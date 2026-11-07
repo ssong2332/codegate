@@ -30,7 +30,12 @@ test("[S1] 계좌 문자 예금주 = 가상 개인 이름(한글 2~4자) · 기�
     assert.equal(/센터|관리|캐피탈|공탁|보호|대응|통관|○/.test(name), false, `${smsId}: 기관형 ${name}`);
   }
   // 같은 계좌번호를 쓰는 문자끼리가 아니면 예금주 이름이 겹치지 않는다(한 대화에서 두 사람 이름이 섞이지 않게 — 시나리오마다 하나).
-  assert.equal(new Set(holders.map(([, name]) => name)).size, holders.length, holders.map(([, n]) => n).join(","));
+  // PR-A(2026-11-07) — 기관 고급 전용 문자(`institution-asset-safe-account`)는 초급 · 중급 문자와 **같은 계좌 · 같은 예금주**다(금액 줄만 더함).
+  // ⇒ 이름 하나 = 계좌 하나(같은 계좌의 문자끼리만 이름을 함께 쓴다).
+  const accountOf = (smsId: string) => /\d{3}-\d{4}-\d{4}-\d{2}/.exec(Object.values(IN_CALL_SMS).flat().find((i) => i.smsId === smsId)!.body)?.[0];
+  const pairs = new Set(holders.map(([smsId, name]) => `${name}@${accountOf(smsId)}`));
+  assert.equal(new Set(holders.map(([, name]) => name)).size, pairs.size, holders.map(([, n]) => n).join(","));
+  assert.equal(holders.length - pairs.size, 1, "같은 계좌를 다시 쓰는 문자는 기관 고급 전용 1건뿐");
   assert.equal(findFlowVariant("fv-akj5")?.sms.length ?? 0, 0, "fv-akj5(#192) 문자 선언 0 그대로");
 });
 
@@ -65,14 +70,20 @@ test("[S2] 이체 화면 칩은 계좌가 대화에 나온 뒤에만 — 판정�
 
 test("[S2 배선] 칩이 생기는 5경로 — 오프닝 · sendMessage · 통화 중 카톡 · 화면 행동 뒤 · 통화 복귀", () => {
   const opening = read("openingLine.ts");
-  assert.ok(opening.includes("const attachments = dropPrematureBankTransferChip(markerAttachments, linkFreeText, resolveRouteAccountNumber(scenarioId, flowVariantId), []);"));
+  // Edge 판 25(2026-11-07) — 오프닝 · 통화 중 카톡 · 화면 행동 뒤 · 통화 복귀는 저장 직전 최종 대사로 판정하고 은행 · 계좌를 싣는다(`finalizeBankTransferChips`).
+  assert.ok(opening.includes("const attachments = finalizeBankTransferChips(openingAttachments, openingText, {"));
+  assert.ok(opening.includes("accountNumber: resolveRouteAccountNumber(scenarioId, flowVariantId),"));
   const index = read("index.ts");
   assert.ok(index.includes("ensureBankTransferChip(\n        // S2"), "보충(D-g) 앞에서 뺀다 — 계좌를 말하면 보충이 다시 붙인다");
   assert.ok(index.includes("dropPrematureBankTransferChip(\n          dropRepeatedLinkChips(markerAttachments, linkFreeReplyText, storedHistory),\n          linkFreeReplyText,\n          routeAccountNumber,\n          storedHistory,\n        ),"));
-  for (const [file, historyVar] of [["chatDuringCall.ts", "claim.history"], ["screenActionFollowUp.ts", "history"]] as const) {
+  for (const [file, historyVar, finalText] of [
+    ["chatDuringCall.ts", "claim.history", "finalReplyText"],
+    ["screenActionFollowUp.ts", "history", "text"],
+  ] as const) {
     const src = read(file);
-    assert.ok(src.includes(`dropRepeatedLinkChips(markerAttachments, linkFreeText, ${historyVar}),`), file);
-    assert.ok(src.includes(`resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),\n${file === "chatDuringCall.ts" ? "    " : "      "}${historyVar},`), file);
+    assert.ok(src.includes(`finalizeBankTransferChips(dropRepeatedLinkChips(markerAttachments, linkFreeText, ${historyVar}), ${finalText}, {`), file);
+    assert.ok(src.includes("accountNumber: resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),"), file);
   }
-  assert.ok(read("callReturnLine.ts").includes("dropPrematureBankTransferChip(markerAttachments, linkFreeText, resolveRouteAccountNumber(session.scenarioId, session.flowVariantId), history);"));
+  assert.ok(read("callReturnLine.ts").includes("const attachments = finalizeBankTransferChips(markerAttachments, text, {"));
+  assert.ok(index.includes("finalizeBankTransferChips(replyAttachments, finalReplyText, {"), "sendMessage — 저장 직전 한 번 더");
 });

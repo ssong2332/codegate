@@ -51,6 +51,22 @@ import { resolveRouteSummary } from "./routeSummary";
 import { stripLeakedThought } from "../realtime/thoughtLeak";
 import { resolveReportTimeBaseMs } from "../session/answeredAt";
 import { personaCardKind } from "../scenarios/personaCardCatalog";
+import { findDialEntry } from "../scenarios/dialDirectory";
+
+/**
+ * 2026-11-07 Edge 시험 판 27 — 공식 번호 확인 기록.
+ * | If | Then |
+ * |---|---|
+ * | `genuineNumberId` 부재 | 없음 |
+ * | 번호부에 그 id가 없거나 진짜 기관 안내(`genuineNotice`) 항목이 아님 | 없음(지어내지 않는다) |
+ * | 그 밖 | `{ label: 연락처 이름(없으면 "공식 번호"), number }` |
+ */
+export function resolveOfficialCheck(scenarioId: string, genuineNumberId: string | undefined): { label: string; number: string } | undefined {
+  if (!genuineNumberId) return undefined;
+  const entry = findDialEntry(scenarioId, genuineNumberId);
+  if (!entry || !entry.genuineNotice || entry.genuineNotice.length === 0) return undefined;
+  return { label: entry.contactLabel ?? "공식 번호", number: entry.number };
+}
 
 /** §142 PR-4 — 루트 교육 포인트를 마무리 문장 앞에 붙인다(중복 0 · 부재 = 입력 그대로). */
 export function withRouteLessons(advice: string[], lessons: readonly string[] | undefined): string[] {
@@ -259,6 +275,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       ...(data.consentedAt ? { consentedAtMs: data.consentedAt.toMillis() } : {}),
       // T123/AC-080 — 메신저 표면(경로 B)의 제출 승격 입력. 부재면 이 기능 도입 전과 동일하다.
       ...(data.submittedAt ? { submittedAtMs: data.submittedAt.toMillis() } : {}),
+      // 2026-11-07 판 19 — 이체 화면 제출의 요구액 대비 비교(표시 전용).
+      ...(data.amountComparison ? { amountComparison: data.amountComparison } : {}),
       // T194-c-1(§84.15.3 · G606) — 통화 중 설치 문서(Q2)는 문자와 **같은 리졸버**로 푼 명시 앵커를 넘긴다(시각 해결 0). 부재 = 메신저 경로.
       ...(typeof data.anchorScammerTurn === "number"
         ? { explicitAnchor: resolveAnchor(data.anchorScammerTurn, messages, reportTimeBaseMs) }
@@ -347,6 +365,7 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     flowVariantId: session.flowVariantId,
     challengeId: session.challengeId,
   });
+  const officialCheck = resolveOfficialCheck(session.scenarioId, session.relay?.genuineNumberId);
   const reportDoc: ReportDoc = {
     reportId: sessionId,
     sessionId,
@@ -367,6 +386,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     ...(session.flowVariantId ? { flowVariantId: session.flowVariantId } : {}),
     // §119(D-3 b) — 이번 결말 이름 · 그 칸의 결말 수(루트가 2가지 이상인 칸만 — 부재 = 줄 0).
     ...(routeSummary ? { routeSummary } : {}),
+    // 2026-11-07 Edge 시험 판 27 — 진짜 기관 번호로 직접 걸어 확인한 사실(서버 `relay.genuineNumberId` · 부재 = 필드 0).
+    ...(officialCheck ? { officialCheck } : {}),
     createdAt: Timestamp.now(),
     scenarioId: session.scenarioId,
     channel: session.channel ?? "voice",

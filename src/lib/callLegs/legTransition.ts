@@ -40,9 +40,22 @@ export const LEG_DIALED_OPENING_TURN =
   "(상대가 너에게 건 전화를 너는 방금 받았다 — 네가 전화한 것이 아니다. '연락드렸습니다'처럼 건 쪽의 말을 하지 말고, 전화를 받는 쪽의 짧은 인사 한마디(5초 안팎)만 한 뒤 멈춰서 상대가 왜 전화했는지 말하기를 기다려라. 용건 설명은 상대의 말을 들은 뒤에 한다.)";
 
 /**
+ * 2026-11-07 Edge 시험 판 26(카드사 고급 R1) — 참가자가 끊은 배송원 통화에 배송원이 다시 걸어 왔는데 "오늘 카드 받으실 수 있으세요?"로 처음부터 시작했다.
+ * 서버는 재연결 맥락(`buildLegRejoinContext` — 끊기기 전 이 통화 대화)을 시스템 지시에 실었지만(로그 `rejoin:"callback"` 확인), 화면이 첫 신호로
+ * 기본 트리거(새로 걸려 온 전화의 첫 마디 — "신분과 전화를 건 이유를 밝혀라")를 보내 모델이 그 신호대로 처음부터 말한 것으로 본다(추정 — 실 키 확인 전).
+ * ⇒ 같은 인물 재연결(서버 `startCallLeg` 응답 `rejoin`)이면 첫 신호도 "끊겼던 통화를 다시 잇는다"로 보낸다.
+ */
+export const LEG_REJOIN_CALLBACK_OPENING_TURN =
+  "(조금 전 끊겼던 통화의 상대에게 네가 같은 번호로 다시 걸었고 상대가 방금 받았다. 처음 인사 · 자기소개 · 본인 확인 · 이미 한 설명을 처음부터 되풀이하지 말고, 끊기기 전에 이미 보낸 문자를 다시 보내 주겠다고 하지 마라. '아까 통화가 끊겨서 다시 연락드렸습니다'처럼 짧게 한두 마디만 한 뒤 멈춰서 상대의 대답을 기다려라. 그다음은 끊기기 전 단계에서 이어 간다.)";
+/** 같은 판단 — 참가자가 끊었던 상대 번호로 다시 걸었다(상대 = 받는 쪽). */
+export const LEG_REJOIN_REDIAL_OPENING_TURN =
+  "(조금 전 끊겼던 통화의 상대가 같은 번호로 너에게 다시 걸어 왔고 너는 방금 받았다 — 네가 전화한 것이 아니다. 처음 인사 · 자기소개 · 본인 확인을 되풀이하지 말고, '네, 아까 통화하던 분이시죠'처럼 받는 쪽의 짧은 한마디만 한 뒤 멈춰서 상대의 말을 기다려라. 그다음은 끊기기 전 단계에서 이어 간다.)";
+
+/**
  * 통화 첫 연결 신호(레그 판정 — 서버 `callLeg.entry`가 원천). `undefined` = 레그 판정 밖(종전 `openingTurnFor`).
  * | # | If | Then |
  * |---|---|---|
+ * | 0 | 레그 전환으로 연 연결 ∧ 같은 인물 재연결(서버 `rejoin` — 2026-11-07) | 상대가 다시 걸어 옴(`callback`) = `LEG_REJOIN_CALLBACK_OPENING_TURN` · 참가자가 다시 걸었음(`redial`) = `LEG_REJOIN_REDIAL_OPENING_TURN` |
  * | 1 | 레그 전환으로 연 연결 ∧ 참가자가 건 통화(`dial`) | `LEG_DIALED_OPENING_TURN` |
  * | 2 | 레그 전환으로 연 연결(그 밖 — 호 전환 · 재발신) | `null`(기본 트리거 — 종전) |
  * | 3 | 세션 첫 연결(`connectionSeq` 0) ∧ 참가자가 건 통화(R2 첫 통화 — 받기 경로) | `LEG_DIALED_OPENING_TURN` |
@@ -52,7 +65,11 @@ export function legOpeningTurnFor(input: {
   legOpening: boolean;
   connectionSeq: number;
   entry: "dial" | "transfer" | "incoming" | undefined;
+  /** 2026-11-07 — 서버 `startCallLeg` 응답의 같은 인물 재연결 표식(부재 · null = 새 통화). */
+  rejoin?: "redial" | "callback" | null;
 }): string | null | undefined {
+  if (input.legOpening && input.rejoin === "callback") return LEG_REJOIN_CALLBACK_OPENING_TURN;
+  if (input.legOpening && input.rejoin === "redial") return LEG_REJOIN_REDIAL_OPENING_TURN;
   if (input.legOpening) return input.entry === "dial" ? LEG_DIALED_OPENING_TURN : null;
   if (input.connectionSeq === 0 && input.entry === "dial") return LEG_DIALED_OPENING_TURN;
   return undefined;

@@ -15,13 +15,19 @@ test("3단계 세션은 구조를 한 줄로 고지한다(단계 번호·카운�
   assert.equal(/1\/3|1단계|2단계|3단계/.test(notice ?? ""), false, "단계 카운터 표기 금지(D-50)");
 });
 
-test("미도달 단계도 **구조 고지에는 포함**된다 — 무엇이 일어날 수법이었는지가 사후 정보다", () => {
+test("2026-11-07 Edge 시험 판 19 — 미도달 단계는 구조 고지에 넣지 않는다(실제로 지난 단계만 · 종전 OQ-U24 판정 뒤집음)", () => {
   const notReached: ReportStage[] = [
     { stage: "messenger", reached: true },
     { stage: "mock_install", reached: false },
     { stage: "voice", reached: false },
   ];
-  assert.equal(buildStageNotice(notReached), "이번 훈련은 문자 → 앱 설치 → 전화로 이어지는 수법이었습니다.");
+  assert.equal(buildStageNotice(notReached), null, "도달 1단계뿐이면 줄 0");
+  const kakaoInstallOnly: ReportStage[] = [
+    { stage: "messenger", reached: true },
+    { stage: "mock_install", reached: true },
+    { stage: "voice", reached: false },
+  ];
+  assert.equal(buildStageNotice(kakaoInstallOnly, "kakao"), "이번 훈련은 메신저 → 앱 설치로 이어지는 수법이었습니다.");
 });
 
 test("단계가 2개면 2개짜리 문장을 만든다(설치 카탈로그가 없는 기존 에스컬레이션 세션)", () => {
@@ -55,7 +61,7 @@ test("reachedStages: 화면은 도달 단계만 그린다(데이터에서는 빼
 test("리포트 검수(2026-10-22) — 카카오톡형 메신저로 시작한 세션은 '메신저'로 부른다(문자 스미싱 · 표면 모름은 종전 '문자')", () => {
   const twoStage: ReportStage[] = [
     { stage: "messenger", reached: true },
-    { stage: "voice", reached: false },
+    { stage: "voice", reached: true },
   ];
   assert.equal(buildStageNotice(twoStage, "kakao"), "이번 훈련은 메신저 → 전화로 이어지는 수법이었습니다.");
   assert.equal(buildStageNotice(twoStage, "sms"), "이번 훈련은 문자 → 전화로 이어지는 수법이었습니다.");
