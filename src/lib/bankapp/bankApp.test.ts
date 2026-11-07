@@ -4,7 +4,7 @@
 // | A1 | 플래그 `bankapp=1`만 켠다 · 저장 유지 키에 있다(`debugFlags.ts`) · 플래그가 꺼지면 계좌 누름 · 송금 화면 0(종전 링크 화면 그대로) |
 // | A2 | 화면 단계 표 S1~S6(받는 분 확인 → 금액 → 인증 → 완료) · 판정(잔액 · 금액 표기 · 받는 분 이름) |
 // | A3 | G138 — 금액은 오버레이 state를 벗어나지 않는다: 완료 콜백 무인자 · 네트워크 · 저장소 · 콜러블 0 |
-// | A4 | 입력 칸 0 — 비밀번호 · 인증번호 입력 칸이 없다(입력은 금액 한 칸뿐 · password 타입 0) |
+// | A4 | 2026-11-07 사용자 결정 (a)(BA3 갱신) — 입력 칸은 금액 하나뿐 · 간편 비밀번호는 버튼 키패드(`BankAuthSheet`) — 누른 숫자 값 저장 · 전송 0(개수만) |
 // | A5 | 실존 은행명 0 — 가상 은행 목록 = 서버 `FICTIONAL_BANK_NAMES`(드리프트 0) · 화면 문구 · 컴포넌트에 실존 은행 이름 0 |
 // | A6 | 통화 유지(D-35 · G10) — 오버레이는 문자함과 같은 자리의 형제 노드 · 라우팅 0 · 문자함 · 확인 시트와 동시에 열리지 않는다 |
 // | A7 | 간소화안 — 클립보드 · 홈 화면 · 탐색 막대 0 · 계좌번호 누름 = '송금' 메뉴 · 그 문자의 링크는 그리지 않는다 · 인증번호 메뉴 0(AC-061) |
@@ -135,15 +135,24 @@ test("[BA-1 A3] G138 — 금액이 오버레이 밖으로 나가지 않는다(�
   }
 });
 
-test("[BA-1 A4] 입력 칸 0 — 비밀번호 · 인증번호 칸이 없고 입력은 금액 한 칸뿐", () => {
+test("[BA-1 A4] 입력 칸은 금액 하나 · 간편 비밀번호 키패드는 누른 숫자 값을 저장 · 전송하지 않는다(사용자 결정 (a))", () => {
   assert.equal(overlayCode.split("<input").length - 1, 1, "입력 칸은 금액 하나");
   assert.equal(overlayCode.split("<select").length - 1, 0, "선택 칸 0(받는 계좌는 문자 · 칩에서 채워진다)");
   for (const forbidden of ['type="password"', "비밀번호를 입력", "인증번호를 입력", "OTP", "보안카드", "<textarea"]) {
     assert.ok(!overlayCode.includes(forbidden), `있으면 안 되는 것: ${forbidden}`);
   }
-  // 2026-11-07 — 확인 화면 버튼은 실제 앱처럼 '보내기'이고, 인증은 생체 인증 시트(`BankAuthSheet` — 입력 칸 0)가 한다.
+  // 2026-11-07 — 확인 화면 버튼은 실제 앱처럼 '보내기'이고, 인증은 생체 인증 시트(`BankAuthSheet`)가 한다.
   assert.equal(BANK_APP_COPY.authButton, "보내기");
   assert.ok(overlayCode.includes('primaryButton(COPY.authButton, () => setSheet("auth"))') && overlayCode.includes("<BankAuthSheet"));
+  // 사용자 결정 (a) — 키패드는 버튼뿐(입력 칸 · password 0) · 숫자 버튼은 값 없이 사실만 보낸다 · 누른 개수만 state에 있다 · 네트워크 · 저장소 0.
+  const sheet = stripComments(read("src/components/BankAuthSheet.tsx"));
+  for (const forbidden of ["<input", "<textarea", 'type="password"', "fetch(", "sendBeacon", "localStorage", "sessionStorage", "indexedDB", "@/lib/api"]) {
+    assert.ok(!sheet.includes(forbidden), `인증 시트에 있으면 안 되는 것: ${forbidden}`);
+  }
+  assert.ok(sheet.includes('onClick={() => dispatch("pin-digit")}'), "숫자 버튼 = 값 없는 사건 하나");
+  assert.equal(sheet.split('dispatch("pin-digit")').length - 1, 1);
+  assert.ok(!/pin-digit"[^)]*digit/.test(sheet) && !/setKeys\([^)]*digit/.test(sheet), "누른 숫자를 어디에도 넘기지 않는다");
+  assert.ok(read("src/lib/bankapp/bankAuth.ts").includes("export type AuthState = { phase: AuthPhase; fails: number; pinCount: number };"), "state = 개수뿐");
   // 주소창 0 — 앱에는 주소창이 없다(가짜 호스트 · `.invalid` 0).
   assert.ok(!overlayCode.includes(".invalid") && !overlayCode.includes("mockHost"));
 });

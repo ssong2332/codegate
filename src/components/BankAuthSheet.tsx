@@ -8,15 +8,21 @@
 // | 지문(One UI형 · 기본) | 아래에서 올라오는 생체 인증 시트 · 화면 아래 센서 자리(지문 아이콘)를 길게 누르면 고리가 차오른다 → 체크 · 일찍 떼면 흔들림 + 안내 |
 // | 얼굴(iOS형) | 가운데 둥근 사각 표시 · 얼굴 윤곽이 스캔하듯 움직인다 → 체크(열리면 바로 시작) |
 //
-// ⛔ 숫자 · 비밀번호 입력 0(BA3). ⛔ 서버 호출 0 — 성공은 `onSuccess` 한 번(호출부가 종전 제출 콜백을 부른다).
+// | 간편 비밀번호(지문 시트 · 잠김 뒤) | 6칸 점 + 매번 섞는 숫자 **버튼** 키패드(재배열 · 지우기) — 6번 누르면 체크 |
+//
+// 2026-11-07 사용자 결정 (a)(BA3 갱신) — 입력 칸(<input>) 0 · 숫자 버튼은 누른 **사실**(`pin-digit`)만 올리고 그 숫자 값은 어디에도 두지 않는다
+// (state = 누른 개수뿐 · 버튼 글자는 그리기에만 쓴다). ⛔ 서버 호출 0 — 성공은 `onSuccess` 한 번(호출부가 종전 제출 콜백을 부른다).
 // ⚠️ 상대 경로로만 import한다 — `MessengerFakeLanding`의 렌더 게이트 하네스가 CJS require로 따라와 `@/` 별칭을 풀지 못한다.
 // ⚠️ 모션은 CSS 키프레임만(`globals.css` `bank-*` — reduced-motion이면 정지 · G457). JS는 단계 전환 타이머(setTimeout)뿐 — 프레임 루프 0(§23.6 A1).
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   BANK_AUTH_COPY as COPY,
   INITIAL_AUTH_STATE,
+  MAX_BIOMETRIC_FAILS,
+  PIN_LENGTH,
   authTimings,
   nextAuthState,
+  shuffleKeypad,
   type AuthEvent,
   type AuthMethod,
   type AuthState,
@@ -103,6 +109,8 @@ export default function BankAuthSheet({ method, appName, summary, onSuccess, onC
     onCancelRef.current = onCancel;
   });
 
+  // 키패드 숫자 배열(열 때 · 재배열 때 이벤트 처리기 안에서 섞는다). ⛔ 누른 숫자는 여기 쌓이지 않는다 — 배열은 버튼 배치일 뿐이다.
+  const [keys, setKeys] = useState<number[]>([]);
   const dispatch = useCallback((event: AuthEvent) => setState((current) => nextAuthState(current, event)), []);
 
   const clearHold = () => {
@@ -174,6 +182,17 @@ export default function BankAuthSheet({ method, appName, summary, onSuccess, onC
 
   const phase = state.phase;
   const busy = phase === "success";
+  const pinMode = phase === "pin" || (phase === "success" && state.pinCount >= PIN_LENGTH);
+  const openPin = () => {
+    clearHold();
+    setKeys(shuffleKeypad(Math.random));
+    dispatch("use-pin");
+  };
+
+  // 간편 비밀번호 화면으로 바뀌면(또는 돌아오면) 제목으로 초점을 옮긴다(스크린리더가 전환을 안다).
+  useEffect(() => {
+    titleRef.current?.focus();
+  }, [pinMode]);
   const fingerprintMessage =
     phase === "scanning"
       ? COPY.fingerprintScanning
@@ -209,10 +228,7 @@ export default function BankAuthSheet({ method, appName, summary, onSuccess, onC
     );
   }
 
-  // 지문(One UI형 · 기본) — 아래에서 올라오는 시트 · 센서 자리는 화면 아래쪽(화면 내장 센서 위치 근사).
-  const ringColor = phase === "failed" || phase === "locked" ? "#D93025" : "#1A73E8";
-  const ringLength = 2 * Math.PI * 44;
-  return (
+  const sheetShell = (children: ReactNode) => (
     <div className="fixed inset-0 z-[80] mx-auto flex w-full max-w-[430px] flex-col justify-end" role="presentation">
       <div className="bank-sheet-dim absolute inset-0 bg-black/45" aria-hidden="true" />
       <div
@@ -221,88 +237,169 @@ export default function BankAuthSheet({ method, appName, summary, onSuccess, onC
         aria-labelledby="bank-auth-title"
         className="bank-sheet-up relative flex flex-col items-center gap-1 rounded-t-[26px] bg-[#FCFCFF] px-6 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-6 text-center text-[#1F1F1F]"
       >
+        {children}
+      </div>
+    </div>
+  );
+
+  const cancelButton = (
+    <button
+      type="button"
+      onClick={() => {
+        clearHold();
+        if (!doneRef.current) onCancel();
+      }}
+      disabled={busy}
+      className="mt-2 min-h-[48px] self-stretch rounded-full text-[16px] font-semibold text-[#1A73E8] disabled:opacity-40"
+    >
+      {COPY.cancel}
+    </button>
+  );
+
+  // 간편 비밀번호(사용자 결정 (a)) — 점 6칸 + 섞인 숫자 버튼. 숫자 버튼은 값 없이 `pin-digit`만 보낸다.
+  if (pinMode) {
+    const keyClass = "flex h-[54px] items-center justify-center rounded-[12px] text-[22px] font-semibold active:bg-[#E8EAED] disabled:opacity-40";
+    const digitButton = (digit: number) => (
+      <button key={digit} type="button" disabled={busy} onClick={() => dispatch("pin-digit")} className={keyClass}>
+        {digit}
+      </button>
+    );
+    return sheetShell(
+      <>
         <h2 ref={titleRef} id="bank-auth-title" tabIndex={-1} className="text-[20px] font-bold outline-none">
-          {COPY.title}
+          {COPY.pinTitle}
         </h2>
         <p className="text-[15px] text-[#444]">{appName}</p>
         <p className="text-[14px] tabular-nums text-[#5F6368] [word-break:keep-all]">{summary}</p>
-        <p
-          key={`${phase}-${state.fails}`}
-          role="status"
-          aria-live="polite"
-          className={`mt-5 min-h-[40px] text-[15px] [word-break:keep-all] ${phase === "failed" ? "bank-shake" : ""}`}
-          style={{ color: phase === "failed" || phase === "locked" ? "#D93025" : "#1F1F1F" }}
-        >
-          {fingerprintMessage}
+        <p role="status" aria-live="polite" className="mt-4 min-h-[24px] text-[15px] [word-break:keep-all]">
+          {phase === "success" ? COPY.success : COPY.pinPrompt}
         </p>
-        <div className="relative mt-3 flex h-[120px] w-[120px] items-center justify-center">
-          {phase === "prompt" && <span aria-hidden="true" className="bank-fp-ripple absolute inset-3 rounded-full border-2 border-[#1A73E8]" />}
-          <svg aria-hidden="true" width="120" height="120" viewBox="0 0 100 100" className="absolute inset-0 -rotate-90">
-            <circle cx="50" cy="50" r="44" fill="none" stroke="#E3E7EE" strokeWidth="4" />
-            {(phase === "scanning" || phase === "success") && (
-              <circle
-                cx="50"
-                cy="50"
-                r="44"
-                fill="none"
-                stroke={phase === "success" ? "#1E8E3E" : ringColor}
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeDasharray={ringLength}
-                className={phase === "scanning" ? "bank-fp-ring" : undefined}
-                style={{ ["--bank-ring" as string]: `${ringLength}`, ["--bank-hold" as string]: `${timings.fingerprintHoldMs}ms`, strokeDashoffset: 0 }}
+        <div className="mt-2 flex h-8 items-center gap-3" aria-label={`${state.pinCount}/${PIN_LENGTH}`} role="img">
+          {phase === "success" ? (
+            <span className="bank-pop text-[#1E8E3E]">
+              <CheckGlyph size={32} />
+            </span>
+          ) : (
+            Array.from({ length: PIN_LENGTH }, (_, index) => (
+              <span
+                key={index}
+                aria-hidden="true"
+                className={`h-3.5 w-3.5 rounded-full border-2 ${index < state.pinCount ? "bank-pop" : ""}`}
+                style={index < state.pinCount ? { backgroundColor: "#1A73E8", borderColor: "#1A73E8" } : { borderColor: "#9AA0A6" }}
               />
-            )}
-          </svg>
-          <button
-            type="button"
-            aria-label={COPY.sensorLabel}
-            disabled={phase === "locked" || busy}
-            onPointerDown={(event) => {
-              event.preventDefault();
-              (event.currentTarget as HTMLButtonElement).setPointerCapture?.(event.pointerId);
-              startHold();
-            }}
-            onPointerUp={endHold}
-            onPointerCancel={endHold}
-            onContextMenu={(event) => event.preventDefault()}
-            onKeyDown={(event) => {
-              if ((event.key === "Enter" || event.key === " ") && !event.repeat) {
-                event.preventDefault();
-                startHold();
-              }
-            }}
-            // 보조기기(화면 낭독기 두 번 탭)는 누르고 있을 수 없다 — 클릭 하나가 스캔 끝까지 간다.
-            onClick={(event) => {
-              if (event.detail === 0) startHold();
-            }}
-            className={`relative flex h-[92px] w-[92px] touch-none select-none items-center justify-center rounded-full [-webkit-touch-callout:none] ${phase === "scanning" ? "bank-fp-press" : ""}`}
-            style={{
-              color: phase === "success" ? "#1E8E3E" : phase === "failed" || phase === "locked" ? "#D93025" : "#1A73E8",
-              backgroundColor: phase === "scanning" ? "#E8F0FE" : "transparent",
-            }}
-          >
-            {phase === "success" ? (
-              <span className="bank-pop">
-                <CheckGlyph size={52} />
-              </span>
-            ) : (
-              <FingerprintGlyph size={56} />
-            )}
+            ))
+          )}
+        </div>
+        <div className="mt-3 grid w-full grid-cols-3 gap-1.5 text-[#1F1F1F]">
+          {keys.slice(0, 9).map(digitButton)}
+          <button type="button" disabled={busy} onClick={() => setKeys(shuffleKeypad(Math.random))} className={`${keyClass} text-[15px]`}>
+            {COPY.reshuffle}
+          </button>
+          {keys.slice(9).map(digitButton)}
+          <button type="button" disabled={busy} onClick={() => dispatch("pin-delete")} className={`${keyClass} text-[15px]`}>
+            {COPY.deleteKey}
           </button>
         </div>
+        {state.fails < MAX_BIOMETRIC_FAILS && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => dispatch("pin-back")}
+            className="mt-2 min-h-[44px] px-3 text-[15px] font-semibold text-[#1A73E8] disabled:opacity-40"
+          >
+            {COPY.backToBiometric}
+          </button>
+        )}
+        {cancelButton}
+      </>,
+    );
+  }
+
+  // 지문(One UI형 · 기본) — 아래에서 올라오는 시트 · 센서 자리는 화면 아래쪽(화면 내장 센서 위치 근사).
+  const ringColor = phase === "failed" || phase === "locked" ? "#D93025" : "#1A73E8";
+  const ringLength = 2 * Math.PI * 44;
+  return sheetShell(
+    <>
+      <h2 ref={titleRef} id="bank-auth-title" tabIndex={-1} className="text-[20px] font-bold outline-none">
+        {COPY.title}
+      </h2>
+      <p className="text-[15px] text-[#444]">{appName}</p>
+      <p className="text-[14px] tabular-nums text-[#5F6368] [word-break:keep-all]">{summary}</p>
+      <p
+        key={`${phase}-${state.fails}`}
+        role="status"
+        aria-live="polite"
+        className={`mt-5 min-h-[40px] text-[15px] [word-break:keep-all] ${phase === "failed" ? "bank-shake" : ""}`}
+        style={{ color: phase === "failed" || phase === "locked" ? "#D93025" : "#1F1F1F" }}
+      >
+        {fingerprintMessage}
+      </p>
+      <div className="relative mt-3 flex h-[120px] w-[120px] items-center justify-center">
+        {phase === "prompt" && <span aria-hidden="true" className="bank-fp-ripple absolute inset-3 rounded-full border-2 border-[#1A73E8]" />}
+        <svg aria-hidden="true" width="120" height="120" viewBox="0 0 100 100" className="absolute inset-0 -rotate-90">
+          <circle cx="50" cy="50" r="44" fill="none" stroke="#E3E7EE" strokeWidth="4" />
+          {(phase === "scanning" || phase === "success") && (
+            <circle
+              cx="50"
+              cy="50"
+              r="44"
+              fill="none"
+              stroke={phase === "success" ? "#1E8E3E" : ringColor}
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeDasharray={ringLength}
+              className={phase === "scanning" ? "bank-fp-ring" : undefined}
+              style={{ ["--bank-ring" as string]: `${ringLength}`, ["--bank-hold" as string]: `${timings.fingerprintHoldMs}ms`, strokeDashoffset: 0 }}
+            />
+          )}
+        </svg>
         <button
           type="button"
-          onClick={() => {
-            clearHold();
-            if (!doneRef.current) onCancel();
+          aria-label={COPY.sensorLabel}
+          disabled={phase === "locked" || busy}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            (event.currentTarget as HTMLButtonElement).setPointerCapture?.(event.pointerId);
+            startHold();
           }}
-          disabled={busy}
-          className="mt-4 min-h-[48px] self-stretch rounded-full text-[16px] font-semibold text-[#1A73E8] disabled:opacity-40"
+          onPointerUp={endHold}
+          onPointerCancel={endHold}
+          onContextMenu={(event) => event.preventDefault()}
+          onKeyDown={(event) => {
+            if ((event.key === "Enter" || event.key === " ") && !event.repeat) {
+              event.preventDefault();
+              startHold();
+            }
+          }}
+          // 보조기기(화면 낭독기 두 번 탭)는 누르고 있을 수 없다 — 클릭 하나가 스캔 끝까지 간다.
+          onClick={(event) => {
+            if (event.detail === 0) startHold();
+          }}
+          className={`relative flex h-[92px] w-[92px] touch-none select-none items-center justify-center rounded-full [-webkit-touch-callout:none] ${phase === "scanning" ? "bank-fp-press" : ""}`}
+          style={{
+            color: phase === "success" ? "#1E8E3E" : phase === "failed" || phase === "locked" ? "#D93025" : "#1A73E8",
+            backgroundColor: phase === "scanning" ? "#E8F0FE" : "transparent",
+          }}
         >
-          {COPY.cancel}
+          {phase === "success" ? (
+            <span className="bank-pop">
+              <CheckGlyph size={52} />
+            </span>
+          ) : (
+            <FingerprintGlyph size={56} />
+          )}
         </button>
       </div>
-    </div>
+      {/* 간편 비밀번호(사용자 결정 (a)) — 생체 인증 대신 · 잠긴 뒤에는 이것과 취소만 남는다. */}
+      <button
+        type="button"
+        disabled={busy || phase === "scanning"}
+        onClick={openPin}
+        className={`mt-4 min-h-[44px] px-3 text-[15px] font-semibold disabled:opacity-40 ${phase === "locked" ? "rounded-full bg-[#1A73E8] px-6 text-white" : "text-[#1A73E8]"}`}
+      >
+        {COPY.usePin}
+      </button>
+      {cancelButton}
+    </>,
   );
 }

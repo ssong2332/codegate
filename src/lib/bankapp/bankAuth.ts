@@ -5,11 +5,12 @@
 // |---|---|
 // | 인증 수단 | 기기 스킨 iOS형 = 얼굴(Face ID형 가운데 표시 — 열리면 바로 스캔) · 그 밖(One UI형 · 기본) = 지문(화면 아래 센서 자리를 길게 누름) |
 // | 지문 | 누르고 있으면 스캔 고리가 차오르고(`FINGERPRINT_HOLD_MS`) 다 차면 성공 · 그 전에 떼면 실패(흔들림 + 안내) |
-// | 실패 | `MAX_BIOMETRIC_FAILS`번 실패하면 생체 인증을 막는다(locked — 취소만 남는다) |
+// | 실패 | `MAX_BIOMETRIC_FAILS`번 실패하면 생체 인증을 막는다(locked — 간편 비밀번호 · 취소만 남는다) |
+// | 간편 비밀번호 | 지문 시트의 '간편 비밀번호로 인증' · 잠김 뒤 — 매번 섞는 숫자 **버튼** 키패드(`shuffleKeypad`) · 6번 누르면 통과 |
 // | 성공 | 체크 표시를 `SUCCESS_HOLD_MS` 보여 준 뒤 송금 완료(= 기존 제출 콜백 한 번) |
 // | 취소 | 시트 닫기 = 확인 화면으로 돌아간다(기록 0) |
 // | 움직임 줄이기 | `prefers-reduced-motion` — 애니메이션 0(CSS) · 대기 시간은 `REDUCED_*`로 줄인다(흐름 · 컨트롤은 같다) |
-// | 입력 | ⛔ 숫자 · 비밀번호 입력 0(BA3) — 인증은 누름 · 자동 스캔뿐 |
+// | 입력 | 2026-11-07 사용자 결정 (a)(BA3 갱신): 입력 칸(<input>) 0 · 누른 숫자 값은 어디에도 저장하지 않고 **개수만** 센다(`pinCount`) · 어떤 숫자든 6번 = 통과 · 네트워크 · 저장소 0 |
 //
 // 판정표 B(지금 · 사건 → 다음). 표에 없는 조합 = 그대로.
 // | # | If | Then |
@@ -17,8 +18,12 @@
 // | B1 | prompt · failed · 손가락 댐(touch-start) | scanning |
 // | B2 | scanning · 다 차기 전 뗌(touch-end) | failed(실패 +1) — 실패가 `MAX_BIOMETRIC_FAILS`에 닿으면 locked |
 // | B3 | scanning · 스캔 끝(scan-complete) | success |
-// | B4 | locked · 무엇이든 | locked(취소만 — 호출부 `onCancel`) |
+// | B4 | locked · 간편 비밀번호 말고 무엇이든 | locked(간편 비밀번호 · 취소만) |
 // | B5 | success · 무엇이든 | success(완료 콜백은 호출부가 한 번만) |
+// | B6 | prompt · failed · locked · 간편 비밀번호(use-pin) | pin(누른 개수 0) |
+// | B7 | pin · 숫자 누름(pin-digit — 값 없음) | 누른 개수 +1 · `PIN_LENGTH`에 닿으면 success |
+// | B8 | pin · 지움(pin-delete) | 누른 개수 −1(0 아래로 안 간다) |
+// | B9 | pin · 생체 인증으로(pin-back) | 실패가 `MAX_BIOMETRIC_FAILS`에 닿았으면 locked · 아니면 prompt(누른 개수 0) |
 //
 // ⚠️ 잎 모듈(값 import 0 · 타입 import만).
 import type { MessengerSkin } from "../messenger/detectSkin";
@@ -30,9 +35,13 @@ export function authMethodForSkin(skin: MessengerSkin): AuthMethod {
   return skin === "ios" ? "face" : "fingerprint";
 }
 
-export type AuthPhase = "prompt" | "scanning" | "failed" | "locked" | "success";
-export type AuthEvent = "touch-start" | "touch-end" | "scan-complete";
-export type AuthState = { phase: AuthPhase; fails: number };
+export type AuthPhase = "prompt" | "scanning" | "failed" | "locked" | "pin" | "success";
+export type AuthEvent = "touch-start" | "touch-end" | "scan-complete" | "use-pin" | "pin-digit" | "pin-delete" | "pin-back";
+/** ⛔ 누른 숫자 값은 여기 없다 — 개수(`pinCount`)만 있다(사용자 결정 (a)). */
+export type AuthState = { phase: AuthPhase; fails: number; pinCount: number };
+
+/** 간편 비밀번호 자리 수. */
+export const PIN_LENGTH = 6;
 
 export const MAX_BIOMETRIC_FAILS = 3;
 /** 지문을 대고 있어야 하는 시간(ms) — 실기기 초음파 센서 체감 근사(추정 · 실측 아님). */
@@ -46,15 +55,28 @@ export const REDUCED_FACE_SCAN_MS = 300;
 export const REDUCED_SUCCESS_HOLD_MS = 300;
 export const REDUCED_FINGERPRINT_HOLD_MS = 300;
 
-export const INITIAL_AUTH_STATE: AuthState = { phase: "prompt", fails: 0 };
+export const INITIAL_AUTH_STATE: AuthState = { phase: "prompt", fails: 0, pinCount: 0 };
 
-/** 판정표 B1 ~ B5. */
+/** 판정표 B1 ~ B9. */
 export function nextAuthState(state: AuthState, event: AuthEvent): AuthState {
-  if (state.phase === "locked" || state.phase === "success") return state; // B4 · B5
+  if (state.phase === "success") return state; // B5
+  if (event === "use-pin" && (state.phase === "prompt" || state.phase === "failed" || state.phase === "locked")) {
+    return { ...state, phase: "pin", pinCount: 0 }; // B6
+  }
+  if (state.phase === "locked") return state; // B4
+  if (state.phase === "pin") {
+    if (event === "pin-digit") {
+      const pinCount = state.pinCount + 1; // B7
+      return { ...state, pinCount, phase: pinCount >= PIN_LENGTH ? "success" : "pin" };
+    }
+    if (event === "pin-delete") return { ...state, pinCount: Math.max(0, state.pinCount - 1) }; // B8
+    if (event === "pin-back") return { ...state, pinCount: 0, phase: state.fails >= MAX_BIOMETRIC_FAILS ? "locked" : "prompt" }; // B9
+    return state;
+  }
   if (event === "touch-start" && (state.phase === "prompt" || state.phase === "failed")) return { ...state, phase: "scanning" }; // B1
   if (event === "touch-end" && state.phase === "scanning") {
     const fails = state.fails + 1; // B2
-    return { phase: fails >= MAX_BIOMETRIC_FAILS ? "locked" : "failed", fails };
+    return { ...state, phase: fails >= MAX_BIOMETRIC_FAILS ? "locked" : "failed", fails };
   }
   if (event === "scan-complete" && state.phase === "scanning") return { ...state, phase: "success" }; // B3
   return state;
@@ -67,6 +89,19 @@ export function authTimings(reducedMotion: boolean): { fingerprintHoldMs: number
     : { fingerprintHoldMs: FINGERPRINT_HOLD_MS, faceScanMs: FACE_SCAN_MS, successHoldMs: SUCCESS_HOLD_MS };
 }
 
+/**
+ * 숫자 키패드 배열(0~9를 한 번씩 · 섞음). 실제 은행 앱 보안 키패드처럼 열 때마다 · '재배열'마다 새로 섞는다.
+ * `random`은 [0, 1) 값을 주는 함수(화면은 이벤트 처리기 안에서 `Math.random`을 넘긴다 — 렌더 중 호출 0).
+ */
+export function shuffleKeypad(random: () => number): number[] {
+  const keys = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+  for (let i = keys.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [keys[i], keys[j]] = [keys[j]!, keys[i]!];
+  }
+  return keys;
+}
+
 /** 시트 문구(한 곳에서 관리 — 테스트가 '모의' · '훈련용' · 비밀번호 요구 문구를 스캔한다). */
 export const BANK_AUTH_COPY = {
   title: "생체 인증",
@@ -74,7 +109,13 @@ export const BANK_AUTH_COPY = {
   fingerprintScanning: "손가락을 떼지 마세요",
   fingerprintFailed: "지문이 일치하지 않습니다. 다시 시도해 주세요.",
   faceScanning: "Face ID",
-  locked: "생체 인증을 너무 많이 시도했습니다. 잠시 후 다시 시도해 주세요.",
+  locked: "생체 인증을 너무 많이 시도했습니다. 간편 비밀번호로 인증해 주세요.",
+  usePin: "간편 비밀번호로 인증",
+  pinTitle: "간편 비밀번호",
+  pinPrompt: "간편 비밀번호 6자리를 눌러 주세요",
+  backToBiometric: "지문으로 인증",
+  reshuffle: "재배열",
+  deleteKey: "지우기",
   success: "인증되었습니다",
   sensorLabel: "지문 인식 센서",
   cancel: "취소",

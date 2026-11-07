@@ -3,7 +3,7 @@
 // |---|---|
 // | C1 | 클라 `BANK_TRANSFER_LANDINGS` = 서버 `BANK_TRANSFER_LANDINGS`(목록 드리프트 0) |
 // | C2 | 흐름 = 이체 정보(폼) → 이체 정보 확인 → 생체 인증 시트 → 완료. 제출 콜백(속은 순간)은 **인증 성공에서만** · 무인자(G138) |
-// | C3 | 확인 화면 · 인증 시트에 비밀번호 · 인증번호 입력 칸이 없다(참가자가 실제 비밀번호를 치는 일을 만들지 않는다) |
+// | C3 | 2026-11-07 사용자 결정 (a)(BA3 갱신) — 확인 화면 · 인증 시트에 입력 칸(<input>) 0 · 간편 비밀번호 버튼 키패드는 누른 숫자 값 저장 · 전송 0(개수만) |
 // | C4 | 미리 채움 = 문자 문서 구조화 필드(`prefilledTransferOf`) — 은행명 없는 옛 문서는 미리 채우지 않는다 |
 // | C5 | 실존 은행명을 쓰지 않는다 — 머리띠 은행명은 세션 가상 은행명(§81) 변수뿐 |
 import { test } from "node:test";
@@ -44,12 +44,17 @@ test("[P2 C2] 폼 → 확인 → 인증 → 완료 · 제출 콜백은 인증 �
   for (const label of ["<BankAuthSheet", "<WithdrawAccountRow", "보이스피싱 주의", "출금 계좌"]) assert.ok(code.includes(label), label);
 });
 
-test("[P2 C3] 본인 인증 화면에 입력 칸이 없다(비밀번호 · 인증번호 0)", () => {
+test("[P2 C3] 확인 화면 · 인증 시트에 입력 칸 0 · 키패드 값 저장 · 전송 0(사용자 결정 (a))", () => {
   const start = code.indexOf("if (bankTransfer && !submitted && bankStage !== \"form\")");
   const block = code.slice(start, code.indexOf("const recordDocument", start));
   assert.ok(start > 0 && block.length > 0);
   assert.equal(/<input/.test(block), false, "확인 · 인증 화면에 입력 요소 0");
   assert.equal(/비밀번호를|인증번호를/.test(block), false);
+  // 인증은 공용 시트(`BankAuthSheet`)가 한다 — 시트에도 입력 칸 0 · 숫자 버튼은 값 없는 사건 · 저장소 · 네트워크 0.
+  assert.ok(block.includes("<BankAuthSheet"));
+  const sheet = readFileSync("src/components/BankAuthSheet.tsx", "utf8").replace(/\/\/[^\n]*/g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
+  assert.equal(/<input|type="password"|localStorage|sessionStorage|fetch\(/.test(sheet), false, "시트에 입력 칸 · 저장 · 전송 0");
+  assert.ok(sheet.includes('onClick={() => dispatch("pin-digit")}'), "숫자 버튼 = 값 없는 사건 하나");
 });
 
 test("[P2 C4] 미리 채움 — 은행명이 있으면 받는 분 · 금액을, 없으면(옛 문서) 미리 채우지 않는다", () => {
