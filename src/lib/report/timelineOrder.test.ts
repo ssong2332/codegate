@@ -19,7 +19,9 @@ test("[§129.10 (4)] O1 — 시각이 이른 항목이 먼저('2분 15초 속음
 test("[§129.10 (1) · (4) 배선] 리포트가 실제 시각 비교로 정렬하고, 큰 시계는 프레임이 멈춰도 최종 값으로 맞춘다", () => {
   const page = read("src/app/report/page.tsx");
   assert.ok(page.includes("].sort(compareTimelineEntries);"));
-  assert.ok(page.includes("timeLabel: sms.events[0]?.timeLabel ?? sms.timeLabel,"));
+  // 2026-11-07 Edge 시험 판 1 · 5 — 문자 항목의 정렬 시각 = 첫 이벤트 시각(§129.10)에서 **이벤트마다 자기 시각**으로 바뀌었다(`reportAccuracy.ts` S1).
+  assert.ok(page.includes("splitSmsEvents(sms).map((row, eventSeq) => ({"));
+  assert.ok(page.includes("timeLabel: row.timeLabel,"));
   const clock = read("src/components/ui/BigClock.tsx");
   assert.ok(clock.includes("window.setTimeout(() => setShown(seconds), duration + 100)"));
   assert.ok(clock.includes("window.clearTimeout(settle)"));

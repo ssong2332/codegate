@@ -179,12 +179,12 @@ test("[B8] 리포트 — 상담원 대사는 사기 대사가 아니다 · 실�
     { turnIndex: 3, role: "user", textMasked: "아니요 제가 생활비로 쓰려고요", createdAtMs: at(16), legIndex: 1 },
   ] as unknown as Parameters<typeof analyzeConversation>[0];
   const legTactics = multiCallLegTactics(c5fj);
-  const none = analyzeConversation(messages, 0, c5fj.tactics, [], legTactics, { legIndexes: [1] });
+  const none = analyzeConversation(messages, 0, c5fj.tactics, [], legTactics, undefined, { legIndexes: [1] });
   assert.equal(none.deceivedMoments.length, 0, "결과 없음 = 순간 0");
   assert.equal(none.riskSignals.length, 0);
-  const held = analyzeConversation(messages, 0, c5fj.tactics, [], legTactics, { legIndexes: [1], loanReview: "held" });
+  const held = analyzeConversation(messages, 0, c5fj.tactics, [], legTactics, undefined, { legIndexes: [1], loanReview: "held" });
   assert.equal(held.deceivedMoments.length, 0);
-  const approved = analyzeConversation(messages, 0, c5fj.tactics, [], legTactics, { legIndexes: [1], loanReview: "approved" });
+  const approved = analyzeConversation(messages, 0, c5fj.tactics, [], legTactics, undefined, { legIndexes: [1], loanReview: "approved" });
   assert.equal(approved.deceivedMoments.length, 1);
   assert.equal(approved.deceivedMoments[0].turnIndex, 3);
   assert.equal(approved.deceivedMoments[0].tactic, LOAN_CHECK_COACHED_TACTIC);

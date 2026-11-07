@@ -18,12 +18,12 @@ import { completeWithFallback, getLlmClient } from "../llm";
 import { resolveSessionScenarioPrompt, routeEndsWithoutAccount } from "../scenarios/flowVariants";
 import { resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
-import { resolveRouteAccountNumber } from "../inCallSms/smsGate";
+import { resolveRouteAccountHolder, resolveRouteAccountNumber } from "../inCallSms/smsGate";
 import { applyFictionalBank, resolveFictionalBankName } from "../shared/fictionalBank";
 import type { MessageDoc, SessionDoc } from "../shared/types";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { extractEscalationSignal } from "./escalationSignal";
-import { dropPrematureBankTransferChip, extractLinkMarker } from "./linkMarker";
+import { extractLinkMarker, finalizeBankTransferChips } from "./linkMarker";
 import { isL3Procedural } from "./l3Depth";
 import { asksIdentityCheck } from "./personaAuthority";
 import { splitSentences } from "./callAnnouncement";
@@ -118,8 +118,6 @@ export async function generateCallReturnLine(
   // 문맥 없는 Mock 대사는 저장하지 않는다(판정표 2행).
   if (completion.isMock) return { message: undefined, isMock: true };
   const { text: linkFreeText, attachments: markerAttachments } = extractLinkMarker(completion.text, session.scenarioId, session);
-  // S2 — 이체 화면 칩은 계좌가 대화에 나온 뒤에만(`linkMarker.ts` `dropPrematureBankTransferChip` 표).
-  const attachments = dropPrematureBankTransferChip(markerAttachments, linkFreeText, resolveRouteAccountNumber(session.scenarioId, session.flowVariantId), history);
   const { text: smsFreeText } = extractSmsMarker(linkFreeText);
   const { text: signalFreeText } = extractEscalationSignal(smsFreeText);
   const { text: markupFreeText } = tidyScammerReplyMarkup(signalFreeText);
@@ -130,5 +128,12 @@ export async function generateCallReturnLine(
   const text = stripSelfDroppedCallSentences(finalizeScammerReplyText(factChecked), by).trim();
   if (replacedCount > 0) logger.info("사기범 대사 실존 금융회사명 치환", { path: "callReturn", scenarioId: session.scenarioId, replacedCount });
   if (!text) return { message: undefined, isMock: false };
+  // S2 · Edge 판 25 — 이체 화면 칩은 최종 대사 · 앞선 대사에 계좌가 있을 때만 · 세션 은행 · 계좌를 싣는다(`linkMarker.ts` `finalizeBankTransferChips` 표).
+  const attachments = finalizeBankTransferChips(markerAttachments, text, {
+    accountNumber: resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
+    bankName: fictionalBankName,
+    accountHolder: resolveRouteAccountHolder(session.scenarioId, session.flowVariantId),
+    history,
+  });
   return { message: { role: "scammer", text, ...(attachments ? { attachments } : {}) }, isMock: false };
 }

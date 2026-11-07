@@ -866,6 +866,8 @@ export default function InCallSmsOverlay({
                     ? { ledgerKey: bankIdentity.ledgerKey, lenderName: lenderNameFromSmsBody(messages.find((m) => m.smsId === landing.smsId)?.body) }
                     : undefined
                 }
+                // ⭐ 2026-11-07(Edge 시험 판 12) — 상품권 구매 화면의 결제 계좌 · 핀 발급 열쇠(계좌 문자가 아니라 `prefilledTransfer`가 없다).
+                bankIdentity={bankIdentity}
                 // T194-c-1(Q2) — 가짜 "권한 허용" 응낙 **사실 하나**를 페이지로 중계한다(인자 = 랜딩 id뿐 · 이 파일은 콜러블을 부르지 않는다).
                 onInstallConsent={() => {
                   if (landing.landingKind === "app-install" && landing.landingId) onInstallConsent?.(landing.landingId);

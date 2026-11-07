@@ -274,8 +274,8 @@
 | D-L8 범위표 | 다통화 변형 문자 = 통화(레그)별 최대값(레그 지정 없는 문자는 모든 통화에 셈) · fv-c5fj 세션 4 · 통화별 3 · 카드사 R1 fv-k3dn 세션 3 · 통화별 1 · fv-r8vb 세션 2 · 통화별 1 · 한 통화 4통 샘플은 걸림 | 세션 합 4 → 위반 | `functions/src/scenarios/__tests__/flowVariants.test.ts` `smsPerCall` · 테스트 진단 출력 `[D-L8]` |
 | D-L9 판정표 | J15 "서비스 안 대출 화면 안내 = O4" — 이름으로 등록한 영역만(접두사 0) · 영역 안이어도 창구 · 지점 · 방문 · 다른 앱/금융/은행/캐피탈 · 은행/금융회사에서 대출 받기·신청은 셈 · 은퇴 fv-pgqt 밖 대출 원문은 셈 | 공통 1 · 장부 +36 | `functions/src/roleplay/__tests__/outOfServiceActions.test.ts` `IN_APP_LOAN_SURFACES` · `IN_APP_LOAN_OUTSIDE` |
 | 장부 | flowVariants J1 16 → 14 · J11 8 → 6(밖 대출 유도 · 은행 직원 둘러대기 2문장이 빠짐) · 그 밖 행 무변경 | 16 · 8 | 같은 파일 `ROUTE_LEDGER` |
-| 문서 | PRD AC-096 갱신 고지 5 · DECISIONS #254 · `in-service-experience-plan-2026-10-31.md` §0.1 행 추가 | — | 세 문서 diff |
+| 문서 | PRD AC-096 갱신 고지 5 · DECISIONS #255 · `in-service-experience-plan-2026-10-31.md` §0.1 행 추가 | — | 세 문서 diff |
 | functions 테스트 | **2164 pass / 0 fail** | 2159 / 3 | `npm --prefix functions test` |
 | root 테스트 | **1316 pass / 0 fail / 1 skip** | 같음 | `npm test` |
 | lint | functions 통과 · root 오류 0 · 경고 1(변경 밖) | 같음 | 두 lint 명령 |
-- ⚠️ DECISIONS #254는 이 브랜치 기준 다음 번호다 — 다른 브랜치가 같은 번호를 쓰면 통합 때 번호를 고친다.
+- ⚠️ DECISIONS 번호 — 통합 브랜치(`claude/edge-fixes-integration-2`)가 #254를 먼저 써서 이 결정은 #255로 옮겼다.

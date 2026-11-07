@@ -435,6 +435,8 @@ export type EndSessionRequest = {
   endReason: EndSessionReason;
   /** 2026-11-06 — 세션 끝 통화 진단 요약(숫자 · 상태값만). 부재 = 로그 없음. */
   diag?: CallDiagSummary;
+  /** 2026-11-07 — 통화 화면의 통화 종료 버튼으로 끝냈을 때만(`endReasonHint.ts` B1 · 서버 `session/endReason.ts` H1). 부재 = 그 밖 모든 종료. */
+  hangupButton?: true;
 };
 export type EndSessionResponse = { status: "ended"; reportPending: true };
 
@@ -476,7 +478,8 @@ export type CallLegEnd = { exit: "dial" | "transfer" | "incoming" };
 // 서버가 아직 모르면 `invalid-argument`로 거절하고, 화면은 종전대로 훈련을 끝낸다(`afterHangupResponse` 2행 — 배포 순서와 무관).
 export type StartCallLegRequest = { sessionId: string; action: "dial" | "transfer" | "callback" | "hangup"; dialed?: string };
 export type StartCallLegResponse =
-  | { status: "connected"; legIndex: number; callerLabel: string; entry: "dial" | "transfer" | "incoming" }
+  // 2026-11-07 — `rejoin` = 참가자가 끊은 같은 레그를 같은 인물로 다시 이었다(서버 `callLegs/request.ts`와 같은 값 · 부재 = 새 통화).
+  | { status: "connected"; legIndex: number; callerLabel: string; entry: "dial" | "transfer" | "incoming"; rejoin?: "redial" | "callback" }
   | { status: "ended" }
   | { status: "genuine"; number: string; contactLabel?: string; notice: readonly string[] }
   | { status: "unknown_number" }

@@ -481,7 +481,9 @@ test("[M2 트립와이어] 종전(시나리오 기준)과 판정이 갈리는 �
     .sort();
   // §92.3 — 고급 전용 2종에 카탈로그가 생겨 배정 은퇴 옛 변형(fv-bmiq · fv-nss6 — 문자 선언 0)이 더해졌다. 그 옛 세션은 종전처럼 문자 문면이
   // 꺼진다(카탈로그가 없던 시절과 같은 판정 — 무소급).
-  assert.deepEqual(changed, ["fv-akj5", "fv-aqp6", "fv-bmiq", "fv-nss6"]);
+  // 2026-11-07 — 납치 협박에 고급 계좌 문자 카탈로그가 생겨(Edge 시험 판 7) 문자 선언 0인 초급 fv-c5ih · 중급 fv-dxwu가 더해졌다. 두 변형의 조립 산출물은
+  // 변형 선언(0)을 따르므로 그대로다 — 갈리는 것은 변형 없는 옛 납치 세션뿐이다(카드 배송 · 유포 협박 카탈로그 신설과 같은 무소급 규칙).
+  assert.deepEqual(changed, ["fv-akj5", "fv-aqp6", "fv-bmiq", "fv-c5ih", "fv-dxwu", "fv-nss6"]);
   for (const id of ["fv-bmiq", "fv-nss6"]) assert.equal(FLOW_VARIANTS.find((v) => v.variantId === id)!.retired, true, id);
 });
 

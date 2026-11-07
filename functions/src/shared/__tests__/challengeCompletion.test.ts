@@ -20,6 +20,7 @@ import {
   nextChallengeStatusOnExperienceEnd,
 } from "../challengeCompletion";
 import type { ChallengeStatus } from "../types";
+import { listedChallengeStatus } from "../../challenge/consentGate";
 
 /** functions/src/shared/types.ts의 ChallengeStatus 7개 전수(순서 = 선언 순서). */
 const ALL_STATUSES: readonly ChallengeStatus[] = [
@@ -316,9 +317,21 @@ test("[T181 G426] 잎 모듈 challengeCompletion.ts는 런타임 import가 0건�
 // S-7 — 상한 판정: ACTIVE_STATUSES에 완료 값이 없다(완료가 슬롯을 돌려준다 — §14.5)
 // ─────────────────────────────────────────────────────────────────────────────
 
-test("[T181 S-5] listMyChallenges 항목이 status: data.status 로 값을 그대로 싣는다(값 변환 0)", () => {
+// D6(2026-11-07 Edge 실사용 시험 판 33) — 통과 고리에 만료 판정 1개가 끼었다(`pending` ∧ 링크 만료 경과 → `"expired"`). 이 테스트의
+// 취지(완료 값이 변환 없이 클라에 닿는다)는 그대로 — 고리가 `listedChallengeStatus`를 거치고 그 함수가 완료 값을 바꾸지 않음을 함께 단언한다.
+test("[T181 S-5 · D6] listMyChallenges 항목의 status는 만료 판정만 거치고 완료 값은 그대로 싣는다", () => {
   const body = stripComments(extractExportBody(readFileSync(CHALLENGE_INDEX_SRC, "utf-8"), "listMyChallenges"));
-  assert.match(body, /^\s*status: data\.status,\s*$/m, "listMyChallenges의 status 통과 고리가 바뀌었다 — 서버→클라 사슬 단절");
+  assert.match(
+    body,
+    /^\s*status: listedChallengeStatus\(data\.status, data\.linkExpiresAt\.toMillis\(\), nowMs\),\s*$/m,
+    "listMyChallenges의 status 통과 고리가 바뀌었다 — 서버→클라 사슬 단절",
+  );
+  const now = Date.now();
+  assert.equal(
+    listedChallengeStatus(CHALLENGE_STATUS_ON_EXPERIENCE_END, now - 30 * 86_400_000, now),
+    CHALLENGE_STATUS_ON_EXPERIENCE_END,
+    "만료 판정이 완료 값을 바꿨다",
+  );
 });
 
 test("[T181 S-7] ACTIVE_STATUSES에 CHALLENGE_STATUS_ON_EXPERIENCE_END의 값이 없다(완료는 활성 상한에서 빠진다)", () => {

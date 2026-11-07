@@ -216,7 +216,9 @@ const ROUTE_LEDGER: Readonly<Record<string, number>> = {
   "functions/src/scenarios/flowVariants.ts#J11_COVER_STORY": 6, // P5
   "functions/src/scenarios/flowVariants.ts#J2_CASH": 9, // P5
   "functions/src/scenarios/flowVariants.ts#J3_GOLD": 5, // P5
-  "functions/src/scenarios/flowVariants.ts#J4_VOUCHER": 5, // P5
+  // 2026-11-07(Edge 시험 판 12 · 사용자 결정 "앱 안 화면 추가") — 검찰 상품권형 fv-v2mk의 상품권 문면은 이제 앱 안 구매 화면(`voucher-purchase`)을 가리킨다
+  // (문자 속 구매 화면에서 사고 화면에 뜬 핀을 불러 달라 — J12 통화 안 말 요구 · O4). 패턴은 표기만 봐서 계속 센다(5 → 6 · 문자 · 화면 · 화면 문구 · 결제 뒤 지시 새 항목).
+  "functions/src/scenarios/flowVariants.ts#J4_VOUCHER": 6, // O4 확인(상품권 구매 화면 안)
   "functions/src/scenarios/flowVariants.ts#J5_COIN": 2, // O4 확인
   // U7(2026-11-01) — 대환대출 설치 수법 2벌(fv-d8pw · fv-r4hc 인라인)을 상수 `LOAN_APP_INSTALL_VIA_SMS` 1개로 합쳤다(9 → 7 · 4 → 3).
   // 조립 결과의 유도 문장 수는 같다(fv-m3hd · fv-d8pw · fv-r4hc가 같은 상수 · fv-6s5p 원문 유지) — 소스 문장만 줄었다.
@@ -225,11 +227,13 @@ const ROUTE_LEDGER: Readonly<Record<string, number>> = {
   "functions/src/scenarios/flowVariants.ts#J7_APP_DELETE": 3, // P6
   "functions/src/scenarios/flowVariants.ts#J9_PHOTO": 2, // P6
   "functions/src/scenarios/grandchildImpersonation.prompt.ts#J4_VOUCHER": 1, // P5
+  "functions/src/scenarios/inCallSms.ts#J4_VOUCHER": 4, // O4 확인(상품권 구매 안내 문자 — 앱 안 구매 화면 링크)
   "functions/src/scenarios/loanScam.prompt.ts#J1_LOAN": 2, // P4
   "functions/src/scenarios/messengerParcelSmishingSms.prompt.ts#J6_INSTALL": 1, // P6
   "functions/src/scenarios/mockScreens.ts#J1_LOAN": 1, // P4
   "functions/src/scenarios/mockScreens.ts#J11_COVER_STORY": 1, // P5
   "functions/src/scenarios/mockScreens.ts#J2_CASH": 1, // P5
+  "functions/src/scenarios/mockScreens.ts#J4_VOUCHER": 8, // O4 확인(상품권 구매 화면 카탈로그 · 결제 뒤 지시)
   "functions/src/scenarios/mockScreens.ts#J5_COIN": 2, // O4 확인
   // §142 — 카드사 고급 재구성 원격 지원 앱 설치 화면(서비스 안 모의 설치 화면 · P6 — 설치 화면 문면 2문장).
   "functions/src/scenarios/mockScreens.ts#J6_INSTALL": 5, // P6
@@ -237,6 +241,7 @@ const ROUTE_LEDGER: Readonly<Record<string, number>> = {
   "functions/src/scenarios/prosecutionCooperationCall.prompt.ts#J5_COIN": 3, // O4 확인
   "functions/src/scenarios/taxRefundScam.prompt.ts#J6_INSTALL": 1, // P6
   "src/components/MessengerFakeLanding.tsx#J1_LOAN": 1, // P4
+  "src/components/MessengerFakeLanding.tsx#J4_VOUCHER": 3, // O4 확인(상품권 구매 화면 문구)
 };
 
 /**
@@ -251,7 +256,7 @@ const ACCOUNT_SMS_WITHOUT_SCREEN_LEDGER: readonly string[] = [];
  * (`ACCOUNT_READOUT`)가 있고 선언 문자 중 이체 화면(`fakeLandingId`)이 있는 `transfer` 문자가 없음. 남은 행마다 이유가 있다(사용자 결정 "권고대로" · 2026-10-31):
  * | 행 | 이유 |
  * |---|---|
- * | 납치 4 | G306 유지 — 실제 사례는 계좌를 전화로 부르고 문자로 보낸 사례를 찾지 못했다. 서비스 밖 위험은 D1 (b)(가상 은행 앱)로 넘긴다 |
+ * | 납치 초 · 중급 2 | 2026-11-07 — 고급 2(fv-k268 · fv-w7tb)는 계좌 문자 + 이체 화면을 선언해 빠졌다(Edge 시험 판 7 · 사용자 결정 "앱 안 화면 추가"). 초 · 중급은 이번 범위 밖(시험에서 앱 밖 유도가 관측된 것은 고급) |
  * | 가족 사고 4 · 손주 3 | 보류 — clone 시나리오는 Gemini Live를 타지 않아(ElevenLabs = 고정 에이전트 프롬프트 · 문자 도구 0 / 폴백 = 변형 적용) 운영 경로 확인 전 |
  * | 카드사 `fv-akj5` | #192 — 2인 챌린지 수신자 고급 조립 바이트 고정 |
  * ⛔ 늘리지 않는다. P2-d에서 환급 3이 빠졌다(수수료 계좌 문자 · 이체 화면 — 메인 "권고대로"). P2-b에서 카드사 자가 고급 `fv-x7ue` · `fv-w3dq`가 빠졌다(피해금 이관 문자 · 화면 선언) · P2-c에서 메신저 6이 빠졌다(칩).
@@ -267,8 +272,6 @@ const VERBAL_ACCOUNT_WITHOUT_SCREEN_LEDGER: readonly string[] = [
   "grandchild-impersonation#fv-mabg",
   "kidnapping-threat#fv-c5ih",
   "kidnapping-threat#fv-dxwu",
-  "kidnapping-threat#fv-k268",
-  "kidnapping-threat#fv-w7tb",
 ];
 /** smsDeclarationConsistency.test.ts의 계좌 낭독 지시 패턴 + "부른다"(완성형 음절이라 "부르"에 안 걸린다 — 환급 문면) + "불러주는 계좌"(납치 · 손주 문면). */
 const ACCOUNT_READOUT = /계좌\s*불러\s*(?:줄게|드릴게)|계좌는\s*'[^']+'\s*(?:같은|처럼)[^.]*(?:부르|부른)|불러주는 계좌/;
@@ -326,7 +329,10 @@ describe("P0 서비스 밖 행동 유도 — J15 서비스 안 대출 예외(D-L
     const fv = readFileSync(fvPath, "utf8");
     const at = fv.indexOf("const INSTITUTION_LOAN_DEMAND =");
     assert.ok(at > 0);
-    const declaration = fv.slice(at, fv.indexOf(";\n", at) + 1);
+    // 줄 끝(LF · CRLF) 무관 — 선언 끝 세미콜론까지.
+    const end = fv.slice(at).search(/;\r?\n/);
+    assert.ok(end > 0);
+    const declaration = fv.slice(at, at + end + 1);
     assert.ok(j1(declaration) >= 1, "fv-pgqt 대출 유도 원문");
   });
 });

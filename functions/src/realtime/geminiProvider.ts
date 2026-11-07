@@ -19,6 +19,7 @@ import { buildSystemPrompt } from "../roleplay/promptAssembly";
 import { buildGenuineLegPrompt } from "../roleplay/genuineLegPrompt";
 import { genuineLegOf, resolveSessionScenarioPrompt, routeEndsWithoutAccount, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
 import { resolveRouteAccountNumber, sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
+import { callPhaseScenarioPrompt } from "../roleplay/escalatedCall";
 import {
   buildGenuineLegToolDeclarations,
   buildGenuineLegToolNames,
@@ -150,10 +151,15 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // T191 S5(AC-096 (e)) — 세션에 배정된 흐름 변형을 합성한 프롬프트(sendMessage · 오프닝과 같은 단일
     // 해석 지점). flowVariantId 부재 = 원본(무소급).
     // §142 — 다통화 변형은 현재 레그 프롬프트(부재 = 종전).
-    const scenarioPrompt = resolveSessionScenarioPrompt(input.scenarioId, input.flowVariantId, input.callLeg?.legIndex);
-    if (!scenarioPrompt) {
+    const resolvedScenarioPrompt = resolveSessionScenarioPrompt(input.scenarioId, input.flowVariantId, input.callLeg?.legIndex);
+    if (!resolvedScenarioPrompt) {
       throw new Error(`시나리오 프롬프트가 없습니다: ${input.scenarioId}`);
     }
+    // Edge 판 23 · 24 — 메신저에서 넘어온 통화는 문자 단계의 통화 전환 지시를 뺀다(`roleplay/escalatedCall.ts` 판정표 C · 부재 = 같은 객체).
+    const scenarioPrompt = callPhaseScenarioPrompt(resolvedScenarioPrompt, {
+      escalatedCall: input.escalatedCall === true,
+      inCallSmsEnabled: sessionDeclaresInCallSms(input.scenarioId, input.flowVariantId),
+    });
     // sendMessage/generateOpeningLine과 **같은 조립 함수**를 쓴다 — 프롬프트를 두 곳에 손으로
     // 옮겨 적어 드리프트가 나는 것을 막는다.
     // T72(§15.3.3 호출부 3곳 중 "Gemini Live 토큰") — 난이도를 여기서도 넘겨야 "텍스트는 난이도가

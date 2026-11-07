@@ -24,6 +24,7 @@
 //   - 화면이 뜬 것·닫은 것의 승격 (D-51 ③ — **응낙만** 속은 순간이다, AC-062 불변식 보호)
 //   - 화면 콘텐츠 원문(headline/bodyLines/consentLabel)을 스냅샷에 싣기 (§15.9.5 e-4)
 import {
+  isBankTransferLanding,
   isMockScreenReachable,
   listAppInstallMockScreens,
   type MockScreenItem,
@@ -49,6 +50,8 @@ export type MockScreenSource = {
    * 같은 문서에서 승격이 두 번 일어나지 않는다.
    */
   submittedAtMs?: number;
+  /** 2026-11-07 판 19 — 이체 화면 제출의 요구액 대비 비교(서버 문서 `amountComparison` · 부재 = 모름). 표시 전용(승격 · 판정 입력 아님). */
+  amountComparison?: "less" | "equal" | "more";
   /**
    * T194-c-1(docs/Architecture.md §84.15.3 · G584 · G606) — **통화 중 설치 화면(Q2) 문서만**: 문서의 `anchorScammerTurn`(설치 문자 문서에서 복사한
    * 값)을 호출부가 **문자와 같은 리졸버**(`smsTimeline.resolveAnchor` — §15.1.5 (6) 리졸버 1개)로 푼 결과. 있으면 아래 첨부 기반 리졸버
@@ -279,6 +282,10 @@ export function applyMockScreens(
       // 제출은 했지만 `consented:false`인 항목이 생긴다(표시 전용). 화면 문면이 그것을
       // "응하지 않음"으로 읽히게 그리면 참가자에게 거짓을 말한다 — 표시 카피는 ux-design 소관.
       consented,
+      // 2026-11-07 Edge 시험 판 19 — 화면 종류 · 제출 사실 · 금액 비교(표시 전용 — 판정 · 승격 무변경). 값이 없으면 키를 만들지 않는다(무백필).
+      ...(isBankTransferLanding(doc.landingId) ? { bankTransfer: true as const } : {}),
+      ...(doc.submittedAtMs !== undefined ? { submitted: true as const } : {}),
+      ...(doc.amountComparison !== undefined ? { amountComparison: doc.amountComparison } : {}),
     });
 
     if ((!consented && !submitted) || !item) continue;

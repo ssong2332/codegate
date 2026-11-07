@@ -157,13 +157,14 @@ test("GeminiRealtimeProvider: 도구는 서버가 조건에 따라 선언한 이
 
 // ⚠️ T192 C3(§79.3 ⚠️ · G556) — 옛 제목 "오늘과 동일하게 tools가 빈 배열"은 **음성 통화에서 거짓이 됐다**(`end_call`).
 // 빈 배열 단언은 `end_call` 거짓 입력(메신저)으로 옮겨 S5b 판정과의 바이트 동일을 그대로 지키고, 음성은 `end_call` 1개를 본다.
+// 2026-11-07 — 납치 협박(kidnapping-threat)에 고급 계좌 문자 카탈로그가 생겨(Edge 시험 판 7) "카탈로그 · 게이트 둘 다 없는 시나리오" 예를 가족 사고(clone · 카탈로그 0 · 확인 무력화 0)로 바꿨다.
 test("GeminiRealtimeProvider: 카탈로그·게이트 둘 다 없는 시나리오 — 메신저 범위는 tools 빈 배열(S5b 그대로) · 음성은 end_call 1개(T192 C3)", async () => {
   const capture = captureTokenRequest();
   try {
     const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
     await provider.createCallCredentials({ ...MESSENGER_SCOPE,
       sessionId: "sess",
-      scenarioId: "kidnapping-threat",
+      scenarioId: "family-accident-deepvoice",
       voiceId: "",
       difficultyLevel: "advanced",
     });
@@ -173,7 +174,7 @@ test("GeminiRealtimeProvider: 카탈로그·게이트 둘 다 없는 시나리�
     assert.deepEqual(setup?.tools, [], "end_call 거짓 입력 + 카탈로그·게이트 없음 = tools 빈 배열(G388 · G556)");
     await provider.createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
-      scenarioId: "kidnapping-threat",
+      scenarioId: "family-accident-deepvoice",
       voiceId: "",
       difficultyLevel: "advanced",
     });
@@ -427,20 +428,21 @@ test("GeminiRealtimeProvider: 도구가 선언되면 credentials.liveTools에 �
 });
 
 // ⚠️ T192 C3 — "도구 0 = liveTools 없음"은 이제 `end_call` 거짓 입력(메신저 · 중간 leg)에서만 성립한다.
+// 2026-11-07 — 납치 협박(kidnapping-threat)에 고급 계좌 문자 카탈로그가 생겨(Edge 시험 판 7) "카탈로그 · 게이트 둘 다 없는 시나리오" 예를 가족 사고(clone · 카탈로그 0 · 확인 무력화 0)로 바꿨다.
 test("GeminiRealtimeProvider: 도구가 하나도 선언되지 않으면 credentials.liveTools 필드 자체가 없다(메신저 범위) · 음성은 endCall 쌍만 실린다", async () => {
   const capture = captureTokenRequest();
   try {
     const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
     const creds = await provider.createCallCredentials({ ...MESSENGER_SCOPE,
       sessionId: "sess",
-      scenarioId: "kidnapping-threat",
+      scenarioId: "family-accident-deepvoice",
       voiceId: "",
       difficultyLevel: "advanced",
     });
     assert.equal("liveTools" in creds, false, "도구 미선언 세션은 liveTools 필드가 없어야 한다");
     const voice = await provider.createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
-      scenarioId: "kidnapping-threat",
+      scenarioId: "family-accident-deepvoice",
       voiceId: "",
       difficultyLevel: "advanced",
     });

@@ -69,7 +69,8 @@ test("[§116 배선] 저장 — submitTranscript는 사기범 줄만 마스킹 �
   // SEC-07(외부 보안 점검 2차) — 저장 전 정규화를 판독 모듈(`transcriptRequest.ts` `prepareTranscriptTurns`)로 옮겼다(규칙 그대로).
   const s = src("realtime/transcriptRequest.ts");
   assert.match(s, /import \{ stripLeakedThought \} from "\.\/thoughtLeak";/);
-  assert.match(s, /const raw = turn\.role === "scammer" \? stripLeakedThought\(submitted\) : submitted;/);
+  // 2026-11-07(판 3 · 16 · 23) — 사기범 줄은 사고 문장 제거 뒤 `liveTranscriptGuard.ts`(표식 · 실존 회사명)를, 참가자 줄은 비밀번호 숫자 가림(U1)만 거친다.
+  assert.match(s, /\? guardLiveScammerLine\(stripLeakedThought\(submitted\)\)\r?\n\s*: guardLiveUserLine\(submitted, previousScammerLine\);/);
   assert.ok(s.indexOf("stripLeakedThought(submitted)") < s.indexOf("maskPII(raw)"), "마스킹 전에 거른다");
   assert.match(src("realtime/submitTranscript.ts"), /const prepared = prepareTranscriptTurns\(turns\);/);
 });

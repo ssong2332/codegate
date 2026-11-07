@@ -140,7 +140,8 @@ test("[§142 D2] 참가자가 건 통화의 첫 신호 = 받는 쪽(레그 전�
   assert.equal(legOpeningTurnFor({ legOpening: false, connectionSeq: 0, entry: undefined }), undefined);
   assert.ok(LEG_DIALED_OPENING_TURN.includes("네가 전화한 것이 아니다"));
   const page = read("src/app/session/play/page.tsx");
-  assert.ok(page.includes("const legOpeningTurn = legOpeningTurnFor({ legOpening, connectionSeq: realtime.connectionSeq, entry: realtime.credentials?.callLeg?.entry });"));
+  assert.ok(page.includes("const legOpeningTurn = legOpeningTurnFor({ legOpening, connectionSeq: realtime.connectionSeq, entry: realtime.credentials?.callLeg?.entry, rejoin: legRejoin });"));
+  // 2026-11-07 — 같은 인물 재연결(`rejoin`) 입력이 더해졌다(`legRejoinCallClock.test.ts`).
   assert.ok(page.includes("resumeTurn={legOpeningTurn !== undefined ? legOpeningTurn : openingTurnFor({"));
 });
 

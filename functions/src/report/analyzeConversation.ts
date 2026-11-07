@@ -30,6 +30,7 @@ import type { MessengerChannel, RiskSignal, RiskSignalKind } from "../shared/typ
 import { resolveTacticCategory, type TacticCategory } from "./tacticCategory";
 import { CODE_DIGITS_WITH_ENDING, CODE_HANGUL_DIGITS, extractSpokenCodes } from "../shared/spokenDigits";
 import { PHOTO_DEMAND } from "../roleplay/photoTurn";
+import { resolveAttemptedTacticLabels, resolveSecretCodeLabel } from "./attemptedTactics";
 
 /** 대처법·예방 조언 문구를 고르는 채널. 부재는 "voice"다(`MessageDoc.channel` 하위호환 규칙과 같다). */
 export type AdviceChannel = MessengerChannel;
@@ -62,6 +63,12 @@ export type DeceivedMomentResult = {
   tacticCategory: TacticCategory;
   /** T129 (b)(§35.6 · §98) — 모의 화면 승격 순간에만(`buildLandingSubmitMoment`). 대화 추정 순간에는 없다. */
   landingId?: string;
+  /**
+   * 2026-11-07 Edge 재시험(기관 사칭 고급 — 문자 링크 이체 화면에서 980만 원 요구에 300만 원 제출, 리포트에 "적게 보냄" 문장 없음) —
+   * **통화 중 문자** 경로 이체 화면 제출 승격 순간에만(`promoteSmsLandingSubmits` 1행). 문자 문서 `landingAmountComparison` 그대로(금액 값 0 — G138).
+   * 메신저 경로는 화면 항목(`MockScreenTimelineEntry.amountComparison`)이 이미 문장을 낸다 — 여기에는 싣지 않는다(중복 문장 0).
+   */
+  amountComparison?: "less" | "equal" | "more";
 };
 
 export type ConversationAnalysis = {
@@ -477,6 +484,29 @@ function isHowToOrFollowOnlyWithoutDemand(scammerText: string, replyText: string
   return !COMPLIANCE_PATTERN.test(replyText.replace(HOW_TO_OR_FOLLOW, " ").replace(NOUN_ONLY_COMPLIANCE, " "));
 }
 
+// ⭐ 2026-11-07 Edge 시험 판 30 · 31(메인 지시 "질문 · 되묻기 · 거절 = 응함 아님") — 리포트 전용 갈래. 공유 패턴은 바이트 무변경.
+// | # | If(참가자 답) | Then |
+// |---|---|---|
+// | C6a | 부정된 행동 · 약속("안 보낼게요" · "못 드려요" · "안 할게요") | 그 구절을 지운 나머지로만 순응을 본다(공유 패턴의 `보낼게`가 부정문 안에서 맞던 것) |
+// | C6b | `왜 …?` 따지는 질문이 있다("왜 돈을 먼저 보내야 해요?") | 순응 아님(실제 제공 H1~H4는 그대로 속음) |
+// | C6c | 요구 뒤 일반 방법 질문만("그럼 제가 뭘 해야 하나요?" · "어떻게 해야 돼요?" — 판 30) | **속음 아님 · 위험 신호 `how_to_question`** — 사용자 결정 2026-11-07
+// |     |   ("위험 신호로 바꾸기") · 2026-10-24 §129 C4 후반("요구 뒤 방법 질문 = 속음")을 대체한다. 요구 없는 대사 뒤는 종전 C4(신호도 0) |
+// | — | 행동을 특정한 질문("어디로 보내면 돼요?" · "어떻게 옮기면 돼요?") · 따름 약속("시키는 대로 할게요") | 종전대로 속음(C6c가 걷어 내지 않는다) |
+const NEGATED_ACTION =
+  /(?:안|못)\s*(?:보내|보낼|보냈|드리|드릴|드려|이체|송금|입금|설치|깔|누르|누를|눌러|알려|불러|말씀|하|할|해|했|줄|줘)[가-힣]*/g;
+const CHALLENGE_QUESTION = /왜\s*[^.?!\s][^.?!]{2,40}\?/;
+/** C6c — 일반 방법 질문(행동을 특정하지 않는다). `ACTION_THEN_OK`("보내면 돼")는 넣지 않는다 — 그쪽은 행동을 특정한 질문이다. */
+const GENERIC_HOW_TO_QUESTION = new RegExp(
+  `${ASKS_HOW_TO_COMPLY.source}[가-힣]*|어떻게\s*(?:해야|하면|해)[가-힣]*`,
+  "g",
+);
+
+/** C6c — 답에서 일반 방법 질문과 명사를 걷어 내면 순응이 남지 않는다(= 방법만 물었다). */
+function isGenericHowToOnly(replyText: string): boolean {
+  if (!new RegExp(GENERIC_HOW_TO_QUESTION.source).test(replyText)) return false;
+  return !COMPLIANCE_PATTERN.test(replyText.replace(GENERIC_HOW_TO_QUESTION, " ").replace(NOUN_ONLY_COMPLIANCE, " "));
+}
+
 /** §129.9 — 대사가 돈 · 송금을 꺼냈다 · 답이 보낼 곳 · 금액을 묻는다. */
 const MONEY_TOPIC = /현금|돈|송금|이체|입금|계좌|\d[\d,]*\s*(?:만|천)?\s*원|[일이삼사오육칠팔구십백천]+\s*(?:억|만|천)\s*원/;
 const SEND_WHERE_OR_HOW_MUCH = /(?:어디로|어느\s*계좌로?|어떻게)\s*(?:보내|입금|이체|송금|넣)|얼마(?:요|를|나|면|예요)/;
@@ -551,6 +581,9 @@ function isHardDisclosure(scammerText: string, replyText: string): boolean {
 // | RS1 | 답에 가짜 표지(가짜로 · 가짜 번호/정보/이름 · 거짓으로 · 아무거나 · 아무 번호 · 지어서 · 엉터리) | `fake_info`(⭐ 이 줄은 순응 어휘가 있어도 속음이 아니다) |
 // | RS2 | 저항 어휘가 없고, 비밀 유지 약속(아무/누구한테도 … 말 · 얘기 안 · 비밀로 할게 · 비밀 지킬게 · 가족 · 은행 … 말 안 할게) | `secrecy_promise` |
 // | RS3 | 저항 어휘 · 거절이 없고, 사기범이 은행 · 거래를 언급했으며 답에 은행명(○○은행 · 농협 · 우체국 · 새마을금고 · 신협 · 수협 · ○○뱅크) | `bank_disclosed` |
+// | RS4 | 2026-11-07 사용자 결정 — 저항 어휘가 없고, 바로 앞 대사에 요구 어형(`scammerHasDemand`)이 있으며, 답이 일반 방법 질문뿐(C6c) | `how_to_question` |
+// ⚠️ 순서: RS2(비밀 약속) 뒤 · RS3 앞. 한 줄에 하나만(위에서 첫 일치).
+// | RS5 | 2026-11-07 — 같은 사기범 대사에 대한 답 줄 묶음(다음 사기범 대사 전까지)에서 속은 순간이 잡혔으면 그 묶음의 RS3(`bank_disclosed`)는 달지 않는다 | (신호 없음) |
 const FAKE_INFO_MARKER = /가짜로|가짜\s*(?:번호|정보|이름|계좌)|거짓(?:말)?로|아무거나|아무\s*번호|지어서|지어낸|엉터리/;
 const SECRECY_PROMISE =
   /(?:아무|누구)\s*(?:한테|에게)?\s*도[^.?!]{0,8}?(?:말|얘기|이야기|알리)[^.?!]{0,3}?(?:안|않|하지\s*않)|비밀로\s*(?:할게|하겠|해\s*드릴|둘게|두겠)|비밀\s*(?:지킬게|지키겠|유지할게|유지하겠)|(?:가족|은행|남편|아내|아들|딸|자녀)[^.?!]{0,8}?(?:말|얘기|알리)[^.?!]{0,3}?안\s*(?:할|하겠|해)/;
@@ -581,6 +614,8 @@ function resolveRiskSignalKind(scammerText: string, replyText: string, otpCodes:
   if (isWrongOtpReply(scammerText, replyText, otpCodes)) return "fake_info";
   if (isResistanceForReport(replyText)) return undefined;
   if (SECRECY_PROMISE.test(replyText)) return "secrecy_promise";
+  // 2026-11-07 사용자 결정 — 요구 뒤 일반 방법 질문만(C6c) = 위험 신호. 요구 없는 대사 뒤는 신호 0(종전 C4).
+  if (scammerHasDemand(scammerText) && isGenericHowToOnly(replyText.replace(NEGATED_ACTION, " "))) return "how_to_question";
   if (!REFUSAL_IN_ANSWER.test(replyText) && BANK_CONTEXT.test(scammerText) && BANK_NAME.test(replyText)) {
     return "bank_disclosed";
   }
@@ -591,8 +626,26 @@ function isResistanceForReport(replyText: string): boolean {
   return RESISTANCE_PATTERN.test(replyText.replace(ECHOED_OR_NEGATED_RESISTANCE, " "));
 }
 
+// ⭐ 2026-11-07(Edge 시험 판 12 · 사용자 결정 "앱 안 화면 추가") — 상품권 핀 번호 낭독. 구매 화면 결제는 화면 기록(`landing_submitted` → 문자 승격)이 잡고,
+// 화면에 뜬 핀 번호를 **불러 준 순간**은 여기서 잡는다. 핀 값은 서버가 모른다(화면이 만든다 — G138) ⇒ 값 대조가 아니라 요구 + 숫자열로 본다(인증번호 L3과 같은 방식).
+// | # | If(바로 앞 사기범 대사 · 참가자 답) | Then |
+// |---|---|---|
+// | P1 | 대사가 핀 번호를 불러 · 말해 · 알려 · 읽어 달라고 요구하지 않았다 | 이 행 밖(종전 판정) |
+// | P2 | 답에 거절 어휘가 있다 | 이 행 밖 |
+// | P3 | 답에 숫자 4자리 이상(띄어쓰기 · 붙임표로 끊겨도 이어서 센다 · 뒤가 금액 · 날짜 단위면 아님) 또는 개인정보 가림 표지([계좌] · [전화]) 또는 한글 숫자 낱말 6개 이상 | 순응(속은 순간) — 라벨은 세션 목록의 상품권 · 핀 수법 |
+const PIN_REQUESTED = /(?:핀|PIN|pin|Pin)\s*(?:번호|넘버|코드)?[^.?!\n]{0,30}?(?:불러|부르|말씀해|알려|읽어)/;
+const PIN_DIGITS_IN_ANSWER = /(?<![\d,])\d{2,}(?:[\s-]+\d{2,})*(?![\d,]|\s*(?:원|만|천|년|월|일|시|분|살|개|명|장|층))/g;
+const PIN_WORDS_IN_ANSWER = /[공영일이삼사오육칠팔구](?:\s?[공영일이삼사오육칠팔구]){5,}/;
+function isPinGiven(scammerText: string, replyText: string): boolean {
+  if (!PIN_REQUESTED.test(scammerText) || REFUSAL_IN_ANSWER.test(replyText)) return false;
+  const digitCount = Math.max(0, ...(replyText.match(PIN_DIGITS_IN_ANSWER) ?? []).map((run) => run.replace(/\D/g, "").length));
+  // 8자리 이상 숫자열은 저장 전 개인정보 가림(`guardrails` `maskPII`)이 "[계좌]" · "[전화]"로 바꾼다 — 가려진 표지도 숫자열로 센다.
+  return digitCount >= 4 || /\[(?:계좌|전화)\]/.test(replyText) || PIN_WORDS_IN_ANSWER.test(replyText);
+}
+
 function isContextualCompliance(scammerText: string, replyText: string): boolean {
   if (REFUSAL_IN_ANSWER.test(replyText)) return false;
+  if (isPinGiven(scammerText, replyText)) return true;
   if (BIRTH_DATE_DEMAND.test(scammerText) && DATE_IN_ANSWER.test(replyText)) return true;
   if (SECRET_CODE_DEMAND.test(scammerText) && SHORT_CODE_IN_ANSWER.test(replyText)) return true;
   return ENTERED_IN_ANSWER.test(replyText);
@@ -618,7 +671,7 @@ function isContextualCompliance(scammerText: string, replyText: string): boolean
  * ⚠️ 예외(PR-A3): 요구 3종 한정 보정은 아래 `resolveDemandFallbackTactic` 판정표뿐이다 — 문구 키가 빈 경우만, 이미 속은 순간의
  * **라벨에만**, 세션 목록 안 라벨만 쓴다(같은 중립 대사 × 전 시나리오에서 그 표도 0건 — `demandFallbackLabel.test.ts`).
  */
-type TacticMatcher = { tactic: string; phraseKeys: string[] };
+export type TacticMatcher = { tactic: string; phraseKeys: string[] };
 
 const PHRASE_KEY_LENGTH = 5;
 const PHRASE_MIN_LENGTH = 3;
@@ -648,14 +701,35 @@ function splitFlavorPhrases(tactic: string): string[] {
     });
 }
 
-function buildTacticMatchers(weakenedTactics: readonly string[]): TacticMatcher[] {
+/**
+ * 2026-11-07 Edge 재시험(자녀 사칭 초급 — 사기범은 "폰 고장 · 200만 원만 먼저"뿐인데 수법 목록에 "다른 명의 계좌 요구") — 문구 키 규칙 한 행 추가.
+ * | 규칙 | 내용 |
+ * |---|---|
+ * | 설정 문구 구별 | **송금 · 계좌 요구 범주 수법만**(`resolveTacticCategory` = payment_demand): 키가 그 시나리오의 **설정 문구**(페르소나 · 시나리오 문자 본문 — 호출부가 넘긴다)에서 수법 인용구를 지운 나머지에도 나오면, 거기 없어질 때까지(최대 문구 전체) 키를 늘린다 |
+ * | (범위 이유) | 전 범주에 적용하면 69변형 1131키 중 75키가 바뀌었다 — "검찰 수사관"(권위 암시)처럼 설정 문구 자체가 수법인 범주까지 늘어 실제 쓴 수법을 놓친다. 요구 범주는 요구 어형이 있어야 그 수법이다 |
+ * 원인(확정): 인용구 '폰이 고장 나서 내 계좌 인증이 안 돼 …'의 앞 5자 "폰이고장나"가 자녀 사칭 페르소나의 기본 사연("폰이 고장 나서")과 같았다.
+ * 위 "시나리오 안 구별"(다른 수법 문구와 겹치면 늘림)과 같은 방식이다. 설정 문구 부재(종전 호출부 · 테스트) = 종전 키 그대로.
+ */
+// export 이유: 설정 문구 구별 전수 비교 테스트(`__tests__/tacticPremise.test.ts`).
+export function buildTacticMatchers(weakenedTactics: readonly string[], premiseText?: string): TacticMatcher[] {
   const phrasesByTactic = weakenedTactics.map(splitFlavorPhrases);
+  // 설정 문구 안에 수법 인용구가 그대로 실려 있으면(페르소나의 예시 대사) 그 자리는 설정이 아니라 수법이다 — 지운 나머지와만 비교한다.
+  const premise = premiseText
+    ? phrasesByTactic
+        .flat()
+        .sort((x, y) => y.length - x.length)
+        .reduce((rest, phrase) => rest.split(phrase).join(" "), normalizeForTacticMatch(premiseText))
+    : "";
+  const inPremise = (key: string) => premise.length > 0 && premise.includes(key);
   return weakenedTactics.map((tactic, index) => {
     const otherPhrases = phrasesByTactic.filter((_, other) => other !== index).flat();
+    const premiseApplies = resolveTacticCategory(extractTacticLabel(tactic)) === "payment_demand";
     const phraseKeys = phrasesByTactic[index].flatMap((phrase) => {
       if (otherPhrases.some((other) => other.startsWith(phrase))) return [];
       let length = Math.min(PHRASE_KEY_LENGTH, phrase.length);
       while (otherPhrases.some((other) => other.startsWith(phrase.slice(0, length)))) length += 1;
+      // 설정 문구 구별 — 문구 끝까지만 늘린다(문구 전체가 설정 문구에 있으면 문구 전체가 키: 그대로 말하면 여전히 잡는다).
+      while (premiseApplies && length < phrase.length && inPremise(phrase.slice(0, length))) length += 1;
       return [phrase.slice(0, length)];
     });
     return { tactic, phraseKeys };
@@ -807,6 +881,8 @@ export function analyzeConversation(
    * 겹쳐도 그 통화에서 쓰지 않은 수법은 붙지 않는다). `legIndex`가 없거나 범위 밖인 메시지 · 인자 부재 = `weakenedTactics`(종전).
    */
   legTactics?: readonly (readonly string[])[],
+  /** 2026-11-07 — 시나리오 설정 문구(페르소나 · 시나리오 문자 본문). 문구 키가 여기 나오면 늘린다(`buildTacticMatchers` 표). 부재 = 종전. */
+  premiseText?: string,
   /**
    * ⭐ PR-B(2026-11-07 · 기관 사칭 고급 3통화 — 설계 §5 · D10 확인된 사실만) — 정당한 제3자 통화(대출 실행 확인 상담원)의 레그 번호 · 그 통화 결과.
    * | # | If | Then |
@@ -827,9 +903,9 @@ export function analyzeConversation(
     .sort((a, b) => a.turnIndex - b.turnIndex);
   const deceivedMoments: DeceivedMomentResult[] = [];
   const tacticLabelsUsed = new Set<string>();
-  const tacticMatchers = buildTacticMatchers(weakenedTactics);
+  const tacticMatchers = buildTacticMatchers(weakenedTactics, premiseText);
   // §142 N3 — 통화별 수법 범위(서버가 메시지에 쓴 `legIndex` 기준). 범위가 없으면 세션 전체 목록 · 매처(종전 바이트 동일).
-  const legMatchers = legTactics?.map((tactics) => buildTacticMatchers([...tactics]));
+  const legMatchers = legTactics?.map((tactics) => buildTacticMatchers([...tactics], premiseText));
   const scopeOf = (message: AnalysisMessage): { tactics: string[]; matchers: TacticMatcher[] } => {
     const leg = message.legIndex;
     if (legTactics && legMatchers && leg !== undefined && leg >= 0 && leg < legTactics.length) {
@@ -867,6 +943,8 @@ export function analyzeConversation(
       const demandLabel = resolveDemandFallbackTactic(msg.textMasked, msgScope.tactics);
       if (demandLabel) tacticLabelsUsed.add(demandLabel);
     }
+    // 2026-11-07 Edge 시험 — 확인 차단 · 인증번호 · 비밀번호 · 명의 도용을 바꿔 말한 대사도 목록에 올린다(`attemptedTactics.ts` 표 A1~A5 · 목록 전용).
+    for (const label of resolveAttemptedTacticLabels(msg.textMasked, msgScope.tactics)) tacticLabelsUsed.add(label);
 
     // 판정 검수(2026-10-21) — 사기범 대사 뒤 참가자 줄이 **연달아** 올 수 있다(실시간 통화에서 사기범 전사가 빈
     // `turnComplete` · 끊긴 조각). 종전엔 첫 줄만 봐서 "잠깐만요" → "048231이요"의 둘째 줄이 판정되지 않았다.
@@ -880,12 +958,17 @@ export function analyzeConversation(
       const resisted = isResistanceForReport(reply.textMasked);
       // 사용자 결정 2026-10-21 — 인증번호 오답(위 W4)은 숫자 응답에서 오는 순응 판정을 끈다(실제 제공 H1 · H2는 그대로).
       const wrongOtp = isWrongOtpReply(msg.textMasked, reply.textMasked, otpCodes);
+      // 2026-11-07 판 31 · 32 — C6a(부정된 행동 구절 제거) · C6b(따지는 질문) — 위 표.
+      const affirmText = reply.textMasked.replace(NEGATED_ACTION, " ");
+      // C6c — 요구 뒤 일반 방법 질문만은 속음이 아니다(위험 신호는 아래 `resolveRiskSignalKind`).
+      const questionedNotComplied = CHALLENGE_QUESTION.test(reply.textMasked) || isGenericHowToOnly(affirmText);
       const complied =
         // §129 C1 — 부인 · 모름 답의 명사 단독 순응은 끈다(공유 패턴 갈래만).
         // §129 C4 · C5 — 요구 없는 대사 뒤의 방법 질문 · 따름 약속만으로는 순응이 아니다.
-        (COMPLIANCE_PATTERN.test(reply.textMasked) &&
-          !isNounOnlyDenial(reply.textMasked) &&
-          !isHowToOrFollowOnlyWithoutDemand(msg.textMasked, reply.textMasked)) ||
+        (!questionedNotComplied &&
+          COMPLIANCE_PATTERN.test(affirmText) &&
+          !isNounOnlyDenial(affirmText) &&
+          !isHowToOrFollowOnlyWithoutDemand(msg.textMasked, affirmText)) ||
         isHandoffPromiseReply(msg.textMasked, reply.textMasked) ||
         isContextualCompliance(msg.textMasked, reply.textMasked);
       if (isPhotoAfterDemand(reply, photoDemand !== undefined)) {
@@ -905,6 +988,10 @@ export function analyzeConversation(
       const reply = sorted[j];
       if (reply === userReply) continue;
       const kind = resolveRiskSignalKind(msg.textMasked, reply.textMasked, otpCodes);
+      // 2026-11-07 Edge 재시험(기관 사칭 고급 "거래 은행은 새솔은행이고요, 잔액은 천이백만 원쯤 있어요." → 위험 신호 "거래 은행을 알려 줬어요"
+      // + 속은 순간 "거래 은행·자산 정보 수집"이 둘 다) — 같은 대사에 대한 답 묶음에서 이미 속은 순간이 잡혔으면 은행명 신호(RS3)는 달지 않는다
+      // (같은 답 하나를 두 번 표기 · RS5). 가짜 정보 · 비밀 약속 · 방법 질문 신호는 그대로다.
+      if (kind === "bank_disclosed" && userReply) continue;
       if (kind) riskSignals.push({ turnIndex: reply.turnIndex, timeLabel: elapsedLabel(reply, sessionCreatedAtMs), kind });
     }
     if (!userReply) continue;
@@ -951,10 +1038,17 @@ export function analyzeConversation(
       : undefined;
     const l4DemandLabel =
       keyIsVerificationBlock && !l4KeyTactic ? resolveDemandFallbackTactic(labelSource.textMasked, scopeTactics) : undefined;
-    const labelTactic =
-      otpKeyTactic ?? l4KeyTactic ?? (otpCategoryTactic || l4DemandLabel ? undefined : firstKeyTactic);
+    // 2026-11-07 Edge 시험 판 1 · 3 — 인증번호 · 비밀번호를 불러 준 순간은 그 이름이 든 목록 라벨이 L3(개인정보 범주 첫 라벨)보다 앞선다.
+    // 목록에 그런 라벨이 없으면 종전 L3 그대로(`attemptedTactics.ts` `resolveSecretCodeLabel`).
+    const secretGiven =
+      userReply.photo !== true && (OTP_DIGIT_RUN.test(userReply.textMasked) || extractSpokenCodes(userReply.textMasked).length > 0);
+    const secretLabel = secretGiven ? resolveSecretCodeLabel(labelSource.textMasked, scopeTactics) : undefined;
+    if (secretLabel) tacticLabelsUsed.add(secretLabel);
+    const labelTactic = secretLabel
+      ? undefined
+      : (otpKeyTactic ?? l4KeyTactic ?? (otpCategoryTactic || l4DemandLabel ? undefined : firstKeyTactic));
     // §129 L2 — 요구 어형 표도 비면 답의 내용 범주로(사진 턴 제외).
-    const fallbackTactic = labelTactic
+    const fallbackTactic = labelTactic || secretLabel
       ? undefined
       : (otpCategoryTactic ??
         l4DemandLabel ??
@@ -963,9 +1057,15 @@ export function analyzeConversation(
         resolveAnswerCategoryTactic(labelSource.textMasked, userReply, scopeTactics));
     if (fallbackTactic) tacticLabelsUsed.add(fallbackTactic);
     // §129.10 최종 폴백(메인 제안 · 빈 라벨 0) — 문구 키 · 요구 어형 표 · 답 내용 범주가 모두 비면 세션 목록의 대표 요구 수법(`representativeTactic`).
-    const representative = labelTactic || fallbackTactic ? undefined : representativeTactic(scopeTactics);
+    const representative = labelTactic || fallbackTactic || secretLabel ? undefined : representativeTactic(scopeTactics);
     if (representative) tacticLabelsUsed.add(representative);
-    const tactic = labelTactic ? extractTacticLabel(labelTactic) : (fallbackTactic ?? representative ?? "약화된 사기 수법");
+    // 2026-11-07 핀 낭독(위 P3) — 라벨은 세션 목록의 상품권 · 핀 수법이 문구 키보다 앞선다(인증번호 L3과 같은 이유 — 같은 대사의 비밀 유지 · 압박 라벨이 먼저 잡힌다).
+    const pinLabel = isPinGiven(labelSource.textMasked, userReply.textMasked)
+      ? scopeTactics.map(extractTacticLabel).find((label) => /상품권|핀\s*번호/.test(label))
+      : undefined;
+    if (pinLabel) tacticLabelsUsed.add(pinLabel);
+    const tactic =
+      pinLabel ?? secretLabel ?? (labelTactic ? extractTacticLabel(labelTactic) : (fallbackTactic ?? representative ?? "약화된 사기 수법"));
     // AC-026 예시("15초 시점에 속았습니다")를 그대로 따르기 위해 turnIndex가 아니라 실제 경과
     // 시간(초)을 라벨로 쓴다 — MessageDoc.createdAt이 이미 존재하므로 정확한 초 단위 계산이
     // 가능하다(구현 판단, Mock 단계라 정밀 음성 타이밍 데이터는 없지만 메시지 write 시각은 실측값).
@@ -1023,7 +1123,8 @@ function elapsedLabel(message: AnalysisMessage, sessionCreatedAtMs: number): str
  * 채널에 모두 맞는 문구(확인 전화·영상통화로 직접 확인)는 채널과 무관하게 그대로다. */
 export function pickCorrectAction(tacticLabel: string, channel: AdviceChannel = "voice"): string {
   const messenger = channel === "messenger";
-  if (/확인|전화/.test(tacticLabel)) {
+  // 2026-11-07 Edge 시험 판 5 — "본인확인 빙자 정보 수집"의 '본인확인'은 확인 차단이 아니다(확인 가로채기가 없던 판에 "상대가 확인 전화를 막으려 해도"가 나왔다).
+  if (/(?<!본인\s?)확인|전화/.test(tacticLabel)) {
     return "상대가 확인 전화를 막으려 해도 반드시 알고 있는 번호로 직접 전화해 사실을 확인하세요.";
   }
   if (/송금|계좌/.test(tacticLabel)) {
@@ -1039,7 +1140,8 @@ export function pickCorrectAction(tacticLabel: string, channel: AdviceChannel = 
   if (/가족|죄책감|애정/.test(tacticLabel)) {
     return "감정이 흔들리더라도 실제 그 사람이 맞는지부터 다른 방법(직접 전화·영상통화)으로 확인하세요.";
   }
-  if (/권위|기관|경찰|공공/.test(tacticLabel)) {
+  // 2026-11-07 Edge 시험 판 6 — 회사 상담원의 "권위·정당성 포장"(대출 사칭)에 "신원(경찰·기관 등)"은 맞지 않는다 → 마지막 일반 문구로 둔다.
+  if (/권위|기관|경찰|공공/.test(tacticLabel) && !/정당성|포장/.test(tacticLabel)) {
     return messenger
       ? "메시지로 신원(경찰·기관 등)을 주장해도 그 자리에서 믿지 말고, 공식 대표번호로 직접 걸어 확인하세요."
       : "전화로 신원(경찰·기관 등)을 주장해도 그 자리에서 믿지 말고, 공식 대표번호로 직접 걸어 확인하세요.";

@@ -43,6 +43,10 @@ export type SmsTimelineSource = {
   landingConvertedAtMs?: number;
   landingAmountAtMs?: number;
   /**
+   * 2026-11-07 — 마지막 이체 화면 제출의 요구액 대비 비교(문서 `landingAmountComparison` · 부재 = 모름). 승격 순간에만 싣는다 — 스냅샷 항목에는 싣지 않는다(G17 · 두 번 렌더 금지).
+   */
+  landingAmountComparison?: "less" | "equal" | "more";
+  /**
    * T123 — 제출된 랜딩의 카탈로그 조회 키.
    * ⛔ **승격 판정 입력으로만 쓰고 `SmsTimelineEntry`(리포트 스냅샷)에는 절대 싣지 않는다** —
    * §15.6 **G19**가 금지한 자리다(사후 열람 화면에 가짜 랜딩 재진입 컨트롤이 생긴다).
@@ -362,11 +366,16 @@ export function promoteSmsLandingSubmits(
     if (!anchor.anchorResolved || anchor.anchorTurnIndex < 0) continue;
     // §129.8 — 시각 표기 = 그 화면에서 가장 깊은 단계를 실제로 누른 시각(위치는 앵커 그대로).
     const stepAtMs = doc.landingSubmittedAtMs ?? doc.landingAmountAtMs ?? doc.landingConvertedAtMs ?? doc.landingIdentityAtMs;
-    const moment = buildLandingSubmitMoment(
+    const built = buildLandingSubmitMoment(
       item,
       anchor.anchorTurnIndex,
       stepAtMs !== undefined ? actualTimeLabel(stepAtMs, sessionCreatedAtMs) : anchor.timeLabel,
     );
+    // 2026-11-07 Edge 재시험 — 1행(마지막 이체 확인) 승격에만 요구액 대비 비교를 싣는다(이체 전 단계 2~4행은 보낸 금액이 없다).
+    const moment =
+      doc.landingSubmittedAtMs !== undefined && doc.landingAmountComparison !== undefined
+        ? { ...built, amountComparison: doc.landingAmountComparison }
+        : built;
     promoted.push(moment);
     const merged = stepAtMs !== undefined ? findChatReportMergedIntoSubmit(moment, stepAtMs, deceivedMoments, sortedMessages) : undefined;
     if (merged !== undefined) dropped.add(merged);

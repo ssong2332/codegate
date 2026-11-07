@@ -257,6 +257,46 @@ export function dropPrematureBankTransferChip(
   return kept.length > 0 ? kept : undefined;
 }
 
+/** 마커 1개로 만든 칩(라벨 · 종류 · 무해 표시가 마커 경로와 같다). Edge 판 22 · 23 · 24 문자 스미싱 첫 문자 링크 백스톱이 쓴다. */
+export function linkChipFor(
+  landingId: string,
+  scenarioId: string,
+  session: Parameters<typeof extractLinkMarker>[2],
+): MessengerAttachment[] | undefined {
+  return extractLinkMarker(`[[LINK:${landingId}]]`, scenarioId, session).attachments;
+}
+
+/**
+ * ⭐ Edge 시험 판 25(2026-11-07 · 자녀 사칭 중급 — "계좌 알려줄게" 메시지에 "이체하기" 칩 · 열면 "메시지로 받은 계좌가 채워져 있습니다"인데 입금 계좌 칸이 빔).
+ * 원인(추정 — 서버 로그 미확인): ① S2(`dropPrematureBankTransferChip`)는 문장 상한 · 대사 교체 **전** 대사로 판정하는데, 계좌 문장이 상한에 잘려도 칩은 남았다.
+ * ② 세션 은행 · 계좌를 칩에 싣는 것(`withBankTransferPrefill`)은 일반 대화 턴만 했다 — 통화 복귀 · 통화 중 대화방 · 화면 뒤 대사 · 첫 메시지 칩은 빈 칸 화면을 열었다.
+ * ⇒ 저장 직전 **최종 대사**로 한 번 더 판정하고, 모든 경로가 같은 방식으로 싣는다. 판정표(위에서 첫 매치):
+ * | # | If | Then |
+ * |---|---|---|
+ * | F1 | 이체 화면 칩이 없다 | 그대로 |
+ * | F2 | 최종 대사 · 앞선 사기범 메시지 어디에도 세션 계좌가 없다(S2 P4) | 이체 화면 칩만 뺀다 |
+ * | F3 | 세션 은행명을 모른다(채울 수 없다 — 빈 칸 화면이 된다) | 이체 화면 칩만 뺀다 |
+ * | F4 | 그 밖 | 세션 은행 · 계좌 · 예금주 · 요구액을 싣는다(P2-c · P2-d · N1 — 같은 값을 다시 실어도 같다) |
+ */
+export function finalizeBankTransferChips(
+  attachments: MessengerAttachment[] | undefined,
+  finalText: string,
+  ctx: {
+    accountNumber: string;
+    bankName: string | undefined;
+    accountHolder?: string;
+    history: ReadonlyArray<{ role: string; textMasked?: string }>;
+  },
+): MessengerAttachment[] | undefined {
+  if (!(attachments ?? []).some((attachment) => isBankTransferLanding(attachment.fakeLandingId))) return attachments; // F1
+  const kept = dropPrematureBankTransferChip(attachments, finalText, ctx.accountNumber, ctx.history); // F2
+  if (!ctx.bankName) {
+    const withoutTransfer = (kept ?? []).filter((attachment) => !isBankTransferLanding(attachment.fakeLandingId)); // F3
+    return withoutTransfer.length > 0 ? withoutTransfer : undefined;
+  }
+  return withBankTransferPrefill(kept, ctx.bankName, ctx.accountNumber, ctx.accountHolder, demandAmountFrom(finalText, ctx.history)); // F4
+}
+
 /**
  * ⭐ D-g(P2 실 키 실측 2026-11-01 · 자녀 사칭 고급 `fv-tdgg` — *"계좌는 해담은행 948-2716-5093-27이고, 예금주는 박지훈이야."* 에 칩이 없었다) — 모델이
  * `[[LINK:…]]` 마커를 빠뜨리면 참가자는 계좌만 보고 실제 뱅킹 앱을 열 수밖에 없다. 판정표(위에서 첫 매치):

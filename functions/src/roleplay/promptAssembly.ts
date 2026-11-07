@@ -101,6 +101,37 @@ ${LIVE_SPEECH_STYLE_VOICE_KEEP}`;
 const LIVE_SPEECH_STYLE_NAME_INSTITUTION = `- **상대의 이름·나이 같은 신상은 [미리 확보한 상대 정보 — 이 통화에서만]에 적혀 있거나 상대가 이 통화에서 직접 말한 것만 쓴다.** 그 밖의 이름은 지어내 부르지 않는다 — 아직 모르는 이름이 필요하면 상대에게 물어 확인한다.`;
 const LIVE_SPEECH_STYLE_NAME_OTHER = `- **상대의 이름·나이 같은 신상은 [미리 확보한 상대 정보 — 이 통화에서만]에 적혀 있거나 상대가 이 통화에서 직접 말한 것만 쓴다.** 그 밖의 이름은 지어내 부르지 않는다 — 이름 대신 상황에 맞는 호칭으로 부른다.`;
 
+// ⭐ 2026-11-07(Edge 시나리오 시험 판 3 · 16 · 23 — `docs/research/edge-scenario-test-2026-11-07.md`) — Live 음성 경로는 출력이 오디오라
+// 텍스트 경로의 결정적 후처리(표식 추출 · R9 비밀번호 문장 제거 · 실명 치환)가 소리에는 닿지 않는다. 이 블록이 소리의 유일한 층이고,
+// 자막 · 저장 전사는 `realtime/liveTranscriptGuard.ts`(화면 사본 `src/lib/realtime/liveTranscriptGuard.ts`)가 결정적으로 거른다.
+// | 줄 | 실측 결함 | 지시 |
+// |---|---|---|
+// | L1 | 판 23 — 메신저에서 넘어온 통화 자막에 `[[LINK:parcel-install]]` · `[[SIGNAL:ESCALATE_VOICE]]` | 겹대괄호 표식은 통화에서 말하지 않는다 · 통화로 넘기라는 표식 지시는 이미 통화 중이라 해당 없음 |
+// | L2 | 판 3 · 판 33 — 계좌 비밀번호를 말로 요구(은행 · 기관 사칭 수법 문면과 [진행 강제] 화면 밖 규칙의 "계좌 비밀번호" 예시) | 비밀번호는 말로 묻지 않고 화면 인증으로 넘긴다 · 수법 목록 · 예시보다 우선 |
+// | L3 | 판 16 — "한진택배 고객센터" 2회(소속 자기소개) | 자기 소속을 밝힐 때도 실제 회사 이름 대신 업종 이름 |
+// ⛔ 실제 회사 이름을 예로 적지 않는다(예시가 오히려 그 이름을 부른다). ⛔ 문자로 받은 인증번호는 L2 대상이 아니다(인증번호 문자 루트의 설계 단계).
+// 실리는 곳 = `liveSpeechStyle`(Gemini Live 토큰 1곳). 폴백 · 오프닝 · 메신저 = 블록 0 = 종전 바이트 동일.
+export const LIVE_CALL_SAFETY_HEAD = "[실시간 통화 — 반드시 지킬 것]";
+/** L1 — 시나리오 문면에 겹대괄호 표식(`[[`)이 있을 때만 싣는다(없는 시나리오에 표식 이야기를 꺼내 오히려 부르지 않게). */
+export const LIVE_CALL_MARKER_RULE = `- 이 대화는 음성 통화다. 위 설명에 나오는 [[LINK:…]] · [[SIGNAL:…]]처럼 겹대괄호로 감싼 표식은 문자 대화에서만 쓰는 것이다. 통화에서는 표식을 소리 내어 말하거나 읽지 않는다. 링크는 "문자로 보내 드린 링크"처럼 말로만 가리킨다. 위 설명에 상대를 전화 통화로 넘기라는 지시가 있어도 지금은 이미 통화 중이므로 해당하지 않는다 — 전화를 다시 걸겠다거나 상담원이 전화드리겠다는 말 없이 이 통화에서 하던 안내를 바로 이어 간다.`;
+export const LIVE_CALL_PASSWORD_RULE = `- 비밀번호(계좌 · 카드 · 인터넷뱅킹 · 간편 비밀번호 · 보안카드 번호)는 말로 불러 달라거나 알려 달라고 하지 않는다. 위 페르소나 · 수법 목록 · [진행 강제] 어디에 비밀번호를 불러 달라는 요구나 "계좌 비밀번호" 예시가 있어도 이 줄이 우선한다 — 그 차례에는 비밀번호를 묻는 대신 "화면에서 인증하실 때 직접 누르시면 됩니다"라고만 안내하는 것으로 그 요구를 대신하고 다음 단계로 넘어간다. 상대가 비밀번호 숫자를 말해도 그 숫자를 되풀이하거나 맞는지 확인하지 않는다. 문자로 받은 인증번호는 이 줄의 대상이 아니다.`;
+export const LIVE_CALL_COMPANY_RULE = `- 자기 소속을 밝힐 때도 택배 · 통신 · 보험 · 증권 · 쇼핑몰 · 캐피탈 · 은행 · 카드 회사의 실제 이름은 쓰지 않는다. 위 설명에 정해진 이름이 있으면 그 이름만, 없으면 "택배사 고객센터"처럼 업종 이름으로만 말한다.`;
+
+/** 겹대괄호 표식을 쓰는 시나리오 문면인가(페르소나 · 수법 중 하나라도 `[[`). */
+export function scenarioUsesControlMarkers(prompt: Pick<ScenarioPromptDoc, "personaPrompt" | "weakenedTactics">): boolean {
+  return prompt.personaPrompt.includes("[[") || prompt.weakenedTactics.some((tactic) => tactic.includes("[["));
+}
+
+/** Live 전용 [실시간 통화 — 반드시 지킬 것] 블록(L1은 표식을 쓰는 시나리오만). */
+export function buildLiveCallSafetyBlock(usesControlMarkers: boolean): string {
+  return [
+    LIVE_CALL_SAFETY_HEAD,
+    ...(usesControlMarkers ? [LIVE_CALL_MARKER_RULE] : []),
+    LIVE_CALL_PASSWORD_RULE,
+    LIVE_CALL_COMPANY_RULE,
+  ].join("\n");
+}
+
 /** Live 전용 [말투] 블록. `identityCheckAllowed`(institution 여부)로 연령·톤 줄과 이름 부재 시 처리만 갈린다. */
 export function buildLiveSpeechStyleBlock(identityCheckAllowed: boolean): string {
   return [
@@ -212,7 +243,26 @@ const SMS_DEMAND_EXAMPLE_TRANSFER_WITH_LINK = `"문자로 보낸 계좌 안내�
  * (`roleplay/screenAction.ts` 판정표 SA). ⛔ 따옴표 대사 예시 0.
  */
 export const SCREEN_ACTION_ONLY_RULE =
-  "[화면 행동 확인]\n- 네가 보낸 문자나 링크의 화면(앱 설치와 권한 허용, 이체, 신청 입력)은 앱이 상대가 그 화면에서 마쳤다고 알려 준 뒤에만 끝난 것으로 본다.\n- 상대가 설치했다, 보냈다, 입력했다고 말만 하고 앱의 알림이 없으면, 실제로 확인할 수 있는 사기범처럼 아직 확인이 안 된다며 그 화면에서 마저 진행해 달라고 하고 다음 단계로 넘어가지 않는다. 이때 완료됐다거나 확인됐다고 말하지 않는다. 같은 말을 되풀이하지 말고 화면에서 어디까지 했는지 묻거나 다른 말로 재촉한다.\n- 앱이 마쳤다고 알려 주면 상대가 무슨 말을 하든 그 단계는 끝난 것으로 보고 다음으로 넘어간다.";
+  "[화면 행동 확인]\n- 네가 보낸 문자나 링크의 화면(앱 설치와 권한 허용, 이체, 신청 입력)은 앱이 상대가 그 화면에서 마쳤다고 알려 준 뒤에만 끝난 것으로 본다.\n- 상대가 설치했다, 보냈다, 입력했다고 말만 하고 앱의 알림이 없으면, 실제로 확인할 수 있는 사기범처럼 아직 확인이 안 된다며 그 화면에서 마저 진행해 달라고 하고 다음 단계로 넘어가지 않는다. 이때 완료됐다거나 확인됐다고 말하지 않는다. 같은 말을 되풀이하지 말고 화면에서 어디까지 했는지 묻거나 다른 말로 재촉한다.\n- 앱이 마쳤다고 알려 주면 상대가 무슨 말을 하든 그 단계는 끝난 것으로 보고 다음으로 넘어간다." +
+  // Edge 시험 판 22 · 23 · 26(2026-11-07) — 화면에 없는 단계를 요구했다(재배송 화면에 인증번호 입력 · 이미 허용한 설치 화면에 권한 하나 더 ·
+  // 설치 화면에 없는 접속번호 불러 주기). 참가자가 따라 할 화면이 없어 막다른 길이 됐다.
+  "\n- 상대에게는 네가 보낸 화면에 실제로 있는 것만 하게 한다. 그 화면에 없는 단계(권한을 하나 더 허용, 화면에 뜬 번호 불러 주기, 화면에 없는 인증번호 입력, 이미 마친 화면 다시 작성)를 지어내 요구하지 않는다.";
+
+/**
+ * ⭐ Edge 재시험 R2(2026-11-07 · 정부지원금 스미싱 고급 fv-hu8w) — 설치 · 권한 허용 · 이름 · 생년월일 뒤 사기범이 "문자로 받으신 인증번호를 불러 주세요"
+ * (인증번호 문자 0통) → "확인 앱에 떠 있는 여섯 자리 숫자"(그런 화면 0) → 통화를 끊은 뒤 문자에서도 같은 요구. 원인: 문자 카탈로그가 없는 세션에도 [진행 강제]의
+ * 구체 요구 예시("인증번호를 불러 달라 · 화면에 뜬 번호를 읽어 달라")와 "본인확인 뒤 추가 항목을 하나 더"가 실리고, 인증번호 금지는 "화면에 뜬 것을 불러 달라"는
+ * 꼴에만 걸려 있었다. 실제 지원금 스미싱은 링크 → 악성 앱 설치 → 앱이 정보를 빼 가는 구조라 피해자에게 번호를 불러 달라는 단계가 없다(공공 안내 기준 — PR 본문 근거).
+ * 판정표(블록 조립 — 위에서 첫 매치):
+ * | # | If | Then |
+ * |---|---|---|
+ * | N1 | [화면 행동 확인]을 싣지 않는 세션 | 없음(종전) |
+ * | N2 | 통화 중 문자를 선언한 세션(`inCallSmsEnabled`) | 없음(인증번호 문자가 실제로 올 수 있다 — 종전 바이트 동일) |
+ * | N3 | 그 밖(화면은 있고 문자 카탈로그는 없다 — 메신저 4종) | 블록 끝에 `NO_OTP_SMS_LINE` |
+ * ⛔ 따옴표 대사 예시 0. #192 고정 변형은 N1(술어 거짓)이라 무변경.
+ */
+export const NO_OTP_SMS_LINE =
+  "\n- 이 대화에는 인증번호 문자가 오지 않고, 네가 보낸 화면이나 설치된 앱에도 번호가 뜨지 않는다. 인증번호 · 확인 번호 · 화면이나 앱에 뜬 숫자를 불러 달라거나 보내 달라고 하지 않는다. 본인 확인이 더 필요하면 상대가 이미 알고 있는 것으로만 묻는다.";
 
 export const TRANSFER_VIA_LINK_ONLY_SENTENCE =
   " 계좌 안내 문자로 이체를 요구할 때는 그 문자 속 링크의 이체 화면에서 하게 하고, 은행 앱·창구·ATM에서 따로 보내라고 하지 않는다." +
@@ -687,14 +737,39 @@ function buildVerifyInterceptRule(
 // ⚠️ **억제 대상은 이탈 차단 계열뿐이다(G62 — T91 불변식)**: 요구 계열은 초급에서도 그대로 일어난다.
 // [진행 강제]의 "반드시 구체적인 요구에 도달한다"는 세 난이도에서 불변이며, 아래 마지막 항목이
 // 그 사실을 프롬프트 안에서도 못박는다.
-const BEGINNER_BLOCK = `[난이도 — 초급: 수법이 눈에 띄게 드러나게]
+//
+// ⭐ D4(2026-11-07 Edge 실사용 시험 판 29 · 판 32 — `docs/research/edge-scenario-test-2026-11-07.md`) — 초급 설명은 "의심하면 쉽게
+// 물러섭니다"인데 기관 사칭 초급(음성)은 확인 의사 3회에 불이익 → 수사 기밀 → 협조 압박을, 자녀 사칭 초급(메신저)은 의심 · 거절에
+// "200만 원만" → "계좌라도"를 이어 갔다. 원인: 이 블록은 [말투/톤]의 재설득만 면제했고, 모든 난이도에 실리는 [진행 강제 — 반드시
+// 지킨다]의 "같은 압박을 반복하지 않는다 — 매번 다른 카드(다른 수법 · 낮춘 재제안 · 더 강한 압박)"와 "상대가 응하면 … 비밀 유지 요구"는
+// 그대로 남겼다 — 관측된 대사가 정확히 그 카드들이다. 또 "물러선다" 뒤에 무엇을 하는지(끝점)가 없어 끊지 않는 경로(메신저 · NONE)에서는
+// "반드시 구체적인 요구에 도달한다"로 되돌아갔다. ⇒ ① 우선순위를 [진행 강제]까지 명문화 ② 물러섬 → 마무리 순서(순서형 — G130 숫자 0)
+// ③ 마무리 방법을 끊기 변형(`hangupMode`)별 1줄로. 중급(블록 0) · 고급(별도 상수)은 바이트 무변경.
+const BEGINNER_BLOCK_TEMPLATE = `[난이도 — 초급: 수법이 눈에 띄게 드러나게]
 - **수법을 눈에 띄게 쓴다.** 전형적인 사기 문구를 그대로 쓰고, 요구를 서두르며, 근거는 어설프게 댄다 — 참가자가 "이건 사기구나"를 스스로 알아챌 단서를 일부러 남긴다.
 - **압박은 약하게 한다.** 몰아붙이거나 겁을 주는 표현의 강도를 낮추고, 상대가 불안해하면 한 발 물러선다.
-- **위 [말투/톤]의 재설득·재압박 지시는 이 난이도에서 적용하지 않는다.** 상대가 의심하거나 거절하면 한 번 더 설득하지 않고 물러선다.
+- **위 [말투/톤]의 재설득·재압박 지시는 이 난이도에서 적용하지 않는다.** 위 [진행 강제]의 "같은 압박을 반복하지 않는다"에 적힌 다른 카드(다른 수법으로 갈아타기, 요구 조건을 낮춰 다시 제안하기, 더 강한 압박으로 올리기)도 이 난이도에서는 꺼내지 않는다. 상대의 의심과 거절에 대해서는 이 블록이 위 [말투/톤]·[사용 가능한 수법]·[진행 강제]보다 우선한다.
+- **의심·거절이 나오면 물러서고, 그래도 이어지면 마무리한다.** 상대가 의심하거나 거절하거나 직접 확인해 보겠다고 하면 새 근거, 불이익 암시, 비밀 유지 요구, 낮춘 요구를 꺼내지 말고 "네, 그럼 확인해 보세요"처럼 상대의 말을 받아들이며 물러선다. 그러고도 상대가 다시 의심하거나 거절하면 요구를 거두고 마무리한다. 아직 요구를 말하기 전이었다면 물러서는 그 응답에서 요구를 짧게 말해 두고 물러선다.
+{{BEGINNER_ENDING}}
 - **상대가 빠져나가려 하면 붙잡지 않는다.** 상대가 통화를 끊으려 하거나, 직접 확인해 보겠다거나, 가족·지인·공식 창구에 물어보겠다고 하면 **그대로 하게 둔다** — 확인·상의·신고를 막는 말, 비밀로 하라는 요구, 통화를 계속 붙들어 두려는 말은 **어떤 표현으로도 하지 않는다.**
-- **붙잡는 수단은 시간 이야기 하나까지만 쓴다.** "지금 아니면 안 된다", "오늘까지만 된다" 정도의 시간 압박 **한 가지**만 허용되고, 그 외의 이탈 차단 수법은 위 [사용 가능한 수법] 목록에 있더라도 이 난이도에서는 쓰지 않는다.
+- **붙잡는 수단은 시간 이야기 하나까지만 쓴다.** "지금 아니면 안 된다", "오늘까지만 된다" 정도의 시간 압박 **한 가지**만 허용되고, 그 외의 이탈 차단 수법은 위 [사용 가능한 수법] 목록에 있더라도 이 난이도에서는 쓰지 않는다. 위 [진행 강제]의 "상대가 응하면 실제로 진행시킨다"에 예로 든 비밀 유지 요구도 이 난이도에서는 하지 않는다.
 - **요구는 한 단계로 끝낸다.** 앞세우는 준비 단계를 만들지 말고, 처음부터 최종 요구를 그대로 말한다.
 - ⚠️ 이 난이도 지시는 **말투·압박 강도·수법의 노출 정도·이탈 차단의 깊이만** 바꾼다. 위 [진행 강제]의 "반드시 구체적인 요구에 도달한다"와 "페이로드는 가상값만", 아래 안전 지침은 **하나도 바꾸지 않는다.** 상대를 붙잡지 않는 것과 요구를 하지 않는 것은 다르다 — **요구는 초급에서도 반드시 한다.**`;
+
+/**
+ * D4 — 초급 마무리 방법(끊기 변형별 1줄). TOOL · SIGNAL은 [진행 강제]의 끊기 규칙 둘째 경우("거절이나 의심을 되풀이해 더는 진행할 수
+ * 없다")를 그대로 가리킨다(새 끊기 경우를 만들지 않는다). NONE(메신저 · 오프닝 · `end_call` 미선언)은 끊지 못하므로 "요구를 거둔 채
+ * 짧게 받기만"으로 둔다 — NONE 규칙의 "네가 통화를 마치겠다는 말 금지"와 충돌하지 않는다. ⛔ 숫자 · 서수 0(G130).
+ */
+export const BEGINNER_ENDING_HANGUP = `- **마무리는 위 끊기 규칙의 "상대가 거절이나 의심을 되풀이해 더는 진행할 수 없다"에 해당한다.** 그때는 붙잡지 말고 그 규칙대로 끊는다. 끊기가 허락되지 않으면 거둔 요구나 새 요구를 다시 꺼내지 말고 상대의 말을 짧게 받기만 한다.`;
+export const BEGINNER_ENDING_NO_HANGUP = `- **마무리할 때는 물러서는 말 한마디만 하고 더 요구하지 않는다.** 그 뒤 상대가 말을 걸어 와도 짧게 받기만 하고, 거둔 요구나 새 요구를 다시 꺼내지 않는다.`;
+
+function buildBeginnerBlock(hangupMode: HangupMode): string {
+  return BEGINNER_BLOCK_TEMPLATE.replace(
+    "{{BEGINNER_ENDING}}",
+    hangupMode === "none" ? BEGINNER_ENDING_NO_HANGUP : BEGINNER_ENDING_HANGUP,
+  );
+}
 
 // 고급 공통 = L1(무변경 계승) + L2(보강) + **L4(교체)**.
 //
@@ -839,7 +914,7 @@ const ADVANCED_L3_PROCEDURAL = `[난이도 — 고급(심화): 절차로 정당�
  *
  * | # | 블록 | 조건 |
  * |---|---|---|
- * | 1 | `BEGINNER_BLOCK` | `beginner` |
+ * | 1 | `BEGINNER_BLOCK_TEMPLATE`(마무리 줄 = `hangupMode`로 갈림 — D4) | `beginner` |
  * | — | *(없음, `null`)* | `intermediate` — **기준선. 블록 미출력** |
  * | 2 | `ADVANCED_BASE_TEMPLATE`(조건형 치환) | `advanced` — 선행 요구 예시가 `inCallSmsEnabled`로 갈린다(§43.4 B) |
  * | 3 | `ADVANCED_L3_PROCEDURAL` | `advanced` && `l3Procedural` |
@@ -854,9 +929,10 @@ const ADVANCED_L3_PROCEDURAL = `[난이도 — 고급(심화): 절차로 정당�
  */
 function buildDifficultyBlock(
   level: DifficultyLevel,
-  opts: { l3Procedural?: boolean; inCallSmsEnabled?: boolean; identityCheckAllowed?: boolean } = {},
+  opts: { l3Procedural?: boolean; inCallSmsEnabled?: boolean; identityCheckAllowed?: boolean; hangupMode?: HangupMode } = {},
 ): string | null {
-  if (level === "beginner") return BEGINNER_BLOCK;
+  // D4 — 초급 마무리 줄만 끊기 변형으로 갈린다(부재 = NONE).
+  if (level === "beginner") return buildBeginnerBlock(opts.hangupMode ?? "none");
   // 기준선 — 블록을 내보내지 않는다(현행 프롬프트가 곧 중급, §15.3.1/§17.4.1).
   if (level === "intermediate") return null;
   // §43.4 B/§50.4.4 (4) — 고급 공통 블록의 선행 요구 예시가 카탈로그 유무·페르소나 권한으로 갈린다.
@@ -1105,6 +1181,8 @@ export function buildSystemPrompt(
         l3Procedural: opts.l3Procedural,
         inCallSmsEnabled: opts.inCallSmsEnabled,
         identityCheckAllowed,
+        // D4 — [진행 강제]의 끊기 슬롯과 같은 값(초급 마무리 줄이 같은 프롬프트의 끊기 규칙을 가리킨다).
+        hangupMode: opts.hangupMode ?? "none",
       })
     : null;
   const personaCardBlock = opts.personaCard ? buildPersonaCardBlock(opts.personaCard, identityCheckAllowed) : null;
@@ -1155,9 +1233,12 @@ export function buildSystemPrompt(
       ? [buildVerifyInterceptRule(opts.toolDrivenTiming === true, opts.offerToolDeclared === true), ""]
       : []),
     // 화면 행동만 인정 — [화면 행동 확인](조건형 · 부재 = 블록 0 · 종전 바이트 동일).
-    ...(opts.screenActionOnly === true ? [SCREEN_ACTION_ONLY_RULE, ""] : []),
+    // Edge 재시험 R2(2026-11-07) — 문자 카탈로그가 없는 세션은 인증번호 문자가 오지 않는다는 줄을 블록 끝에 잇는다(`NO_OTP_SMS_LINE` 표).
+    ...(opts.screenActionOnly === true ? [opts.inCallSmsEnabled === true ? SCREEN_ACTION_ONLY_RULE : `${SCREEN_ACTION_ONLY_RULE}${NO_OTP_SMS_LINE}`, ""] : []),
     // T194-b(§84.3.4) — [미리 확보한 상대 정보](조건형). [진행 강제] 뒤라 예외 문장이 금지 규칙보다 **나중에** 읽힌다.
     ...(personaCardBlock ? [personaCardBlock, ""] : []),
+    // 2026-11-07 — Live 전용 [실시간 통화 — 반드시 지킬 것](L1 ~ L3 · 위 상수 주석). [진행 강제]보다 뒤라 그 예시보다 나중에 읽힌다. 부재 = 블록 0.
+    ...(opts.liveSpeechStyle === true ? [buildLiveCallSafetyBlock(scenarioUsesControlMarkers(prompt)), ""] : []),
     ...(difficultyBlock ? [difficultyBlock, ""] : []),
     ...(opts.turnInstruction ? [opts.turnInstruction, ""] : []),
     prompt.guardrailPreamble,

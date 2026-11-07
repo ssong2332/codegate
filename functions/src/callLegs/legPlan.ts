@@ -13,6 +13,7 @@
 // | `rejoin` | 2026-11-07 — 참가자가 끊은 레그가 같은 인물로 다시 연결됐다(재다이얼 · 상대 재발신)와 그때의 사용자 발화 수 |
 import type { FlowVariant, FlowVariantLeg } from "../scenarios/flowVariants";
 import { findDialEntry, lookupDialedNumber, normalizeDialedNumber, type DialEntry } from "../scenarios/dialDirectory";
+import { IN_CALL_SMS } from "../scenarios/inCallSms";
 
 export type RelayState = {
   legIndex: number;
@@ -249,10 +250,21 @@ const REJOIN_OPENING: Record<LegRejoinKind, string> = {
  * (앞 통화 대화는 여전히 싣지 않는다 — `messages` 중 `legIndex`가 이 레그인 줄만 · 부재 = 레그 0). 결정적(추가 LLM 호출 0).
  * `messages`를 안 넘기면(폴백 — 모델 이력에 이미 이 레그 대화가 있다) 상황 문장만.
  */
-export function buildLegRejoinContext(kind: LegRejoinKind, legIndex: number, messages?: readonly LegRejoinMessage[]): string {
+export function buildLegRejoinContext(
+  kind: LegRejoinKind,
+  legIndex: number,
+  messages?: readonly LegRejoinMessage[],
+  /** 2026-11-07(Edge 시험 판 26) — 끊기기 전 이 통화에서 이미 도착한 문자의 설명(`legSentSmsDescriptions`). 부재 · 빈 목록 = 줄 0(종전 바이트). */
+  sentSms?: readonly string[],
+): string {
   const head = [
     `[끊겼던 통화 다시 연결] ${REJOIN_SITUATION[kind]} 너는 끊기기 전과 같은 사람이다.`,
     `위 [이 통화 전 상황]의 '본인 확인부터'는 처음 연결됐을 때의 규칙이다 — 끊기기 전에 이미 한 본인 확인 · 설명은 처음부터 다시 하지 않는다. ${REJOIN_OPENING[kind]} 끊기기 전 단계에서 이어 간다. 상대가 왜 끊었는지 따지거나 화내지 않는다.`,
+    ...(sentSms && sentSms.length > 0
+      ? [
+          `끊기기 전 이 통화에서 네가 이미 보낸 문자(상대 휴대전화에 이미 도착해 있다): ${sentSms.join(" · ")}. 이 문자를 다시 보내 주겠다거나 곧 보내겠다고 하지 말고, 필요하면 '아까 보내 드린 문자'로 가리킨다.`,
+        ]
+      : []),
   ];
   if (!messages) return head.join("\n");
   const lines = messages
@@ -294,6 +306,28 @@ export function buildLegLoanReviewContext(
     "- 너는 앞서 이 사람과 통화한 바로 그 사람이다. 앞 통화에서 안전계좌 이체와 비대면 대출 신청을 시켰고, 금융회사 확인 전화가 끝나면 다시 연락하겠다고 했다. 이번 통화는 네가 같은 번호로 다시 건 것이라 본인 확인 · 사건 설명을 처음부터 다시 하지 않는다.",
     `- ${result}`,
   ].join("\n");
+}
+
+/**
+ * 2026-11-07(Edge 시험 판 26 — 다시 걸려 온 배송원이 이미 보낸 반송 문자를 "보내 드릴 테니"라고 다시 말했다) — 이 레그에 선언된 문자 중 이미 도착한 것의 설명
+ * (카탈로그 본문 첫 줄 · 발신 번호 — 서버 고정 문면 · 추가 LLM 호출 0). 순서 = 레그 선언 순서. 다른 레그 문자 · 도착 안 한 문자 · 카탈로그 밖 = 제외.
+ */
+export function legSentSmsDescriptions(
+  variant: Pick<FlowVariant, "scenarioId" | "sms">,
+  legIndex: number,
+  deliveredSmsIds: readonly string[],
+): string[] {
+  const delivered = new Set(deliveredSmsIds);
+  const catalog = IN_CALL_SMS[variant.scenarioId] ?? [];
+  const out: string[] = [];
+  for (const declared of variant.sms) {
+    if ((declared.leg ?? 0) !== legIndex || !delivered.has(declared.smsId)) continue;
+    const item = catalog.find((sms) => sms.smsId === declared.smsId);
+    if (!item) continue;
+    const firstLine = item.body.split("\n")[0]?.trim() ?? "";
+    out.push(`'${clipLine(firstLine)}'(${item.senderLabel}에서 보냄)`);
+  }
+  return out;
 }
 
 const clipLine = (text: string): string =>

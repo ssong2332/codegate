@@ -38,3 +38,25 @@ export function readEndReasonHint(stored: string | null, sessionId: string): End
     return END_REASON_HINT_DEFAULT;
   }
 }
+
+/**
+ * 2026-11-07(사용자 결정 "단일 통화도 집계 (권장)" · 메인 지시) — **통화 종료 버튼 힌트**(통화 화면 → 종료 화면 1회성 · 사유 힌트와 같은 방식).
+ * | # | If | Then |
+ * |---|---|---|
+ * | B1 | 통화 화면 `handleHangup`이 끝낸 종료(`endCall("user", { hangupButton: true })`)가 사유 `user_ended`로 래치됐다 | 힌트 저장 → 종료 화면이 `endSession`에 `hangupButton: true` |
+ * | B2 | 그 밖(원격 끊김 · 오류 · 시간 초과 · 새로고침 복원 · "훈련 종료" 버튼 · 사기범 끊기 · 다른 세션의 힌트 · 깨진 값) | 싣지 않음 |
+ */
+export function encodeHangupButtonHint(sessionId: string): string {
+  return JSON.stringify({ sessionId, hangupButton: true });
+}
+
+/** 저장값 판독 — 같은 세션 · `hangupButton === true`일 때만 `true`. */
+export function readHangupButtonHint(stored: string | null, sessionId: string): boolean {
+  if (!stored) return false;
+  try {
+    const parsed = JSON.parse(stored) as { sessionId?: unknown; hangupButton?: unknown } | null;
+    return Boolean(parsed) && parsed!.sessionId === sessionId && parsed!.hangupButton === true;
+  } catch {
+    return false;
+  }
+}

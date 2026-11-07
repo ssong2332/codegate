@@ -53,6 +53,20 @@ import { authMethodForSkin } from "../lib/bankapp/bankAuth";
 import { accountLabel, recordLoanApplication, recordWithdrawal, withdrawAccountsFor, withdrawError, type WithdrawAccount } from "../lib/bankapp/withdrawAccounts";
 import { LOAN_PURPOSES, loanApplyError, loanOfferFor } from "../lib/bankapp/loanFlow";
 import BankAuthSheet from "./BankAuthSheet";
+// ⭐ 2026-11-07(Edge 시험 판 12) — 상품권 구매 화면(잎 모듈 · 상대 경로).
+import {
+  VOUCHER_BRAND,
+  VOUCHER_COPY,
+  VOUCHER_DENOMINATIONS,
+  VOUCHER_MAX_QUANTITY,
+  VOUCHER_SELLER,
+  denominationLabel,
+  lastVoucherPurchase,
+  recordVoucherPurchase,
+  voucherOrderError,
+  voucherWon,
+  type VoucherPurchase,
+} from "../lib/bankapp/voucher";
 import WithdrawAccountSheet, { WithdrawAccountRow } from "./WithdrawAccountSheet";
 
 /** UX-023의 목업 종류. 부재 → `credential-form`(하위호환 읽기 규칙, §15.9.1 R2). */
@@ -128,6 +142,11 @@ type MessengerFakeLandingProps = {
    * ⛔ 참가자 입력이 아니다 — 대출 금액 · 용도는 `LoanApplyMockup` 밖으로 나가지 않는다(G138).
    */
   loanContext?: { ledgerKey: string; lenderName: string };
+  /**
+   * ⭐ 2026-11-07(Edge 시험 판 12) — 상품권 구매 화면(`VOUCHER_LANDINGS`)의 결제 계좌 · 핀 발급 열쇠(참가자의 "내 은행" · 세션 id). 부재 = 열쇠 빈 값.
+   * ⛔ 참가자 입력이 아니다 — 어떤 콜백에도 싣지 않는다.
+   */
+  bankIdentity?: { myBankName: string; ledgerKey: string };
 };
 
 /**
@@ -171,6 +190,7 @@ export default function MessengerFakeLanding({
   prefilledAccount,
   prefilledTransfer,
   loanContext,
+  bankIdentity,
 }: MessengerFakeLandingProps) {
   const bar = browserBarTokensFor(skin);
   const returnLabel = RETURN_LABELS[entrySurface];
@@ -302,6 +322,16 @@ export default function MessengerFakeLanding({
             returnLabel={returnLabel}
             onClose={onClose}
             onSubmit={() => onCredentialSubmit?.()}
+          />
+        ) : landingId !== undefined && VOUCHER_LANDINGS.includes(landingId) ? (
+          // ⭐ 2026-11-07 — 상품권 구매 화면(권종 · 수량 → 결제 확인 → 결제 인증 → 핀 번호). 제출 = 무인자(G138 — 핀 · 금액은 이 파일 밖으로 나가지 않는다).
+          <VoucherPurchaseMockup
+            landingId={landingId}
+            onClose={onClose}
+            onCredentialSubmit={() => onCredentialSubmit?.()}
+            bankIdentity={bankIdentity}
+            returnLabel={returnLabel}
+            skin={skin}
           />
         ) : (
           <CredentialFormMockup
@@ -463,7 +493,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     fields: [
       { label: "보관 신청 금액", placeholder: "금액을 입력하세요", inputMode: "numeric", amount: true },
       { label: "돈을 찾을 은행", placeholder: "은행을 입력하세요" },
-      { label: "찾는 방법(현금 또는 수표)", placeholder: "현금 또는 수표" },
+      { label: "보관 방법(현금 · 수표 · 금 실물)", placeholder: "현금 · 수표 · 금 실물 중 하나" },
     ],
     submitLabel: "보관 신청하기",
     successHeadline: "보관 신청이 접수되었습니다.",
@@ -719,6 +749,33 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 대화",
     mockHost: "friend-send-link.invalid",
   },
+  // ⭐ 2026-11-07(Edge 시험 판 7) — 납치 협박 고급 계좌 문자가 여는 이체 화면(서버 카탈로그 mockScreens.ts와 글자 단위로 동일).
+  "kidnap-ransom-transfer": {
+    headline: "지금 이체할 금액을 확인해 주세요",
+    bodyLines: ["받는 분 통장에는 보내는 분 실명으로 표시됩니다."],
+    fields: [
+      { label: "입금받을 계좌", placeholder: "문자로 받은 계좌번호를 입력하세요", inputMode: "numeric", prefill: "account" },
+      { label: "보낼 금액", placeholder: "보내실 금액을 입력하세요", inputMode: "numeric", amount: true },
+    ],
+    submitLabel: "지금 이체하기",
+    successHeadline: "즉시 이체가 완료되었습니다.",
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 즉시",
+    mockHost: "quick-send-now.invalid",
+  },
+  // ⭐ 2026-11-07(Edge 시험 판 12) — 검찰 고급 상품권형의 구매 화면(서버 카탈로그 mockScreens.ts와 글자 단위로 동일). 그리는 곳은 아래 `VoucherPurchaseMockup`
+  // (이 표의 칸 라벨은 권종 · 수량 선택 줄의 이름이고, 입력 칸 대신 버튼으로 고른다).
+  "voucher-purchase": {
+    headline: "다솜 문화상품권 구매",
+    bodyLines: ["구매 즉시 모바일 상품권 핀 번호가 발급됩니다."],
+    fields: [
+      { label: "권종", placeholder: "권종을 고르세요" },
+      { label: "수량", placeholder: "수량을 고르세요" },
+    ],
+    submitLabel: "상품권 구매하기",
+    successHeadline: "상품권 구매가 완료되었습니다.",
+    issuerLabel: "ⓒ 한올기프트",
+    mockHost: "hanol-gift-shop.invalid",
+  },
   // ⭐ P2-d(X6) — 환급 처리 수수료 이체 화면(서버 카탈로그 mockScreens.ts와 글자 단위로 동일).
   "tax-refund-fee-transfer": {
     headline: "수수료 이체 정보를 확인해 주세요",
@@ -759,7 +816,12 @@ const BANK_TRANSFER_LANDINGS: readonly string[] = [
   "card-safe-transfer",
   // ⭐ PR-B — 기관 사칭 고급 3통화 대출금 보관 이체(서버 목록과 같다).
   "loan-safe-transfer",
+  // 2026-11-07(Edge 시험 판 7) — 납치 협박 고급 계좌 문자.
+  "kidnap-ransom-transfer",
 ];
+
+/** ⭐ 2026-11-07(Edge 시험 판 12) — 상품권 구매 화면 landingId(서버 `mockScreens.ts` `VOUCHER_LANDINGS`와 같은 목록 — `mockScreenCopy.test.ts`). 정확 일치만(R8). */
+const VOUCHER_LANDINGS: readonly string[] = ["voucher-purchase"];
 
 /** S2(실기기 확인 2026-11-01) — 대화방 링크 카드가 이체 화면 칩인가(그림 자리 없는 송금 카드로 그린다 · 정확 일치). */
 export function isBankTransferLandingId(landingId: string): boolean {
@@ -912,6 +974,321 @@ function landingHostFor(kind: MessengerFakeLandingKind, landingId?: string): str
 function issuerNameOf(issuerLabel: string): string {
   const prefix = "ⓒ ";
   return issuerLabel.slice(0, prefix.length) === prefix ? issuerLabel.slice(prefix.length) : issuerLabel;
+}
+
+/**
+ * ⭐ 2026-11-07(Edge 시험 판 12 · 사용자 결정 "앱 안 화면 추가") — 상품권 구매 화면(`VOUCHER_LANDINGS`). 검찰 고급 상품권형의 결말
+ * "문화상품권을 사서 핀 번호를 불러 달라"를 앱 안에서 끝까지 겪게 한다(실제 판매처 · 매장으로 가지 않는다).
+ * 흐름: ① 권종 · 수량 · 결제 계좌 → ② 결제 정보 확인(판매처 주의 문구) → ③ 결제 인증(생체 인증 시트 — 이체 화면과 같은 `BankAuthSheet`) → ④ 구매 완료 + 핀 번호 카드.
+ * ⛔ 핀 · 권종 · 수량 · 금액은 이 컴포넌트 state와 `voucher.ts` 메모리 표를 벗어나지 않는다(G138 — 콜백은 무인자 · 네트워크 · 저장소 0).
+ * 다시 열면 같은 세션의 마지막 구매 내역(핀 카드)을 보여 준다 — 통화하며 문자함을 오가도 번호를 다시 읽을 수 있게.
+ */
+function VoucherPurchaseMockup({
+  landingId,
+  onClose,
+  onCredentialSubmit,
+  bankIdentity,
+  returnLabel,
+  skin,
+}: {
+  landingId: string;
+  onClose: () => void;
+  /** ⛔ 무인자 — 결제했다는 사실 하나만 올린다(G138). */
+  onCredentialSubmit: () => void;
+  bankIdentity?: { myBankName: string; ledgerKey: string };
+  returnLabel: string;
+  skin: MessengerSkin;
+}) {
+  const copy = CREDENTIAL_LANDING_COPY[landingId] ?? GENERIC_CREDENTIAL_COPY;
+  const page = LANDING_PAGE_TOKENS;
+  const ledger = bankIdentity?.ledgerKey ?? "";
+  const appBankName = bankIdentity?.myBankName ?? myBankNameFor(ledger);
+  const [accounts] = useState(() => withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: fictionalBalanceFor(ledger) }));
+  const [accountId, setAccountId] = useState<WithdrawAccount["id"]>("main");
+  const account = accounts.find((item) => item.id === accountId) ?? accounts[0]!;
+  const [accountSheetOpen, setAccountSheetOpen] = useState(false);
+  const [denomination, setDenomination] = useState<number | undefined>(undefined);
+  const [quantity, setQuantity] = useState(1);
+  const [stage, setStage] = useState<"form" | "confirm" | "auth">("form");
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [purchase, setPurchase] = useState<VoucherPurchase | undefined>(() => lastVoucherPurchase(ledger, landingId));
+  const total = denomination !== undefined ? denomination * quantity : 0;
+  // 발급처 꼬리말(서버 issuerLabel 그대로 · 렌더 게이트 대상). 이름을 따로 둔 것은 렌더 게이트 역검증 ①의 오염 지점(입력 화면의 발급처 꼬리말 한 곳)을 그대로 두려는 것.
+  const sellerFooter = copy.issuerLabel;
+  const denominationLabelText = copy.fields[0]?.label ?? "";
+  const quantityLabelText = copy.fields[1]?.label ?? "";
+
+  const voucherIssuerBar = (
+    <div
+      className="flex h-14 shrink-0 items-center gap-2.5 px-4 text-base font-semibold"
+      style={{ backgroundColor: page.issuerBarBg, color: page.issuerBarText }}
+    >
+      <PhoneIcon name="shield" size={24} />
+      <span className="truncate">{issuerNameOf(copy.issuerLabel)}</span>
+    </div>
+  );
+  const rowList = (rows: [string, string][]) => (
+    <dl className="flex flex-col divide-y rounded-[10px] border" style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg }}>
+      {rows.map(([label, value]) => (
+        <div key={label} className="flex items-baseline justify-between gap-3 px-3.5 py-3 text-[15px]" style={{ borderColor: page.inputBorder }}>
+          <dt style={{ color: page.body }}>{label}</dt>
+          <dd className="break-all text-right font-semibold tabular-nums" style={{ color: page.headline }}>
+            {value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+
+  const finishPurchase = () => {
+    if (denomination === undefined) return;
+    // AC-045 — 네트워크 호출 0. 핀은 `voucher.ts` 메모리 표에서만 만든다.
+    const made = recordVoucherPurchase(ledger, landingId, denomination, quantity, new Date());
+    recordWithdrawal(ledger, account.id, String(total));
+    setPurchase(made);
+    setStage("form");
+    onCredentialSubmit();
+  };
+
+  // ④ 구매 완료 + 핀 번호 카드(이 화면이 만든 값 · 버튼으로 고른 상품 정보만 — 참가자가 타이핑한 입력값 재표시 0).
+  if (purchase) {
+    return (
+      <>
+        {voucherIssuerBar}
+        <div className="flex flex-col gap-4 p-5">
+          <p role="status" className="text-lg font-semibold leading-snug" style={{ color: page.headline }}>
+            {copy.successHeadline}
+          </p>
+          <ul className="flex flex-col gap-3">
+            {purchase.pins.map((pin, index) => (
+              <li
+                key={pin}
+                className="flex flex-col gap-2 rounded-[14px] border px-4 py-4"
+                style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg }}
+              >
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[15px] font-semibold" style={{ color: page.headline }}>
+                    {VOUCHER_BRAND} {denominationLabel(purchase.denomination)}
+                  </span>
+                  {purchase.pins.length > 1 && (
+                    <span className="text-[13px] tabular-nums" style={{ color: page.body }}>
+                      {index + 1}/{purchase.pins.length}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[13px]" style={{ color: page.body }}>
+                  {VOUCHER_COPY.pinHeading}
+                </span>
+                {/* 스크린리더가 숫자를 한 자씩 읽게 띄어 쓴 이름을 단다(인증번호 문자와 같은 관례 — 수사로 읽히면 받아 적을 수 없다). */}
+                <span
+                  className="font-mono text-[22px] font-bold tracking-[0.06em] tabular-nums"
+                  style={{ color: page.headline }}
+                  aria-label={`${VOUCHER_COPY.pinHeading} ${pin.replace(/-/g, "").split("").join(" ")}`}
+                >
+                  {pin}
+                </span>
+                <span className="text-[13px]" style={{ color: page.body }}>
+                  {VOUCHER_COPY.issuedLabel} {transferTimeText(purchase.purchasedAt)} · {VOUCHER_COPY.validLabel} {VOUCHER_COPY.validValue}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[13px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
+            {VOUCHER_COPY.pinNote}
+          </p>
+          <Button type="button" onClick={onClose}>
+            {returnLabel}
+          </Button>
+        </div>
+      </>
+    );
+  }
+
+  // ② 결제 정보 확인 · ③ 결제 인증(시트가 확인 화면 위로 올라온다 — 이체 화면과 같은 모양).
+  if (stage !== "form" && denomination !== undefined) {
+    return (
+      <>
+        {voucherIssuerBar}
+        <div inert={stage === "auth" ? true : undefined}>
+          <div className="flex flex-col gap-4 px-5 pb-6 pt-5">
+            <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
+              {VOUCHER_COPY.confirmHeadline}
+            </h1>
+            {rowList([
+              [VOUCHER_COPY.productRow, `${VOUCHER_BRAND} ${denominationLabel(denomination)} × ${quantity}`],
+              [VOUCHER_COPY.sellerRow, VOUCHER_SELLER],
+              [VOUCHER_COPY.payFromRow, accountLabel(account)],
+              [VOUCHER_COPY.amountRow, voucherWon(total)],
+            ])}
+            <p
+              role="note"
+              className="rounded-[10px] px-3.5 py-3 text-[14px] leading-relaxed [word-break:keep-all]"
+              style={{ backgroundColor: page.fieldReadonlyBg, color: page.body }}
+            >
+              {VOUCHER_COPY.notice}
+            </p>
+            <button
+              type="button"
+              onClick={() => setStage("auth")}
+              className="min-h-[52px] rounded-[10px] text-base font-semibold"
+              style={{ backgroundColor: page.submitBg, color: page.submitText }}
+            >
+              {voucherWon(total)} {VOUCHER_COPY.pay}
+            </button>
+            <button
+              type="button"
+              onClick={() => setStage("form")}
+              className="min-h-[48px] rounded-[10px] border px-6 py-2.5 text-base font-semibold"
+              style={{ borderColor: page.inputBorder, color: page.headline }}
+            >
+              {VOUCHER_COPY.cancel}
+            </button>
+          </div>
+        </div>
+        {stage === "auth" && (
+          <BankAuthSheet
+            method={authMethodForSkin(skin)}
+            appName={`${appBankName} 모바일뱅킹`}
+            summary={`${VOUCHER_SELLER} ${voucherWon(total)} ${VOUCHER_COPY.pay}`}
+            onSuccess={finishPurchase}
+            onCancel={() => setStage("confirm")}
+          />
+        )}
+      </>
+    );
+  }
+
+  // ① 권종 · 수량 · 결제 계좌.
+  const handleNext = () => {
+    const found = voucherOrderError(denomination, quantity) ?? withdrawError(ledger, account, String(total));
+    setError(found);
+    if (!found) setStage("confirm");
+  };
+  return (
+    <>
+      {voucherIssuerBar}
+      <div className="flex flex-col gap-4 px-5 pb-6 pt-4">
+        <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
+          {copy.headline}
+        </h1>
+        {copy.bodyLines.map((line) => (
+          <p key={line} className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
+            {line}
+          </p>
+        ))}
+        <div className="flex flex-col gap-2">
+          <span id="voucher-denomination-label" className="text-[15px] font-semibold" style={{ color: page.headline }}>
+            {denominationLabelText}
+          </span>
+          <div role="radiogroup" aria-labelledby="voucher-denomination-label" className="grid grid-cols-2 gap-2">
+            {VOUCHER_DENOMINATIONS.map((value) => {
+              const selected = value === denomination;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => {
+                    setDenomination(value);
+                    setError(undefined);
+                  }}
+                  className="min-h-[52px] rounded-[10px] text-base font-semibold"
+                  style={{
+                    border: `${selected ? 2 : 1}px solid ${selected ? page.submitBg : page.inputBorder}`,
+                    backgroundColor: selected ? page.fieldReadonlyBg : page.inputBg,
+                    color: page.headline,
+                  }}
+                >
+                  {denominationLabel(value)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span id="voucher-quantity-label" className="text-[15px] font-semibold" style={{ color: page.headline }}>
+            {quantityLabelText}
+          </span>
+          <div role="group" aria-labelledby="voucher-quantity-label" className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label={`${quantityLabelText} 줄이기`}
+              disabled={quantity <= 1}
+              onClick={() => {
+                setQuantity(Math.max(1, quantity - 1));
+                setError(undefined);
+              }}
+              className="h-11 w-11 rounded-full border text-xl font-semibold disabled:opacity-40"
+              style={{ borderColor: page.inputBorder, color: page.headline }}
+            >
+              −
+            </button>
+            <output aria-live="polite" className="min-w-[3ch] text-center text-lg font-bold tabular-nums" style={{ color: page.headline }}>
+              {quantity}장
+            </output>
+            <button
+              type="button"
+              aria-label={`${quantityLabelText} 늘리기`}
+              disabled={quantity >= VOUCHER_MAX_QUANTITY}
+              onClick={() => {
+                setQuantity(Math.min(VOUCHER_MAX_QUANTITY, quantity + 1));
+                setError(undefined);
+              }}
+              className="h-11 w-11 rounded-full border text-xl font-semibold disabled:opacity-40"
+              style={{ borderColor: page.inputBorder, color: page.headline }}
+            >
+              +
+            </button>
+          </div>
+        </div>
+        <WithdrawAccountRow
+          account={account}
+          ledgerKey={ledger}
+          onOpen={() => setAccountSheetOpen(true)}
+          colors={{ border: page.inputBorder, bg: page.inputBg, label: page.body, value: page.headline }}
+        />
+        {accountSheetOpen && (
+          <WithdrawAccountSheet
+            accounts={accounts}
+            selectedId={account.id}
+            ledgerKey={ledger}
+            onSelect={(id) => {
+              setAccountId(id);
+              setError(undefined);
+              setAccountSheetOpen(false);
+            }}
+            onClose={() => setAccountSheetOpen(false)}
+          />
+        )}
+        <p
+          className="flex items-baseline justify-between gap-3 rounded-[10px] border px-3.5 py-3 text-[15px]"
+          style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.body }}
+        >
+          <span>{VOUCHER_COPY.totalLabel}</span>
+          <span className="text-[18px] font-bold tabular-nums" style={{ color: page.headline }}>
+            {voucherWon(total)}
+          </span>
+        </p>
+        {error && (
+          <p role="alert" className="text-[14px] font-semibold" style={{ color: page.errorText }}>
+            {error}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={handleNext}
+          className="min-h-[52px] rounded-[10px] text-base font-semibold"
+          style={{ backgroundColor: page.submitBg, color: page.submitText }}
+        >
+          {copy.submitLabel}
+        </button>
+        <p className="text-center text-[13px]" style={{ color: page.issuerFooter }}>
+          {sellerFooter}
+        </p>
+      </div>
+    </>
+  );
 }
 
 /**
