@@ -17,6 +17,7 @@ import { completeWithFallback, getLlmClient, LLM_FIRST_TURN_TIMEOUT_MS } from ".
 import { triggerReportGeneration } from "../report";
 import { findFlowVariant, resolveSessionScenarioPrompt, routeEndsWithoutAccount, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
 import {
+  buildLegRejoinContext,
   currentLegIndex,
   legHangupAdjustments,
   legStartUserTurns,
@@ -774,8 +775,14 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       logger.info("[§132] 인증번호 다시 요구 지시", { sessionId, userTurns: userTurnsNow, since: otpArrivedSince });
     }
     // §142(PR-3)의 앞 통화 인계 블록은 2026-11-07에 없앴다(위 `legHistory` 주석).
+    // 2026-11-07(메인 승인 계약) — 참가자가 끊은 같은 레그를 다시 이은 뒤 첫 턴에만 상황 문장(이 레그 대화는 모델 이력에 이미 있다).
+    const rejoin = session.relay?.rejoin;
+    const legRejoinNotice =
+      sessionCallLeg && rejoin && session.relay?.legIndex === sessionCallLeg.legIndex && turnCount === rejoin.atUserTurns + 1
+        ? buildLegRejoinContext(rejoin.kind, sessionCallLeg.legIndex)
+        : undefined;
     const turnInstructionWithSms =
-      [promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction, otpFollowUpInstruction, otpHoldInstruction]
+      [legRejoinNotice, promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction, otpFollowUpInstruction, otpHoldInstruction]
         .filter(Boolean)
         .join("\n") || undefined;
     // §120 — 사진 턴이면 캐릭터 유지형 반응 지시 1줄을 맨 뒤에 붙인다(`photoTurn.ts` 표 · 그 밖 턴 = 없음 · 문면 바이트 동일).

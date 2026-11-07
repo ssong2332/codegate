@@ -16,9 +16,9 @@ import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { getVerifyOfferTrigger } from "../scenarios/verifyIntercept";
 import { findFlowVariant, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
-import { resolveSessionCallLeg } from "../callLegs/legPlan";
+import { buildLegRejoinContext, resolveSessionCallLeg } from "../callLegs/legPlan";
 import type { VoiceMode } from "../scenarios/publicMeta";
-import type { ChallengeDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
+import type { ChallengeDoc, MessageDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
 import { getRealtimeProvider, requiresServerPromptProvider } from "./provider";
 import type { CreateRealtimeCallRequest, CreateRealtimeCallResponse } from "./callTypes";
 import type { RealtimeProviderName } from "./types";
@@ -161,7 +161,24 @@ export const createRealtimeCall = onCall<
   }
   await reserveRealtimeIssue(db, db.collection("sessions").doc(sessionId), realtimeIssueLegKey(session, callLeg));
   let priorChatContext: string | undefined;
-  if (callLeg && callLeg.legIndex > 0) {
+  const rejoin = callLeg && session.relay?.rejoin && session.relay.legIndex === callLeg.legIndex ? session.relay.rejoin : undefined;
+  if (callLeg && rejoin) {
+    // 2026-11-07(메인 승인 계약 — 참가자가 먼저 끊기) — 참가자가 끊은 같은 레그를 같은 인물로 다시 잇는다. 같은 사람이 들은 **이 통화**의 말만 싣는다
+    // (앞 통화 대화 0 — `buildLegRejoinContext`가 `legIndex`로 거른다). 읽기 실패 = 상황 문장만(통화는 막지 않는다).
+    try {
+      const messagesSnap = await db.collection("sessions").doc(sessionId).collection("messages").orderBy("turnIndex", "asc").get();
+      priorChatContext = buildLegRejoinContext(
+        rejoin.kind,
+        callLeg.legIndex,
+        messagesSnap.docs.map((d) => {
+          const m = d.data() as Pick<MessageDoc, "role" | "textMasked" | "legIndex" | "notSpoken">;
+          return { role: m.role, text: m.textMasked, legIndex: m.legIndex, notSpoken: m.notSpoken === true };
+        }),
+      );
+    } catch {
+      priorChatContext = buildLegRejoinContext(rejoin.kind, callLeg.legIndex);
+    }
+  } else if (callLeg && callLeg.legIndex > 0) {
     // 2026-11-07(카드사 고급 R1 · 사용자 지적 "a와 이야기 한 내용을 b나 c가 알면 안되지") — 다통화 다음 레그는 앞 통화 대화를 싣지 않는다
     // (메시지 읽기 0). 같은 일당이 넘겨받았을 사건 골격은 레그 프롬프트(`caseBrief`)에 있다. 아래 메신저 → 통화 갈래로도 가지 않는다.
     priorChatContext = undefined;

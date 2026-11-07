@@ -225,7 +225,7 @@ test("[§142.3] 레그 시작 5행 하한 — 레그 시작 뒤 발화가 하한
   assert.equal(decision.status, "too_early");
 });
 
-test("[§142 startCallLeg] 요청 판독 — 행동 3종 · dial만 번호 필수 · 그 밖 invalid-argument", () => {
+test("[§142 startCallLeg] 요청 판독 — 행동 4종(2026-11-07 hangup 추가) · dial만 번호 필수 · 그 밖 invalid-argument", () => {
   assert.deepEqual(readStartCallLegRequest({ sessionId: "s1", action: "transfer" }), { sessionId: "s1", action: "transfer" });
   assert.deepEqual(readStartCallLegRequest({ sessionId: "s1", action: "dial", dialed: FAKE_CALLBACK }), {
     sessionId: "s1",
@@ -233,7 +233,8 @@ test("[§142 startCallLeg] 요청 판독 — 행동 3종 · dial만 번호 필�
     dialed: FAKE_CALLBACK,
   });
   assert.throws(() => readStartCallLegRequest({ sessionId: "s1", action: "dial" }));
-  assert.throws(() => readStartCallLegRequest({ sessionId: "s1", action: "hangup" }));
+  assert.deepEqual(readStartCallLegRequest({ sessionId: "s1", action: "hangup" }), { sessionId: "s1", action: "hangup" });
+  assert.throws(() => readStartCallLegRequest({ sessionId: "s1", action: "end" }));
   assert.throws(() => readStartCallLegRequest({ action: "dial", dialed: FAKE_CALLBACK }));
 });
 
