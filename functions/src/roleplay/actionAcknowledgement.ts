@@ -94,11 +94,12 @@ export function guardUnconfirmedTransfer(text: string, transferScreenPending: bo
 // 이 앱의 이체 · 인증 화면에는 비밀번호 칸이 없다(본인 인증 = 지문 · 얼굴 버튼 하나). 참가자가 습관대로 실제 비밀번호를 치지 않게 한다(BA3와 같은 원칙).
 // | # | If | Then |
 // |---|---|---|
+// | P0 | 2026-11-07 — 그 절이 간편 비밀번호를 화면 · 본인 인증에서 직접 누르라는 앱 안 입력 유도이고 말로 불러 · 알려 달라는 말이 없다 | 그대로(P1 아님) |
 // | P1 | 대사의 문장 · 절이 비밀번호 · 비번 · 보안카드를 입력 · 불러 · 알려 · 눌러 달라는 말 | 그 절을 뺀다 |
 // | P2 | 다 빠지면 | 화면 버튼만 누르면 된다는 1줄(말투 맞춤) |
 // | P3 | 그 밖 | 그대로 |
 // ⚠️ 인증번호(문자로 온 6자리)는 대상이 아니다 — 인증번호 문자를 선언한 루트의 설계 단계다(그 밖 루트의 인증번호 요구는 지시 문면이 막는다).
-const PASSWORD_REQUEST = /(?:비밀\s?번호|비번|보안\s?카드)[^.?!\n]{0,20}(?:입력|눌러|누르|불러|알려|말해|적어|넣어|쳐)/;
+const PASSWORD_REQUEST = /(?:비밀\s?번호|비번|보안\s?카드)[^.?!\n]{0,20}(?:입력|눌러|누르|불러|알려|말해|말씀|적어|넣어|쳐)/;
 
 export const PASSWORD_FREE_REPLY = {
   casual: "링크 화면에서 이체하기 버튼만 누르면 돼.",
@@ -106,9 +107,19 @@ export const PASSWORD_FREE_REPLY = {
 } as const;
 
 /** P1 ~ P3. */
+// P0(2026-11-07 · 사용자 결정 "앱 안 화면 입력으로" — 은행 · 기관 사칭 수법이 비밀번호를 앱 안 본인 인증의 "간편 비밀번호" 버튼 키패드로
+// 누르게 한다 · 누른 값 저장 · 전송 0, G138) — 간편 비밀번호를 화면 · 인증에서 직접 누르라는 절은 앱 안 입력 유도라 P1 대상이 아니다.
+// 말로 불러 · 알려 달라는 말이 같은 절에 있으면 P1 그대로다(R9의 원래 대상 "비밀번호 여섯 자리 입력"은 간편 비밀번호 · 인증 어휘가 없어 그대로 빠진다).
+const IN_APP_PASSWORD_GUIDE = /간편\s?비밀\s?번호[^.?!\n]{0,40}(?:눌러|누르)|(?:화면|인증)[^.?!\n]{0,30}간편\s?비밀\s?번호/;
+const SPOKEN_PASSWORD_VERB = /불러|알려|말씀|말해|적어/;
+function isPasswordRequestClause(clause: string): boolean {
+  if (!PASSWORD_REQUEST.test(clause)) return false;
+  return !(IN_APP_PASSWORD_GUIDE.test(clause) && /화면|인증/.test(clause) && !SPOKEN_PASSWORD_VERB.test(clause));
+}
+
 export function stripPasswordRequests(text: string): { text: string; stripped: boolean } {
   const clauses = clausesOf(text);
-  const kept = clauses.filter((clause) => !PASSWORD_REQUEST.test(clause));
+  const kept = clauses.filter((clause) => !isPasswordRequestClause(clause));
   if (kept.length === clauses.length) return { text, stripped: false }; // P3
   if (kept.length === 0) return { text: POLITE_ENDING.test(text) ? PASSWORD_FREE_REPLY.polite : PASSWORD_FREE_REPLY.casual, stripped: true }; // P2
   return { text: kept.join(" "), stripped: true }; // P1
