@@ -483,10 +483,23 @@ function isHowToOrFollowOnlyWithoutDemand(scammerText: string, replyText: string
 // |---|---|---|
 // | C6a | 부정된 행동 · 약속("안 보낼게요" · "못 드려요" · "안 할게요") | 그 구절을 지운 나머지로만 순응을 본다(공유 패턴의 `보낼게`가 부정문 안에서 맞던 것) |
 // | C6b | `왜 …?` 따지는 질문이 있다("왜 돈을 먼저 보내야 해요?") | 순응 아님(실제 제공 H1~H4는 그대로 속음) |
-// | — | 요구 뒤 일반 방법 질문("그럼 제가 뭘 해야 하나요?" — 판 30) | ⚠️ 종전대로 속음 — §129 C4 후반 · §129.12(사용자 결정 2026-10-24)와 충돌해 바꾸지 않았다(결정 대기) |
+// | C6c | 요구 뒤 일반 방법 질문만("그럼 제가 뭘 해야 하나요?" · "어떻게 해야 돼요?" — 판 30) | **속음 아님 · 위험 신호 `how_to_question`** — 사용자 결정 2026-11-07
+// |     |   ("위험 신호로 바꾸기") · 2026-10-24 §129 C4 후반("요구 뒤 방법 질문 = 속음")을 대체한다. 요구 없는 대사 뒤는 종전 C4(신호도 0) |
+// | — | 행동을 특정한 질문("어디로 보내면 돼요?" · "어떻게 옮기면 돼요?") · 따름 약속("시키는 대로 할게요") | 종전대로 속음(C6c가 걷어 내지 않는다) |
 const NEGATED_ACTION =
   /(?:안|못)\s*(?:보내|보낼|보냈|드리|드릴|드려|이체|송금|입금|설치|깔|누르|누를|눌러|알려|불러|말씀|하|할|해|했|줄|줘)[가-힣]*/g;
 const CHALLENGE_QUESTION = /왜\s*[^.?!\s][^.?!]{2,40}\?/;
+/** C6c — 일반 방법 질문(행동을 특정하지 않는다). `ACTION_THEN_OK`("보내면 돼")는 넣지 않는다 — 그쪽은 행동을 특정한 질문이다. */
+const GENERIC_HOW_TO_QUESTION = new RegExp(
+  `${ASKS_HOW_TO_COMPLY.source}[가-힣]*|어떻게\s*(?:해야|하면|해)[가-힣]*`,
+  "g",
+);
+
+/** C6c — 답에서 일반 방법 질문과 명사를 걷어 내면 순응이 남지 않는다(= 방법만 물었다). */
+function isGenericHowToOnly(replyText: string): boolean {
+  if (!new RegExp(GENERIC_HOW_TO_QUESTION.source).test(replyText)) return false;
+  return !COMPLIANCE_PATTERN.test(replyText.replace(GENERIC_HOW_TO_QUESTION, " ").replace(NOUN_ONLY_COMPLIANCE, " "));
+}
 
 /** §129.9 — 대사가 돈 · 송금을 꺼냈다 · 답이 보낼 곳 · 금액을 묻는다. */
 const MONEY_TOPIC = /현금|돈|송금|이체|입금|계좌|\d[\d,]*\s*(?:만|천)?\s*원|[일이삼사오육칠팔구십백천]+\s*(?:억|만|천)\s*원/;
@@ -562,6 +575,8 @@ function isHardDisclosure(scammerText: string, replyText: string): boolean {
 // | RS1 | 답에 가짜 표지(가짜로 · 가짜 번호/정보/이름 · 거짓으로 · 아무거나 · 아무 번호 · 지어서 · 엉터리) | `fake_info`(⭐ 이 줄은 순응 어휘가 있어도 속음이 아니다) |
 // | RS2 | 저항 어휘가 없고, 비밀 유지 약속(아무/누구한테도 … 말 · 얘기 안 · 비밀로 할게 · 비밀 지킬게 · 가족 · 은행 … 말 안 할게) | `secrecy_promise` |
 // | RS3 | 저항 어휘 · 거절이 없고, 사기범이 은행 · 거래를 언급했으며 답에 은행명(○○은행 · 농협 · 우체국 · 새마을금고 · 신협 · 수협 · ○○뱅크) | `bank_disclosed` |
+// | RS4 | 2026-11-07 사용자 결정 — 저항 어휘가 없고, 바로 앞 대사에 요구 어형(`scammerHasDemand`)이 있으며, 답이 일반 방법 질문뿐(C6c) | `how_to_question` |
+// ⚠️ 순서: RS2(비밀 약속) 뒤 · RS3 앞. 한 줄에 하나만(위에서 첫 일치).
 const FAKE_INFO_MARKER = /가짜로|가짜\s*(?:번호|정보|이름|계좌)|거짓(?:말)?로|아무거나|아무\s*번호|지어서|지어낸|엉터리/;
 const SECRECY_PROMISE =
   /(?:아무|누구)\s*(?:한테|에게)?\s*도[^.?!]{0,8}?(?:말|얘기|이야기|알리)[^.?!]{0,3}?(?:안|않|하지\s*않)|비밀로\s*(?:할게|하겠|해\s*드릴|둘게|두겠)|비밀\s*(?:지킬게|지키겠|유지할게|유지하겠)|(?:가족|은행|남편|아내|아들|딸|자녀)[^.?!]{0,8}?(?:말|얘기|알리)[^.?!]{0,3}?안\s*(?:할|하겠|해)/;
@@ -592,6 +607,8 @@ function resolveRiskSignalKind(scammerText: string, replyText: string, otpCodes:
   if (isWrongOtpReply(scammerText, replyText, otpCodes)) return "fake_info";
   if (isResistanceForReport(replyText)) return undefined;
   if (SECRECY_PROMISE.test(replyText)) return "secrecy_promise";
+  // 2026-11-07 사용자 결정 — 요구 뒤 일반 방법 질문만(C6c) = 위험 신호. 요구 없는 대사 뒤는 신호 0(종전 C4).
+  if (scammerHasDemand(scammerText) && isGenericHowToOnly(replyText.replace(NEGATED_ACTION, " "))) return "how_to_question";
   if (!REFUSAL_IN_ANSWER.test(replyText) && BANK_CONTEXT.test(scammerText) && BANK_NAME.test(replyText)) {
     return "bank_disclosed";
   }
@@ -882,7 +899,8 @@ export function analyzeConversation(
       const wrongOtp = isWrongOtpReply(msg.textMasked, reply.textMasked, otpCodes);
       // 2026-11-07 판 31 · 32 — C6a(부정된 행동 구절 제거) · C6b(따지는 질문) — 위 표.
       const affirmText = reply.textMasked.replace(NEGATED_ACTION, " ");
-      const questionedNotComplied = CHALLENGE_QUESTION.test(reply.textMasked);
+      // C6c — 요구 뒤 일반 방법 질문만은 속음이 아니다(위험 신호는 아래 `resolveRiskSignalKind`).
+      const questionedNotComplied = CHALLENGE_QUESTION.test(reply.textMasked) || isGenericHowToOnly(affirmText);
       const complied =
         // §129 C1 — 부인 · 모름 답의 명사 단독 순응은 끈다(공유 패턴 갈래만).
         // §129 C4 · C5 — 요구 없는 대사 뒤의 방법 질문 · 따름 약속만으로는 순응이 아니다.

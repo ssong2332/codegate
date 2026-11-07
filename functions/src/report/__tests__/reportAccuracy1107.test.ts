@@ -157,17 +157,38 @@ test("[판 31] C6b — '왜 …?' 따지는 질문은 응함이 아니다(실제
   assert.equal(judge(SUBSIDY, "계좌번호 알려 주세요.", "왜 필요한지 모르겠지만요? [계좌]"), 1, "H1 실제 제공은 질문과 무관하게 속음");
 });
 
-test("[판 30 — 결정 대기] 요구 뒤 일반 방법 질문은 종전대로 속음(§129 C4 후반 사용자 결정 유지) · 보낼 곳을 묻는 질문도 속음", () => {
-  assert.equal(judge(CARD, "카드 도용 여부 확인을 위해 카드번호를 불러 주셔야 합니다.", "그럼 제가 뭘 해야 하나요?"), 1);
-  assert.equal(judge(SUBSIDY, "확인금 3만 원을 이체해 주셔야 합니다.", "어디로 보내면 돼요?"), 1);
+test("[판 30 — 사용자 결정 2026-11-07 \"위험 신호로 바꾸기\"] 요구 뒤 일반 방법 질문 = 속음 아님 · 위험 신호 how_to_question · 행동을 특정한 질문은 종전대로 속음", () => {
+  const asked = analyzeConversation(
+    [msg(0, "scammer", "문자로 갈 인증번호를 불러주시겠어요?", 10), msg(1, "user", "그럼 제가 뭘 해야 하나요?", 20)],
+    t0,
+    CARD,
+  );
+  assert.equal(asked.deceivedMoments.length, 0);
+  assert.deepEqual(asked.riskSignals.map((r) => [r.turnIndex, r.kind]), [[1, "how_to_question"]]);
+  assert.equal(judge(CARD, "카드 도용 여부 확인을 위해 카드번호를 불러 주셔야 합니다.", "어떻게 하면 되나요?"), 0);
+  assert.equal(judge(SUBSIDY, "확인금 3만 원을 이체해 주셔야 합니다.", "어디로 보내면 돼요?"), 1, "보낼 곳을 묻는 질문 = 응함(종전)");
+  // 요구 없는 대사 뒤 방법 질문 = 종전 C4(속음 0 · 신호 0).
+  const noDemand = analyzeConversation([msg(0, "scammer", "고객님 명의 계좌가 범죄에 이용된 정황이 있습니다.", 10), msg(1, "user", "어떻게 해야 하나요?", 20)], t0, CARD);
+  assert.equal(noDemand.deceivedMoments.length + noDemand.riskSignals.length, 0);
 });
 
-test("[판 32 · 31 원문 3쌍] 거절 · 따지는 질문은 속은 순간이 아니다", () => {
+test("[판 32 · 31 · 30 원문 4쌍] 거절 · 따지는 질문 · 요구 뒤 일반 방법 질문은 속은 순간이 아니다", () => {
   const CHILD = SCENARIO_PROMPTS["messenger-child-impersonation-kakao"]!.weakenedTactics;
   const pairs: [string[], string, string][] = [
     [CHILD, "아빠한테는 말하지 마ㅠㅠ 200만 원만 지금 바로 보내줘.", "안 보낼게. 네 진짜 번호로 통화되면 그때 얘기하자."],
     [SUBSIDY, "1만 원을 먼저 보내셔야 지급이 됩니다. 이체 메뉴를 찾아 주시고 입금해 주세요.", "근데 지원금 받는데 왜 돈을 먼저 보내야 해요? 이체할 화면도 없는데요."],
     [SUBSIDY, "센터에 직접 알아보시면 지원 대상에서 제외되실 수 있습니다.", "아니요. 안 보낼게요."],
+    [CARD, "문자로 갈 인증번호를 불러주시겠어요?", "그럼 제가 뭘 해야 하나요?"],
   ];
   for (const [tactics, scammer, user] of pairs) assert.equal(judge(tactics, scammer, user), 0, user);
+});
+
+test("[판 31] 정부지원금 목록에 개인정보 요구 라벨이 있어 이름 · 생년월일 순간이 '앱 설치' 라벨로 불리지 않는다", () => {
+  assert.ok(SUBSIDY.some((t) => t.startsWith("개인정보 요구 —")));
+  const result = analyzeConversation(
+    [msg(0, "scammer", "지원금 대상 확인을 위해 성함과 생년월일을 알려 주세요.", 10), msg(1, "user", "김민수, 1960년 3월 2일생이에요.", 20)],
+    t0,
+    SUBSIDY,
+  );
+  assert.deepEqual(result.deceivedMoments.map((m) => m.tactic), ["개인정보 요구"]);
 });

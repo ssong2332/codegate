@@ -359,7 +359,8 @@ test("[§129 C4 · C5 경계] 앞 대사에 요구가 있으면 방법 질문 ·
   const tactics = G2LD_TACTICS();
   const ask = (scammer: string, user: string) => analyzeConversation(dialogue([["scammer", scammer], ["user", user]]), 0, tactics).wasDeceived;
   assert.equal(ask("고객님 명의 계좌가 범죄에 이용된 정황이 확인됐습니다.", "어떻게 해야 하나요?"), false); // C4
-  assert.equal(ask("잔액 전액을 안전계좌로 이체해 주십시오.", "어떻게 해야 하나요?"), true); // 요구 있음
+  // 2026-11-07 사용자 결정("위험 신호로 바꾸기") — 요구 뒤 일반 방법 질문도 속음이 아니다(위험 신호 how_to_question · `analyzeConversation.ts` C6c · RS4). 종전 true.
+  assert.equal(ask("잔액 전액을 안전계좌로 이체해 주십시오.", "어떻게 해야 하나요?"), false); // 요구 있음 → 위험 신호
   assert.equal(ask("명의가 도용돼 개설된 것으로 보입니다.", "알겠어요. 시키는 대로 할게요"), false); // C5
   assert.equal(ask("자산 보호를 위해 안전계좌로 옮기셔야 합니다. 협조하시겠습니까?", "네 말씀하신 대로 할게요"), true); // 요구 있음
   assert.equal(ask("문자 안내 확인하셨습니까?", "네, 알려주신 대로 했어요."), true, "이행 보고는 약속이 아니다");
@@ -611,7 +612,9 @@ test("[§129.12] '당신 자녀분이 지금 저희 쪽에 있어요' · '… �
     ["scammer", "가온은행 948-2716-5093-27, 예금주는 박정호입니다. 지금 바로 천만 원 이체하세요. 끊지 말고 대기하세요."],
     ["user", "보냈어요"],
   ]), 0, tactics);
-  assert.deepEqual(live.deceivedMoments.map((m) => [m.turnIndex, m.tactic]), [[3, "자녀 인질 협박"], [5, "냉담한 반응"], [7, "즉시 송금 요구"]]);
+  // 2026-11-07 사용자 결정 — 3번 답 "네? 우리 애가요? 어떻게 해야 돼요?"는 요구 뒤 방법 질문 = 위험 신호(종전 [3, "자녀 인질 협박"] 순간).
+  assert.deepEqual(live.deceivedMoments.map((m) => [m.turnIndex, m.tactic]), [[5, "냉담한 반응"], [7, "즉시 송금 요구"]]);
+  assert.deepEqual(live.riskSignals.map((r) => [r.turnIndex, r.kind]), [[3, "how_to_question"]]);
   assert.ok(live.tacticsUsed.includes("자녀 인질 협박"));
 });
 

@@ -607,7 +607,8 @@ export type PersonaBlock = {
  * 사용자 결정 2026-10-21 ② — 속음은 아니지만 위험했던 참가자 줄(`report/analyzeConversation.ts` `resolveRiskSignalKind` 판정표).
  * `turnIndex` = 그 참가자 줄 · `timeLabel` = 속은 순간과 같은 시간축. 문면은 클라가 `kind`로 고른다(서버 문면 0).
  */
-export type RiskSignalKind = "secrecy_promise" | "bank_disclosed" | "fake_info";
+// 2026-11-07 사용자 결정("위험 신호로 바꾸기") — `how_to_question` = 요구를 받고 방법만 물었다(판 30 · 속음 아님).
+export type RiskSignalKind = "secrecy_promise" | "bank_disclosed" | "fake_info" | "how_to_question";
 export type RiskSignal = { turnIndex: number; timeLabel: string; kind: RiskSignalKind };
 
 export type ReportDoc = {
