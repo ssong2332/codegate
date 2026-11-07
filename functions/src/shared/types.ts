@@ -494,6 +494,12 @@ export type MockScreenTimelineEntry = {
   // true면 **같은 순간이 `deceivedMoments`에도 있다** — 중복 카드 금지 규칙(§15.9.5 e-4)에 따라
   // 교육 문구(correctAction)는 그쪽이 전담하고 이 항목은 사실 1줄만 낸다.
   consented: boolean;
+  /** 2026-11-07 Edge 시험 판 19 — 훈련용 이체 화면(`BANK_TRANSFER_LANDINGS`)이면 true(부재 = 그 밖 화면 · 옛 리포트). 화면 종류 문면을 가른다. */
+  bankTransfer?: true;
+  /** 판 19 — 이 화면의 폼을 실제로 제출했다(서버 `submittedAt` 존재 · 부재 = 제출 없음 · 옛 리포트). 승격 여부와 별개의 사실이다. */
+  submitted?: true;
+  /** 판 19 — 이체 화면 제출의 요구액 대비 비교(서버 `amountComparison` 그대로 · 금액 값은 싣지 않는다 — G138). 부재 = 모름. */
+  amountComparison?: "less" | "equal" | "more";
 };
 // ⚠️ 스냅샷에 **절대 넣지 않는 필드**(§15.9.5 e-4 금지 표): headline/bodyLines/consentLabel 등
 // 화면 콘텐츠 원문(사후 화면이 목업을 재구성·재진입할 수 있게 된다 — §15.6 G19 동형 취지),
@@ -623,6 +629,11 @@ export type ReportDoc = {
   // §119(DECISIONS #234 · D-3 b) — 이번 결말 이름 · 그 칸(시나리오 × 난이도 × 세션 종류)의 결말 수. 루트가 2가지 이상인 칸만
   // 만든다(부재 = 줄 0 · 무백필). 변형 ID · 단계 문면은 싣지 않는다.
   routeSummary?: { label: string; routeCount: number };
+  /**
+   * 2026-11-07 Edge 시험 판 27 — 참가자가 앱 안 다이얼로 **진짜 기관 번호**(번호부 `genuineNotice` 항목)에 직접 걸어 확인한 사실(서버 `relay.genuineNumberId`).
+   * 잘 대처한 행동으로 리포트에 따로 적는다. 부재 = 그런 통화 없음 · 다통화가 아닌 세션 · 옛 리포트(무백필).
+   */
+  officialCheck?: { label: string; number: string };
   createdAt: FirebaseFirestore.Timestamp;
   // T74 추가(전부 옵셔널, 하위호환 — §15.4.1 "아카이브 카드가 필요로 하는 세션 메타를 리포트에
   // 역정규화"). 없으면 아카이브가 카드 1장마다 세션 문서를 추가 read해야 한다(N+1, §15.6 G8).

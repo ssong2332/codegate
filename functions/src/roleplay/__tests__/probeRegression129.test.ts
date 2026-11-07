@@ -660,7 +660,8 @@ test("[§129.13 (a)(b)] 금 구매형 — 요구 없는 대사 뒤 방법 질문
   const moments = result.deceivedMoments.map((m) => [m.turnIndex, m.tactic]);
   assert.ok(!moments.some(([turn]) => turn === 3), "(a) 2번 답 '어떻게 해야 하나요?'는 C4");
   // (b) 종전: [13, "비밀 유지 요구"] — 7번 대사의 문구 키는 '비밀 유지 요구'만 걸린다.
-  assert.deepEqual(moments.find(([turn]) => turn === 13), [13, "신원정보 직접 요구"]);
+  // 2026-11-07 Edge 시험 판 1 — 인증번호를 불러 준 순간은 목록에 '인증번호 요구'가 있으면 그 라벨(L3의 '개인정보 범주 첫 라벨'보다 앞선다 · `attemptedTactics.ts`).
+  assert.deepEqual(moments.find(([turn]) => turn === 13), [13, "인증번호 요구"]);
   assert.deepEqual(moments.find(([turn]) => turn === 5), [5, "신원정보 직접 요구"]);
 });
 

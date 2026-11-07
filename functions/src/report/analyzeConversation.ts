@@ -30,6 +30,7 @@ import type { MessengerChannel, RiskSignal, RiskSignalKind } from "../shared/typ
 import { resolveTacticCategory, type TacticCategory } from "./tacticCategory";
 import { CODE_DIGITS_WITH_ENDING, CODE_HANGUL_DIGITS, extractSpokenCodes } from "../shared/spokenDigits";
 import { PHOTO_DEMAND } from "../roleplay/photoTurn";
+import { resolveAttemptedTacticLabels, resolveSecretCodeLabel } from "./attemptedTactics";
 
 /** 대처법·예방 조언 문구를 고르는 채널. 부재는 "voice"다(`MessageDoc.channel` 하위호환 규칙과 같다). */
 export type AdviceChannel = MessengerChannel;
@@ -477,6 +478,16 @@ function isHowToOrFollowOnlyWithoutDemand(scammerText: string, replyText: string
   return !COMPLIANCE_PATTERN.test(replyText.replace(HOW_TO_OR_FOLLOW, " ").replace(NOUN_ONLY_COMPLIANCE, " "));
 }
 
+// ⭐ 2026-11-07 Edge 시험 판 30 · 31(메인 지시 "질문 · 되묻기 · 거절 = 응함 아님") — 리포트 전용 갈래. 공유 패턴은 바이트 무변경.
+// | # | If(참가자 답) | Then |
+// |---|---|---|
+// | C6a | 부정된 행동 · 약속("안 보낼게요" · "못 드려요" · "안 할게요") | 그 구절을 지운 나머지로만 순응을 본다(공유 패턴의 `보낼게`가 부정문 안에서 맞던 것) |
+// | C6b | `왜 …?` 따지는 질문이 있다("왜 돈을 먼저 보내야 해요?") | 순응 아님(실제 제공 H1~H4는 그대로 속음) |
+// | — | 요구 뒤 일반 방법 질문("그럼 제가 뭘 해야 하나요?" — 판 30) | ⚠️ 종전대로 속음 — §129 C4 후반 · §129.12(사용자 결정 2026-10-24)와 충돌해 바꾸지 않았다(결정 대기) |
+const NEGATED_ACTION =
+  /(?:안|못)\s*(?:보내|보낼|보냈|드리|드릴|드려|이체|송금|입금|설치|깔|누르|누를|눌러|알려|불러|말씀|하|할|해|했|줄|줘)[가-힣]*/g;
+const CHALLENGE_QUESTION = /왜\s*[^.?!\s][^.?!]{2,40}\?/;
+
 /** §129.9 — 대사가 돈 · 송금을 꺼냈다 · 답이 보낼 곳 · 금액을 묻는다. */
 const MONEY_TOPIC = /현금|돈|송금|이체|입금|계좌|\d[\d,]*\s*(?:만|천)?\s*원|[일이삼사오육칠팔구십백천]+\s*(?:억|만|천)\s*원/;
 const SEND_WHERE_OR_HOW_MUCH = /(?:어디로|어느\s*계좌로?|어떻게)\s*(?:보내|입금|이체|송금|넣)|얼마(?:요|를|나|면|예요)/;
@@ -854,6 +865,8 @@ export function analyzeConversation(
       const demandLabel = resolveDemandFallbackTactic(msg.textMasked, msgScope.tactics);
       if (demandLabel) tacticLabelsUsed.add(demandLabel);
     }
+    // 2026-11-07 Edge 시험 — 확인 차단 · 인증번호 · 비밀번호 · 명의 도용을 바꿔 말한 대사도 목록에 올린다(`attemptedTactics.ts` 표 A1~A5 · 목록 전용).
+    for (const label of resolveAttemptedTacticLabels(msg.textMasked, msgScope.tactics)) tacticLabelsUsed.add(label);
 
     // 판정 검수(2026-10-21) — 사기범 대사 뒤 참가자 줄이 **연달아** 올 수 있다(실시간 통화에서 사기범 전사가 빈
     // `turnComplete` · 끊긴 조각). 종전엔 첫 줄만 봐서 "잠깐만요" → "048231이요"의 둘째 줄이 판정되지 않았다.
@@ -867,12 +880,16 @@ export function analyzeConversation(
       const resisted = isResistanceForReport(reply.textMasked);
       // 사용자 결정 2026-10-21 — 인증번호 오답(위 W4)은 숫자 응답에서 오는 순응 판정을 끈다(실제 제공 H1 · H2는 그대로).
       const wrongOtp = isWrongOtpReply(msg.textMasked, reply.textMasked, otpCodes);
+      // 2026-11-07 판 31 · 32 — C6a(부정된 행동 구절 제거) · C6b(따지는 질문) — 위 표.
+      const affirmText = reply.textMasked.replace(NEGATED_ACTION, " ");
+      const questionedNotComplied = CHALLENGE_QUESTION.test(reply.textMasked);
       const complied =
         // §129 C1 — 부인 · 모름 답의 명사 단독 순응은 끈다(공유 패턴 갈래만).
         // §129 C4 · C5 — 요구 없는 대사 뒤의 방법 질문 · 따름 약속만으로는 순응이 아니다.
-        (COMPLIANCE_PATTERN.test(reply.textMasked) &&
-          !isNounOnlyDenial(reply.textMasked) &&
-          !isHowToOrFollowOnlyWithoutDemand(msg.textMasked, reply.textMasked)) ||
+        (!questionedNotComplied &&
+          COMPLIANCE_PATTERN.test(affirmText) &&
+          !isNounOnlyDenial(affirmText) &&
+          !isHowToOrFollowOnlyWithoutDemand(msg.textMasked, affirmText)) ||
         isHandoffPromiseReply(msg.textMasked, reply.textMasked) ||
         isContextualCompliance(msg.textMasked, reply.textMasked);
       if (isPhotoAfterDemand(reply, photoDemand !== undefined)) {
@@ -938,10 +955,17 @@ export function analyzeConversation(
       : undefined;
     const l4DemandLabel =
       keyIsVerificationBlock && !l4KeyTactic ? resolveDemandFallbackTactic(labelSource.textMasked, scopeTactics) : undefined;
-    const labelTactic =
-      otpKeyTactic ?? l4KeyTactic ?? (otpCategoryTactic || l4DemandLabel ? undefined : firstKeyTactic);
+    // 2026-11-07 Edge 시험 판 1 · 3 — 인증번호 · 비밀번호를 불러 준 순간은 그 이름이 든 목록 라벨이 L3(개인정보 범주 첫 라벨)보다 앞선다.
+    // 목록에 그런 라벨이 없으면 종전 L3 그대로(`attemptedTactics.ts` `resolveSecretCodeLabel`).
+    const secretGiven =
+      userReply.photo !== true && (OTP_DIGIT_RUN.test(userReply.textMasked) || extractSpokenCodes(userReply.textMasked).length > 0);
+    const secretLabel = secretGiven ? resolveSecretCodeLabel(labelSource.textMasked, scopeTactics) : undefined;
+    if (secretLabel) tacticLabelsUsed.add(secretLabel);
+    const labelTactic = secretLabel
+      ? undefined
+      : (otpKeyTactic ?? l4KeyTactic ?? (otpCategoryTactic || l4DemandLabel ? undefined : firstKeyTactic));
     // §129 L2 — 요구 어형 표도 비면 답의 내용 범주로(사진 턴 제외).
-    const fallbackTactic = labelTactic
+    const fallbackTactic = labelTactic || secretLabel
       ? undefined
       : (otpCategoryTactic ??
         l4DemandLabel ??
@@ -950,9 +974,10 @@ export function analyzeConversation(
         resolveAnswerCategoryTactic(labelSource.textMasked, userReply, scopeTactics));
     if (fallbackTactic) tacticLabelsUsed.add(fallbackTactic);
     // §129.10 최종 폴백(메인 제안 · 빈 라벨 0) — 문구 키 · 요구 어형 표 · 답 내용 범주가 모두 비면 세션 목록의 대표 요구 수법(`representativeTactic`).
-    const representative = labelTactic || fallbackTactic ? undefined : representativeTactic(scopeTactics);
+    const representative = labelTactic || fallbackTactic || secretLabel ? undefined : representativeTactic(scopeTactics);
     if (representative) tacticLabelsUsed.add(representative);
-    const tactic = labelTactic ? extractTacticLabel(labelTactic) : (fallbackTactic ?? representative ?? "약화된 사기 수법");
+    const tactic =
+      secretLabel ?? (labelTactic ? extractTacticLabel(labelTactic) : (fallbackTactic ?? representative ?? "약화된 사기 수법"));
     // AC-026 예시("15초 시점에 속았습니다")를 그대로 따르기 위해 turnIndex가 아니라 실제 경과
     // 시간(초)을 라벨로 쓴다 — MessageDoc.createdAt이 이미 존재하므로 정확한 초 단위 계산이
     // 가능하다(구현 판단, Mock 단계라 정밀 음성 타이밍 데이터는 없지만 메시지 write 시각은 실측값).
@@ -988,7 +1013,8 @@ function elapsedLabel(message: AnalysisMessage, sessionCreatedAtMs: number): str
  * 채널에 모두 맞는 문구(확인 전화·영상통화로 직접 확인)는 채널과 무관하게 그대로다. */
 export function pickCorrectAction(tacticLabel: string, channel: AdviceChannel = "voice"): string {
   const messenger = channel === "messenger";
-  if (/확인|전화/.test(tacticLabel)) {
+  // 2026-11-07 Edge 시험 판 5 — "본인확인 빙자 정보 수집"의 '본인확인'은 확인 차단이 아니다(확인 가로채기가 없던 판에 "상대가 확인 전화를 막으려 해도"가 나왔다).
+  if (/(?<!본인\s?)확인|전화/.test(tacticLabel)) {
     return "상대가 확인 전화를 막으려 해도 반드시 알고 있는 번호로 직접 전화해 사실을 확인하세요.";
   }
   if (/송금|계좌/.test(tacticLabel)) {
@@ -1004,7 +1030,8 @@ export function pickCorrectAction(tacticLabel: string, channel: AdviceChannel = 
   if (/가족|죄책감|애정/.test(tacticLabel)) {
     return "감정이 흔들리더라도 실제 그 사람이 맞는지부터 다른 방법(직접 전화·영상통화)으로 확인하세요.";
   }
-  if (/권위|기관|경찰|공공/.test(tacticLabel)) {
+  // 2026-11-07 Edge 시험 판 6 — 회사 상담원의 "권위·정당성 포장"(대출 사칭)에 "신원(경찰·기관 등)"은 맞지 않는다 → 마지막 일반 문구로 둔다.
+  if (/권위|기관|경찰|공공/.test(tacticLabel) && !/정당성|포장/.test(tacticLabel)) {
     return messenger
       ? "메시지로 신원(경찰·기관 등)을 주장해도 그 자리에서 믿지 말고, 공식 대표번호로 직접 걸어 확인하세요."
       : "전화로 신원(경찰·기관 등)을 주장해도 그 자리에서 믿지 말고, 공식 대표번호로 직접 걸어 확인하세요.";
