@@ -721,14 +721,39 @@ function buildVerifyInterceptRule(
 // ⚠️ **억제 대상은 이탈 차단 계열뿐이다(G62 — T91 불변식)**: 요구 계열은 초급에서도 그대로 일어난다.
 // [진행 강제]의 "반드시 구체적인 요구에 도달한다"는 세 난이도에서 불변이며, 아래 마지막 항목이
 // 그 사실을 프롬프트 안에서도 못박는다.
-const BEGINNER_BLOCK = `[난이도 — 초급: 수법이 눈에 띄게 드러나게]
+//
+// ⭐ D4(2026-11-07 Edge 실사용 시험 판 29 · 판 32 — `docs/research/edge-scenario-test-2026-11-07.md`) — 초급 설명은 "의심하면 쉽게
+// 물러섭니다"인데 기관 사칭 초급(음성)은 확인 의사 3회에 불이익 → 수사 기밀 → 협조 압박을, 자녀 사칭 초급(메신저)은 의심 · 거절에
+// "200만 원만" → "계좌라도"를 이어 갔다. 원인: 이 블록은 [말투/톤]의 재설득만 면제했고, 모든 난이도에 실리는 [진행 강제 — 반드시
+// 지킨다]의 "같은 압박을 반복하지 않는다 — 매번 다른 카드(다른 수법 · 낮춘 재제안 · 더 강한 압박)"와 "상대가 응하면 … 비밀 유지 요구"는
+// 그대로 남겼다 — 관측된 대사가 정확히 그 카드들이다. 또 "물러선다" 뒤에 무엇을 하는지(끝점)가 없어 끊지 않는 경로(메신저 · NONE)에서는
+// "반드시 구체적인 요구에 도달한다"로 되돌아갔다. ⇒ ① 우선순위를 [진행 강제]까지 명문화 ② 물러섬 → 마무리 순서(순서형 — G130 숫자 0)
+// ③ 마무리 방법을 끊기 변형(`hangupMode`)별 1줄로. 중급(블록 0) · 고급(별도 상수)은 바이트 무변경.
+const BEGINNER_BLOCK_TEMPLATE = `[난이도 — 초급: 수법이 눈에 띄게 드러나게]
 - **수법을 눈에 띄게 쓴다.** 전형적인 사기 문구를 그대로 쓰고, 요구를 서두르며, 근거는 어설프게 댄다 — 참가자가 "이건 사기구나"를 스스로 알아챌 단서를 일부러 남긴다.
 - **압박은 약하게 한다.** 몰아붙이거나 겁을 주는 표현의 강도를 낮추고, 상대가 불안해하면 한 발 물러선다.
-- **위 [말투/톤]의 재설득·재압박 지시는 이 난이도에서 적용하지 않는다.** 상대가 의심하거나 거절하면 한 번 더 설득하지 않고 물러선다.
+- **위 [말투/톤]의 재설득·재압박 지시는 이 난이도에서 적용하지 않는다.** 위 [진행 강제]의 "같은 압박을 반복하지 않는다"에 적힌 다른 카드(다른 수법으로 갈아타기, 요구 조건을 낮춰 다시 제안하기, 더 강한 압박으로 올리기)도 이 난이도에서는 꺼내지 않는다. 상대의 의심과 거절에 대해서는 이 블록이 위 [말투/톤]·[사용 가능한 수법]·[진행 강제]보다 우선한다.
+- **의심·거절이 나오면 물러서고, 그래도 이어지면 마무리한다.** 상대가 의심하거나 거절하거나 직접 확인해 보겠다고 하면 새 근거, 불이익 암시, 비밀 유지 요구, 낮춘 요구를 꺼내지 말고 "네, 그럼 확인해 보세요"처럼 상대의 말을 받아들이며 물러선다. 그러고도 상대가 다시 의심하거나 거절하면 요구를 거두고 마무리한다. 아직 요구를 말하기 전이었다면 물러서는 그 응답에서 요구를 짧게 말해 두고 물러선다.
+{{BEGINNER_ENDING}}
 - **상대가 빠져나가려 하면 붙잡지 않는다.** 상대가 통화를 끊으려 하거나, 직접 확인해 보겠다거나, 가족·지인·공식 창구에 물어보겠다고 하면 **그대로 하게 둔다** — 확인·상의·신고를 막는 말, 비밀로 하라는 요구, 통화를 계속 붙들어 두려는 말은 **어떤 표현으로도 하지 않는다.**
-- **붙잡는 수단은 시간 이야기 하나까지만 쓴다.** "지금 아니면 안 된다", "오늘까지만 된다" 정도의 시간 압박 **한 가지**만 허용되고, 그 외의 이탈 차단 수법은 위 [사용 가능한 수법] 목록에 있더라도 이 난이도에서는 쓰지 않는다.
+- **붙잡는 수단은 시간 이야기 하나까지만 쓴다.** "지금 아니면 안 된다", "오늘까지만 된다" 정도의 시간 압박 **한 가지**만 허용되고, 그 외의 이탈 차단 수법은 위 [사용 가능한 수법] 목록에 있더라도 이 난이도에서는 쓰지 않는다. 위 [진행 강제]의 "상대가 응하면 실제로 진행시킨다"에 예로 든 비밀 유지 요구도 이 난이도에서는 하지 않는다.
 - **요구는 한 단계로 끝낸다.** 앞세우는 준비 단계를 만들지 말고, 처음부터 최종 요구를 그대로 말한다.
 - ⚠️ 이 난이도 지시는 **말투·압박 강도·수법의 노출 정도·이탈 차단의 깊이만** 바꾼다. 위 [진행 강제]의 "반드시 구체적인 요구에 도달한다"와 "페이로드는 가상값만", 아래 안전 지침은 **하나도 바꾸지 않는다.** 상대를 붙잡지 않는 것과 요구를 하지 않는 것은 다르다 — **요구는 초급에서도 반드시 한다.**`;
+
+/**
+ * D4 — 초급 마무리 방법(끊기 변형별 1줄). TOOL · SIGNAL은 [진행 강제]의 끊기 규칙 둘째 경우("거절이나 의심을 되풀이해 더는 진행할 수
+ * 없다")를 그대로 가리킨다(새 끊기 경우를 만들지 않는다). NONE(메신저 · 오프닝 · `end_call` 미선언)은 끊지 못하므로 "요구를 거둔 채
+ * 짧게 받기만"으로 둔다 — NONE 규칙의 "네가 통화를 마치겠다는 말 금지"와 충돌하지 않는다. ⛔ 숫자 · 서수 0(G130).
+ */
+export const BEGINNER_ENDING_HANGUP = `- **마무리는 위 끊기 규칙의 "상대가 거절이나 의심을 되풀이해 더는 진행할 수 없다"에 해당한다.** 그때는 붙잡지 말고 그 규칙대로 끊는다. 끊기가 허락되지 않으면 거둔 요구나 새 요구를 다시 꺼내지 말고 상대의 말을 짧게 받기만 한다.`;
+export const BEGINNER_ENDING_NO_HANGUP = `- **마무리할 때는 물러서는 말 한마디만 하고 더 요구하지 않는다.** 그 뒤 상대가 말을 걸어 와도 짧게 받기만 하고, 거둔 요구나 새 요구를 다시 꺼내지 않는다.`;
+
+function buildBeginnerBlock(hangupMode: HangupMode): string {
+  return BEGINNER_BLOCK_TEMPLATE.replace(
+    "{{BEGINNER_ENDING}}",
+    hangupMode === "none" ? BEGINNER_ENDING_NO_HANGUP : BEGINNER_ENDING_HANGUP,
+  );
+}
 
 // 고급 공통 = L1(무변경 계승) + L2(보강) + **L4(교체)**.
 //
@@ -873,7 +898,7 @@ const ADVANCED_L3_PROCEDURAL = `[난이도 — 고급(심화): 절차로 정당�
  *
  * | # | 블록 | 조건 |
  * |---|---|---|
- * | 1 | `BEGINNER_BLOCK` | `beginner` |
+ * | 1 | `BEGINNER_BLOCK_TEMPLATE`(마무리 줄 = `hangupMode`로 갈림 — D4) | `beginner` |
  * | — | *(없음, `null`)* | `intermediate` — **기준선. 블록 미출력** |
  * | 2 | `ADVANCED_BASE_TEMPLATE`(조건형 치환) | `advanced` — 선행 요구 예시가 `inCallSmsEnabled`로 갈린다(§43.4 B) |
  * | 3 | `ADVANCED_L3_PROCEDURAL` | `advanced` && `l3Procedural` |
@@ -888,9 +913,10 @@ const ADVANCED_L3_PROCEDURAL = `[난이도 — 고급(심화): 절차로 정당�
  */
 function buildDifficultyBlock(
   level: DifficultyLevel,
-  opts: { l3Procedural?: boolean; inCallSmsEnabled?: boolean; identityCheckAllowed?: boolean } = {},
+  opts: { l3Procedural?: boolean; inCallSmsEnabled?: boolean; identityCheckAllowed?: boolean; hangupMode?: HangupMode } = {},
 ): string | null {
-  if (level === "beginner") return BEGINNER_BLOCK;
+  // D4 — 초급 마무리 줄만 끊기 변형으로 갈린다(부재 = NONE).
+  if (level === "beginner") return buildBeginnerBlock(opts.hangupMode ?? "none");
   // 기준선 — 블록을 내보내지 않는다(현행 프롬프트가 곧 중급, §15.3.1/§17.4.1).
   if (level === "intermediate") return null;
   // §43.4 B/§50.4.4 (4) — 고급 공통 블록의 선행 요구 예시가 카탈로그 유무·페르소나 권한으로 갈린다.
@@ -1139,6 +1165,8 @@ export function buildSystemPrompt(
         l3Procedural: opts.l3Procedural,
         inCallSmsEnabled: opts.inCallSmsEnabled,
         identityCheckAllowed,
+        // D4 — [진행 강제]의 끊기 슬롯과 같은 값(초급 마무리 줄이 같은 프롬프트의 끊기 규칙을 가리킨다).
+        hangupMode: opts.hangupMode ?? "none",
       })
     : null;
   const personaCardBlock = opts.personaCard ? buildPersonaCardBlock(opts.personaCard, identityCheckAllowed) : null;
