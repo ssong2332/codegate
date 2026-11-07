@@ -42,9 +42,10 @@ export function pickFirstDeceivedIndex(moments: readonly { timeLabel?: string }[
 export type SmsEventLike = { event: string; timeLabel?: string };
 
 /** S1 — 문자 항목을 이벤트 단위 줄로 편다(정렬 시각 = 그 이벤트의 시각 · 없으면 항목 시각). */
-export function splitSmsEvents<E extends SmsEventLike, S extends { timeLabel?: string; events: readonly E[] }>(
+// 이벤트 타입은 `S`에서 꺼낸다 — 따로 둔 타입 인자 `E`는 제약(`SmsEventLike`)으로만 추론돼 호출부의 `what` 등이 사라졌다(next build 타입 검사 실패 · 통합 브랜치에서 수정).
+export function splitSmsEvents<S extends { timeLabel?: string; events: readonly SmsEventLike[] }>(
   sms: S,
-): { sms: S; event: E; timeLabel?: string }[] {
+): { sms: S; event: S["events"][number]; timeLabel?: string }[] {
   return sms.events.map((event) => {
     const timeLabel = event.timeLabel ?? sms.timeLabel;
     return timeLabel === undefined ? { sms, event } : { sms, event, timeLabel };
