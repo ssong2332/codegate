@@ -17,7 +17,14 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { endSession } from "@/lib/api";
 import type { EndSessionReason } from "@/lib/api/types";
-import { clearPendingEndReason, clearPendingSession, getPendingSessionId, peekPendingEndReason } from "@/lib/recording";
+import {
+  clearPendingEndReason,
+  clearPendingHangupButton,
+  clearPendingSession,
+  getPendingSessionId,
+  peekPendingEndReason,
+  peekPendingHangupButton,
+} from "@/lib/recording";
 import { clearPendingCallDiag, peekPendingCallDiag } from "@/lib/realtime/callDiagSummary";
 import { Button, LoadingStatus } from "@/components/ui";
 import { EXIT_BOARD } from "@/lib/design/e2Prep";
@@ -59,7 +66,9 @@ async function fetchChallengeContext(
 function requestEndSession(sid: string, endReason: EndSessionReason) {
   // 2026-11-06 — 통화 화면이 끝내는 순간 남긴 진단 요약(숫자 · 상태값만 · 없으면 필드 0 — `callDiagSummary.ts`).
   const diag = peekPendingCallDiag(sid);
-  return endSession({ sessionId: sid, endReason, ...(diag ? { diag } : {}) });
+  // 2026-11-07 — 통화 종료 버튼 힌트(`endReasonHint.ts` B1)는 사유가 `user_ended`일 때만 싣는다(서버 `session/endReason.ts` H1과 같은 조건).
+  const hangupButton = endReason === "user_ended" && peekPendingHangupButton(sid);
+  return endSession({ sessionId: sid, endReason, ...(diag ? { diag } : {}), ...(hangupButton ? { hangupButton: true as const } : {}) });
 }
 
 export default function SessionEndPage() {
@@ -179,6 +188,7 @@ export default function SessionEndPage() {
       .then(async () => {
         // Minor-2 — 종료가 성공한 뒤에만 사유 힌트를 지운다(실패 경로는 남겨 다음 재시도 · 새로고침이 같은 값을 보낸다).
         clearPendingEndReason();
+        clearPendingHangupButton();
         clearPendingCallDiag();
         setChallenge(await fetchChallengeContext(sessionId));
         setState("ended");

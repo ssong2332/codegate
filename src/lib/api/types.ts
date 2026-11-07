@@ -432,6 +432,8 @@ export type EndSessionRequest = {
   endReason: EndSessionReason;
   /** 2026-11-06 — 세션 끝 통화 진단 요약(숫자 · 상태값만). 부재 = 로그 없음. */
   diag?: CallDiagSummary;
+  /** 2026-11-07 — 통화 화면의 통화 종료 버튼으로 끝냈을 때만(`endReasonHint.ts` B1 · 서버 `session/endReason.ts` H1). 부재 = 그 밖 모든 종료. */
+  hangupButton?: true;
 };
 export type EndSessionResponse = { status: "ended"; reportPending: true };
 

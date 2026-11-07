@@ -7,6 +7,7 @@ import {
   END_SESSION_ALLOWED_REASONS,
   readEndSessionReason,
   resolveRecordedEndReason,
+  shouldMarkParticipantHangupButton,
 } from "../endReason";
 
 // T192 C1 · G508 — `endSession` 사유 허용목록 · 표식 없는 `scammer_ended` → `user_ended` · 멱등 유지
@@ -80,4 +81,25 @@ test("[G508 배선 역검증] 클라 값을 그대로 쓰는 사본 · 멱등 �
   assert.ok(endSessionWiringViolations(noIdempotent).some((m) => m.includes("멱등")));
   const noAllowlist = body.replace("readEndSessionReason(", "String(");
   assert.ok(endSessionWiringViolations(noAllowlist).some((m) => m.includes("허용목록")));
+});
+
+test("[2026-11-07 H1 · H2] 통화 종료 버튼 표식 — hangupButton === true ∧ 요청 · 기록 사유 user_ended일 때만", () => {
+  assert.equal(shouldMarkParticipantHangupButton(true, "user_ended", "user_ended"), true);
+  // H2 — 필드 없음 · true 아닌 값 · 다른 사유 · 강등된 scammer_ended(기록은 user_ended여도 요청이 버튼이 아니다).
+  for (const raw of [undefined, null, false, "true", 1, {}]) {
+    assert.equal(shouldMarkParticipantHangupButton(raw, "user_ended", "user_ended"), false, JSON.stringify(raw));
+  }
+  assert.equal(shouldMarkParticipantHangupButton(true, "limit_reached", "limit_reached"), false);
+  assert.equal(shouldMarkParticipantHangupButton(true, "scammer_ended", "scammer_ended"), false);
+  assert.equal(shouldMarkParticipantHangupButton(true, "scammer_ended", "user_ended"), false);
+});
+
+test("[2026-11-07 배선] endSession — 표식은 판정 함수 결과로만 · 같은 write에 실린다(멱등 반환 뒤 · 클라 값 직기록 0)", () => {
+  const body = endSessionBody(readFileSync(SESSION_SRC, "utf8"));
+  const decideAt = body.indexOf("shouldMarkParticipantHangupButton(");
+  const updateAt = body.indexOf("sessionRef.update(");
+  const idempotentAt = body.indexOf('session.status === "ended"');
+  assert.ok(decideAt > idempotentAt && decideAt < updateAt, "판정은 멱등 반환 뒤 · write 앞");
+  assert.ok(body.slice(updateAt).includes("...(hangupButton ? { participantHangupButton: true as const } : {})"));
+  assert.equal((body.match(/participantHangupButton/g) ?? []).length, 1, "표식을 쓰는 곳은 write 1곳");
 });

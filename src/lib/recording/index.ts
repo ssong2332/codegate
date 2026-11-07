@@ -17,6 +17,10 @@ export {
   setPendingEndReason,
   peekPendingEndReason,
   clearPendingEndReason,
+  // 2026-11-07 — 통화 종료 버튼 힌트(통화 화면 → 종료 화면 1회성).
+  setPendingHangupButton,
+  peekPendingHangupButton,
+  clearPendingHangupButton,
   setIdentityConfirmed,
   getIdentityConfirmed,
   setOpeningAudioUrl,

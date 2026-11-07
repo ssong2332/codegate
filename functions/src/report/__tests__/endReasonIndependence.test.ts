@@ -47,6 +47,20 @@ test("[G511] report/**에 endReason · scammerHangup · ...session 0", () => {
   assert.deepEqual(findReasonReads(sources), [], "리포트가 종료 사유를 읽을 수 있게 됐다(AC-103 (e))");
 });
 
+// 2026-11-07(메인 지시) — "먼저 전화를 끊음" 블록은 종료 사유가 아니라 서버 표식 `participantHangupButton`을 읽는다 ⇒ 위 스캔에 예외 0(G511 원래대로).
+test("[G511 판정 동일] 블록 값은 판정에 들어가지 않는다 — wasDeceived = 최종 속은 순간 수 · participantHangup은 리포트 필드로만", () => {
+  const core = readFileSync(path.join(REPORT_SRC, "generateReportCore.ts"), "utf8");
+  assert.ok(core.includes("const wasDeceived = mock.deceivedMoments.length > 0;"));
+  // 변수 쓰임 = 선언 1줄 + 리포트 필드 전개 1줄뿐(주석 · import 줄 제외).
+  const useLines = core
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /\bparticipantHangup\b/.test(line) && !line.startsWith("//") && !line.startsWith("import "));
+  assert.deepEqual(useLines, ["const participantHangup = resolveParticipantHangup({", "...(participantHangup ? { participantHangup } : {}),"]);
+  const analyze = readFileSync(path.join(REPORT_SRC, "analyzeConversation.ts"), "utf8");
+  assert.equal(/participantHangup|resolveParticipantHangup/.test(analyze), false, "판정 모듈이 블록을 읽으면 안 된다");
+});
+
 test("[G511 역검증] 사유를 읽는 사본 · 세션을 통째로 펼치는 사본은 스캔에 걸린다", () => {
   assert.equal(findReasonReads([["x.ts", "const r = session.endReason;"]]).length, 1);
   assert.equal(findReasonReads([["x.ts", "if (session.scammerHangup) verdict = 1;"]]).length, 1);

@@ -82,6 +82,8 @@ export type EndSessionReason = AllowedEndSessionReason;
 export type EndSessionRequest = {
   sessionId: string;
   endReason: EndSessionReason;
+  /** 2026-11-07 — 통화 화면의 통화 종료 버튼으로 끝냈을 때만 `true`(`endReason.ts` H1). 부재 = 그 밖 모든 종료. */
+  hangupButton?: true;
 };
 export type EndSessionResponse = { status: "ended"; reportPending: true };
 
