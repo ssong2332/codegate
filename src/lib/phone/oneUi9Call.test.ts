@@ -45,7 +45,7 @@ test("[One UI 9] 배선 — 통화 셸이 oneui9일 때만 새 버튼 묶음 · 
   assert.match(play, /\) : oneUi9 \? \(\s*<OneUiCallControls/);
   assert.match(play, /callTokens\.shellGradient \?\? callTokens\.bg/);
   // 종료 버튼 이름(G441)은 그대로 — 스킨과 무관하게 한 버튼.
-  assert.equal(play.split('aria-label={returnsToMessengerOnHangup ? "통화 종료" : "통화 종료 — 훈련 종료"}').length, 2);
+  assert.equal(play.split('aria-label={returnsToMessengerOnHangup || multiCallSession ? "통화 종료" : "통화 종료 — 훈련 종료"}').length, 2);
   const controls = readFileSync("src/components/OneUiCallControls.tsx", "utf8");
   // 2026-10-27 — 시트 항목은 두 스킨 공용 `CallExtraSheets`로 옮겨 갔다.
   const withSheets = controls + readFileSync("src/components/CallExtraSheets.tsx", "utf8");

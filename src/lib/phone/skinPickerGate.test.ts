@@ -103,7 +103,8 @@ test("[T190/AC-092 (b)] 한 세션 = 한 스킨 — 통화 셸·배너·문자�
 
 test("[T190 역검증 — AC-092 (g)ⓑ] 문자함에 다른 스킨을 넘긴 사본은 실패한다", () => {
   const play = read(PLAY);
-  const poisoned = play.replace("skin={deviceSkin.skin}", 'skin={"ios"}');
+  // 2026-11-07 — 통화 사이 화면(`CallLegScreens`)도 같은 스킨을 받는다 — 오염 지점은 문자함 블록 안으로 좁힌다.
+  const poisoned = play.replace(/(<InCallSmsOverlay[\s\S]*?)skin=\{deviceSkin\.skin\}/, '$1skin={"ios"}');
   assert.notEqual(poisoned, play, "오염 지점을 찾지 못했다");
   assert.deepEqual(sameSkinViolations(poisoned), ["문자함이 통화 셸과 같은 스킨을 받지 않는다"]);
 });

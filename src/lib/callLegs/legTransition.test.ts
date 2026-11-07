@@ -7,13 +7,11 @@ import { readFileSync } from "node:fs";
 import {
   DIAL_MAX_DIGITS,
   LEG_CALLBACK_DELAY_MS,
-  LEG_DIAL_CONTACTS,
   LEG_GENUINE_COPY,
   LEG_TRANSFER_CONNECT_MS,
   LEG_TRANSFER_HOLD_TONE,
   LEG_TRANSFER_HOLD_TONE_CAP_MS,
   backspaceDial,
-  dialContactsFor,
   digitsOf,
   formatDialDigits,
   LEG_DIALED_OPENING_TURN,
@@ -69,27 +67,15 @@ test("[§142 문자] 안내 번호는 본문 첫 1회만 누를 수 있다 · �
   assert.equal(splitBodyAtDialNumber(body, undefined), null);
 });
 
-test("[§142 미러] 연락처 = 서버 번호부의 연락처 항목(번호 · 가상 기관명) · 실제 번호 0", () => {
-  const server = read("functions/src/scenarios/dialDirectory.ts");
-  const names = read("functions/src/scenarios/fictionalNames.ts");
-  const contacts = dialContactsFor("card-company-impersonation");
-  assert.equal(contacts.length, 3);
-  for (const contact of contacts) {
-    assert.ok(server.includes(`"${contact.number}"`), `서버 번호부에 ${contact.number}가 없다`);
-  }
-  assert.ok(names.includes('cardCompany: "윤슬카드"') && names.includes('supervisor: "금융감독기관"'));
-  assert.ok(server.includes("`${CARD} 고객센터`") && server.includes("`${SUPERVISOR} 대표번호`") && server.includes("`${PROSECUTION} 대표번호`"));
-  assert.ok(names.includes('office: "한빛지방검찰청"') && server.includes("const PROSECUTION = CASE_RECORD_NAMES.office;"));
-  assert.deepEqual(
-    contacts.map((c) => c.label),
-    ["윤슬카드 고객센터", "금융감독기관 대표번호", "한빛지방검찰청 대표번호"],
-  );
-  for (const list of Object.values(LEG_DIAL_CONTACTS)) {
-    for (const { number } of list) {
-      assert.ok(!["1332", "1301", "112"].includes(digitsOf(number)), "실제 기관 번호 금지");
-    }
-  }
-  assert.deepEqual(dialContactsFor("unknown"), []);
+// 2026-11-07 실기기 신고 — "내 연락처에 왜 … 대표번호가 저장되어 있는 건데" → 기관 번호 연락처 미리 저장 0.
+// 서버 번호부 미러(공식 번호 검색 결과)는 `phoneApp.test.ts`.
+test("[11-07 R1 연락처] 기관 번호를 연락처에 미리 저장하지 않는다 — 클라 연락처 표 · 연락처 탭 0", () => {
+  const lib = read("src/lib/callLegs/legTransition.ts").replace(/^\s*(\/\/|\*).*$/gm, "");
+  assert.ok(!lib.includes("LEG_DIAL_CONTACTS") && !lib.includes("dialContactsFor"));
+  const screens = read("src/components/CallLegScreens.tsx");
+  assert.ok(!/\bcontacts\b/.test(screens), "연락처 목록 prop 0");
+  assert.ok(!screens.includes('"연락처"'), "연락처 탭 0");
+  assert.ok(!read("src/app/session/play/page.tsx").includes("dialContactsFor"));
 });
 
 test("[§142 배선] 통화 화면 — 끊기 legEnd는 종료 래치 대신 통화 사이로 · 다음 통화는 startCallLeg · 실시간 새 연결은 오프닝부터", () => {
@@ -149,7 +135,9 @@ test("[§142 D2] 참가자가 건 통화의 첫 신호 = 받는 쪽(레그 전�
 
 test("[§142 D1 배선] 새 통화(레그)를 열면 문자 백스톱 질의를 다시 연다 — 앞 레그 none_pending · 마무리 1회 표시 초기화", () => {
   const page = read("src/app/session/play/page.tsx");
-  const connectLeg = page.slice(page.indexOf('const connectLeg = (callerLabelForLeg: string, via?: "transfer") => {'), page.indexOf("const openNextLeg = async"));
+  // 2026-11-07 R1 — 서명에 최근 기록용 방향(`direction`)이 붙었다.
+  const connectLeg = page.slice(page.indexOf('const connectLeg = (callerLabelForLeg: string, via?: "transfer", direction?: "in" | "out") => {'), page.indexOf("const openNextLeg = async"));
+  assert.ok(connectLeg.length > 0);
   assert.ok(connectLeg.includes("smsBackstopRef.current.nonePending = false;"));
   assert.ok(connectLeg.includes("smsBackstopRef.current.wrapUpSent = false;"));
   assert.ok(connectLeg.indexOf("smsBackstopRef.current.nonePending = false;") < connectLeg.indexOf("handleAnswer();"));
@@ -165,7 +153,12 @@ test("[F1] R2 시작 = 받은 문자 화면 — 받기 전에도 문자 구독 �
   assert.ok(page.includes('if (!sessionId || phase === "pre-call-notice" || ((phase === "incoming" || phase === "connecting") && !smsStart)) return;'));
   assert.ok(page.includes("  }, [sessionId, phase, smsStart]);"));
   assert.ok(page.includes('if (!smsStart || pageState !== "ready" || phase !== "incoming" || smsStartInboxShownRef.current || inCallSms.length === 0) return;'));
-  assert.ok(page.includes('noActiveCall={smsStart && (phase === "incoming" || phase === "connecting")}'));
+  // 2026-11-07 R1 — 통화를 끊고 전화 앱에서 연 문자함에도 '통화 중' 표시줄 0.
+  assert.ok(
+    page.includes(
+      'noActiveCall={(smsStart && (phase === "incoming" || phase === "connecting")) || legScreen.kind === "dialer" || legScreen.kind === "genuine"}',
+    ),
+  );
   // 번호 누름 경로(종전) — 문자함을 닫고 다이얼에 채운다.
   const dial = page.slice(page.indexOf("const handleDialNumber = "), page.indexOf("const handleDialNumber = ") + 400);
   assert.ok(dial.includes("setSmsOverlayOpen(false);") && dial.includes('setLegScreen({ kind: "dialer", digits });'));
@@ -224,9 +217,9 @@ test("[11-07 수정 3 배선] 넘김 = 통화 화면 유지 · 대기음 · 연�
   assert.ok(connect.includes('clearLegTimers({ keepHoldTone: via === "transfer" && callMode === "realtime" && Boolean(sessionId) });'));
   // 새 통화가 연결되면(실시간 `reconnecting`을 벗어나면) 대기음을 멈춘다.
   assert.ok(page.includes('if (realtime.status !== "reconnecting") stopHoldTone();'));
-  // 통화 화면의 종료 버튼 — 넘김 대기 중이면 예약을 걷고 훈련 종료(종전 "연결 중" 화면의 종료와 같다).
-  const hangup = page.slice(page.indexOf("const handleHangup = async () => {"), page.indexOf("const handleHangup = async () => {") + 400);
-  assert.ok(hangup.includes('if (legScreen.kind === "holding") {\n      endTrainingFromLeg();'));
+  // 통화 화면의 종료 버튼 — 2026-11-07 R1: 넘김 대기 중이어도 그 통화만 끊는다(`hangupMeaning` 3행 · 훈련 종료는 전화 앱 오른쪽 위).
+  const hangup = page.slice(page.indexOf("const handleHangup = async () => {"), page.indexOf("const handleHangup = async () => {") + 900);
+  assert.ok(hangup.includes("const meaning = hangupMeaning({") && hangup.includes('void hangupCurrentLeg("hangup");'));
   // 배너는 순수 판정으로만.
   assert.ok(page.includes('reconnecting={showsReconnectingNotice({ reconnecting: realtime.status === "reconnecting", legScreen: legScreen.kind, legOpening })}'));
   assert.ok(!page.includes('reconnecting={realtime.status === "reconnecting"}'));

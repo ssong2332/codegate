@@ -202,17 +202,21 @@ import {
   LEG_TRANSFER_CONNECT_MS,
   LEG_TRANSFER_HOLD_TONE,
   LEG_TRANSFER_HOLD_TONE_CAP_MS,
+  afterHangupResponse,
   backspaceDial,
-  dialContactsFor,
+  callDisplayNumber,
   digitsOf,
+  hangupMeaning,
   legCallerLabelOr,
   legOpeningTurnFor,
   pressDialKey,
   screenAfterLegEnd,
+  screenAfterParticipantHangup,
   labelAfterLegConnect,
   showsReconnectingNotice,
   type LegScreen,
 } from "@/lib/callLegs/legTransition";
+import { buildRecents, officialNumberForTitle, type PhoneCallLog } from "@/lib/callLegs/phoneApp";
 import BankAppOverlay from "@/components/BankAppOverlay";
 import { fictionalBalanceFor, isBankAppEnabled, myBankNameFor, type TransferTarget } from "@/lib/bankapp/bankApp";
 import { readDebugFlagSearch } from "@/lib/realtime/debugFlags";
@@ -229,6 +233,8 @@ import { chatDuringCallContextText } from "@/lib/realtime/chatDuringCall";
 const noopSubscribeBankApp = () => () => {};
 const readBankAppEnabled = () => isBankAppEnabled(readDebugFlagSearch());
 const readBankAppEnabledOnServer = () => false;
+// 2026-11-07 — 최근 기록 시각(이벤트 경로에서만 부른다 · React 컴파일러 순수성 규칙이 `connectLeg` 안의 직접 호출을 렌더로 오인한다).
+const callLogNowMs = () => Date.now();
 
 // ⚠️ 지연 로딩 필수 — @elevenlabs/react가 끌어오는 livekit-client(WebRTC)를 이 화면 로드 시점에
 // 함께 불러오면 WebRTC를 못 쓰는 환경에서 렌더러가 통째로 죽는다(실측: 페이지 자체가 로드 실패).
@@ -562,6 +568,11 @@ export default function SessionCallPage() {
   // 2026-11-07 — 통화 중 넘김 대기음(`LEG_TRANSFER_HOLD_TONE`)의 정지 함수 · 넘김 직전에 보이던 발신자 라벨(넘긴 뒤에도 그대로 — `labelAfterLegConnect`).
   const holdToneStopRef = useRef<(() => void) | null>(null);
   const transferShownLabelRef = useRef<string | null>(null);
+  // 2026-11-07 실기기 신고(R1) — 전화 앱 최근 기록의 통화(이번 세션 · 메모리만). 지금 통화의 시작(번호 · 방향 · 시각)은 끝날 때 한 줄로 남는다.
+  const [phoneCallLog, setPhoneCallLog] = useState<PhoneCallLog[]>([]);
+  const currentCallRef = useRef<{ number: string; direction: "in" | "out"; atMs: number } | null>(null);
+  // 참가자가 끊은 뒤 상대가 다시 걸어 오는 예약 — 다시 걸려 온 전화를 거절하면 더 걸어 오지 않는다(끝없는 재발신 0).
+  const callbackAfterHangupRef = useRef(true);
   // §142 PR-4(R2) — 세션이 수신 벨이 아니라 시작 문자 · 전화 앱 화면에서 시작한다(세션 문서 `startSurface` — 서버 값). 첫 통화는 참가자가 건다.
   const [smsStart, setSmsStart] = useState(false);
   // 결함 ①(2026-11-06) — 수신 통화로 시작하는 다통화 세션의 첫 통화 발신자(서버 세션 문서 `startCallerLabel`). 받기 전 벨 화면도 이 번호다.
@@ -1666,13 +1677,28 @@ export default function SessionCallPage() {
   // 훈련 종료는 대화방의 종료 버튼 · 사기범이 대화방을 나갔을 때 · 이 화면의 "훈련 종료"(벨 직전 고지 등)만. 한도 도달 · 서버 close는
   // 종전대로 훈련을 끝낸다. §112 — 사기범 끊기도 대화방 복귀다(`endCall`의 scammer 분기). 처음부터 통화인 시나리오는 종전(훈련 종료).
   const returnsToMessengerOnHangup = scenario?.channel === "messenger";
+  // 2026-11-07 실기기 신고(R1) — 다통화 세션(서버 값: 시작 문자 · 첫 통화 발신자 · 레그 자격증명 중 하나)에서는 빨간 종료 = 그 통화만 끊기.
+  const multiCallSession = smsStart || startCallerLabel !== null || legCallerLabel !== null || Boolean(realtime.credentials?.callLeg);
   const handleHangup = async () => {
-    // 2026-11-07 — 넘김 대기 중의 통화 종료 = 종전 "연결 중" 화면의 종료와 같다(대기 · 다음 통화 예약을 걷고 훈련 종료).
-    if (legScreen.kind === "holding") {
-      endTrainingFromLeg();
+    // 판정은 `hangupMeaning` 표대로만(legTransition.ts). 넘김 대기 중의 종료도 그 통화만 끊는다(3행).
+    const meaning = hangupMeaning({
+      endLatched: isEndLatched(callEndingRef.current),
+      messengerReturn: returnsToMessengerOnHangup,
+      multiCall: multiCallSession,
+      legScreen: legScreen.kind,
+    });
+    if (meaning === "end_leg") {
+      // 상대가 이미 끊는 중(마지막 대사 재생 중 — `legEndRef`)이면 남은 대사만 건너뛴다(서버는 이미 그 통화를 끝냈다).
+      if (legEndRef.current) {
+        audioRef.current?.pause();
+        handleScammerHangupReady();
+        return;
+      }
+      void hangupCurrentLeg("hangup");
       return;
     }
     stopHoldTone();
+    // `hangupMeaning` 2행(messenger)과 같은 조건이다.
     if (returnsToMessengerOnHangup && !isEndLatched(callEndingRef.current)) {
       await handleRequestReverseEscalation("hangup");
       return;
@@ -1776,8 +1802,11 @@ export default function SessionCallPage() {
     ringbackStopRef.current = startRingback(primedCallAudioRef.current?.output ?? null, RINGBACK_TONE);
   };
   // 서버가 연 다음 통화로 들어간다 — 실시간이면 새 자격증명으로 다음 인물의 Live 세션(오프닝부터) · 폴백이면 다음 턴부터 서버가 그 인물로 답한다.
-  const connectLeg = (callerLabelForLeg: string, via?: "transfer") => {
+  const connectLeg = (callerLabelForLeg: string, via?: "transfer", direction?: "in" | "out") => {
     clearLegTimers({ keepHoldTone: via === "transfer" && callMode === "realtime" && Boolean(sessionId) });
+    // 최근 기록 — 넘김은 같은 통화(시작 기록 유지) · 그 밖은 새 통화의 시작.
+    if (via !== "transfer") currentCallRef.current = { number: callerLabelForLeg, direction: direction ?? "in", atMs: callLogNowMs() };
+    callbackAfterHangupRef.current = true;
     setLegCallerLabel(callerLabelForLeg);
     setLegScreen({ kind: "none" });
     setLegDialing(false);
@@ -1804,18 +1833,24 @@ export default function SessionCallPage() {
       const result = await startCallLeg({ sessionId, action, ...(dialed ? { dialed } : {}) });
       if (!endCallMountedRef.current) return;
       if (result.status === "connected") {
+        // 2026-11-07 — 연락처가 없으니 화면에는 번호가 보인다(`callDisplayNumber` 표 — 건 통화 = 건 번호).
+        const shownNumber = callDisplayNumber({
+          label: result.callerLabel,
+          dialed: action === "dial" ? dialed : undefined,
+          officialNumber: officialNumberForTitle(scenarioId ?? "", result.callerLabel),
+        });
         if (action === "callback") {
           // D4 — 상대가 다시 걸어 왔다(받기를 눌러야 연결된다).
           ringbackStopRef.current?.();
-          setLegScreen({ kind: "incoming", label: result.callerLabel });
+          setLegScreen({ kind: "incoming", label: shownNumber });
           setLegDialing(false);
           return;
         }
         if (action === "dial") {
-          // 발신 연결음 뒤 상대가 받는다(실제 전화처럼).
-          setLegScreen({ kind: "connecting", via: "dial", label: result.callerLabel });
+          // 발신 연결음 뒤 상대가 받는다(실제 전화처럼). 발신 화면 = 통화 화면과 같은 스킨(`CallLegScreens` connecting).
+          setLegScreen({ kind: "connecting", via: "dial", label: shownNumber });
           playLegRingback();
-          legTimeout(() => connectLeg(result.callerLabel), LEG_DIAL_CONNECT_MS);
+          legTimeout(() => connectLeg(shownNumber, undefined, "out"), LEG_DIAL_CONNECT_MS);
           return;
         }
         // 2026-11-07 — 통화 중 넘김: 통화 화면 · 번호를 그대로 두고 새 통화를 연다(`labelAfterLegConnect` 표).
@@ -1859,6 +1894,8 @@ export default function SessionCallPage() {
     if (callMode === "realtime") realtime.suspendForLeg();
     audioRef.current?.pause();
     speech.stop();
+    // 넘김은 같은 통화가 이어진다(최근 기록 한 줄 = 화면에 보인 통화 하나). 직접 걸기로 끝나면 이 통화가 최근 기록에 남는다.
+    if (legEnd.exit === "dial") logCurrentCallEnded();
     try {
       await flushTranscript(legDiag);
     } catch {
@@ -1894,7 +1931,74 @@ export default function SessionCallPage() {
   };
   const answerLegCallback = () => {
     if (legScreen.kind !== "incoming") return;
-    connectLeg(legScreen.label);
+    connectLeg(legScreen.label, undefined, "in");
+  };
+  // 2026-11-07 — 최근 기록: 지금 통화를 끝난 통화 한 줄로 남긴다(통화 길이 = 연결부터 지금까지).
+  const logCurrentCallEnded = () => {
+    const current = currentCallRef.current;
+    currentCallRef.current = null;
+    if (!current) return;
+    const now = Date.now();
+    setPhoneCallLog((log) => [...log, { ...current, durationSec: Math.max(0, Math.round((now - current.atMs) / 1000)) }]);
+  };
+  /**
+   * 2026-11-07 실기기 신고(R1) — 참가자가 통화를 먼저 끊음 · 발신 취소 · 다시 걸려 온 전화 거절 = **그 통화만** 끝낸다(훈련 계속).
+   * 순서: 통화 정리(실시간 · 재생) → 전사 제출 → 서버 `startCallLeg({action:"hangup"})` → `afterHangupResponse` 표
+   * (`ended` = 전화 앱 최근 기록 · 그 밖 = 종전 훈련 종료 — 서버 배포 전에도 안전).
+   */
+  const hangupCurrentLeg = async (kind: "hangup" | "cancel_dial" | "decline") => {
+    if (!sessionId) {
+      await endCall("user");
+      return;
+    }
+    if (legSwitchingRef.current && legScreen.kind === "none") return;
+    const shownLabel = legScreen.kind === "incoming" || legScreen.kind === "connecting" ? legScreen.label : null;
+    const legDiag = currentCallDiag();
+    legSwitchingRef.current = true;
+    setEndLatched(true);
+    setSmsOverlayOpen(false);
+    setVerifyOverlayOpen(false);
+    setBankAppOpen(false);
+    clearLegTimers();
+    setLegDialing(false);
+    if (kind === "hangup") setLocalHangup(true);
+    if (callMode === "realtime") realtime.suspendForLeg();
+    audioRef.current?.pause();
+    speech.stop();
+    if (kind === "hangup") logCurrentCallEnded();
+    else if (shownLabel !== null) {
+      setPhoneCallLog((log) => [...log, { number: shownLabel, direction: kind === "decline" ? "declined" : "out", atMs: Date.now() }]);
+    }
+    if (kind === "decline") callbackAfterHangupRef.current = false;
+    try {
+      await flushTranscript(legDiag);
+    } catch {
+      // 제출 실패는 끊기를 막지 않는다(종료 때 다시 제출된다).
+    }
+    let response: { status: string } | null = null;
+    try {
+      response = await startCallLeg({ sessionId, action: "hangup" });
+    } catch {
+      response = null;
+    }
+    if (!endCallMountedRef.current) return;
+    if (afterHangupResponse(response) === "end_training") {
+      // 서버가 이 행동을 모른다(배포 전) · 실패 — 종전대로 훈련 종료(AC-006 종료는 항상 성공).
+      endTrainingFromLeg();
+      return;
+    }
+    setLocalHangup(false);
+    setLegScreen(screenAfterParticipantHangup());
+    // 실제 사기범처럼 상대가 다시 걸어 온다(D4와 같은 시간) — 걸려 온 전화를 거절했으면 더 걸지 않는다.
+    if (callbackAfterHangupRef.current) legTimeout(() => void openNextLeg("callback"), LEG_CALLBACK_DELAY_MS);
+  };
+  // 최근 기록 한 줄 누름 = 그 번호로 바로 건다.
+  const callNumberFromPhoneApp = (digits: string) => {
+    if (legDialing) return;
+    setLegScreen({ kind: "dialer", digits });
+    primeSmsStartDial();
+    clearLegTimers();
+    void openNextLeg("dial", digits);
   };
   const endTrainingFromLeg = () => {
     clearLegTimers();
@@ -1921,6 +2025,11 @@ export default function SessionCallPage() {
     }
   }, [legScreen]);
   useEffect(() => () => clearLegTimers(), []);
+  // 2026-11-07 — 수신 통화로 시작한 다통화 세션의 첫 통화(R1 배송원)를 최근 기록의 시작으로 잡는다(받은 순간).
+  useEffect(() => {
+    if (smsStart || startCallerLabel === null || legCallerLabel !== null || currentCallRef.current) return;
+    if (phase === "opening" || phase === "live") currentCallRef.current = { number: startCallerLabel, direction: "in", atMs: Date.now() };
+  }, [phase, smsStart, startCallerLabel, legCallerLabel]);
   // 2026-11-07 — 넘긴 통화가 연결되면(또는 실패해 다시 잇는 상태를 벗어나면) 대기음을 멈춘다.
   useEffect(() => {
     if (realtime.status !== "reconnecting") stopHoldTone();
@@ -4231,7 +4340,8 @@ export default function SessionCallPage() {
               onClick={() => void handleHangup()}
               // §110.4 — 메신저발 통화는 끊으면 대화방으로 돌아간다. §131(5)(메인 세션 라이브 확인 2026-10-24 — 메인 지시 *"메신저에서 이어진 통화는
               // '통화 종료'로"*) — 그 통화만 이름에서 "훈련 종료"를 뺀다(훈련이 끝나지 않는다). 통화 시나리오는 G441 이름 그대로.
-              aria-label={returnsToMessengerOnHangup ? "통화 종료" : "통화 종료 — 훈련 종료"}
+              // 2026-11-07 — 다통화 세션도 그 통화만 끊는다(`hangupMeaning` 3행 · 훈련 종료는 전화 앱 오른쪽 위).
+              aria-label={returnsToMessengerOnHangup || multiCallSession ? "통화 종료" : "통화 종료 — 훈련 종료"}
               className={`flex items-center justify-center rounded-full shadow-lg transition active:scale-95 ${oneUi9 ? "h-16 w-16" : "h-[76px] w-[76px]"} ${
                 iosEndLifted ? "pointer-events-auto" : ""
               }`}
@@ -4271,13 +4381,19 @@ export default function SessionCallPage() {
       {/* §142(카드사 고급 재구성 PR-2) — 다통화 변형의 통화 사이 화면(다이얼 · 연결 중 · 다시 걸려 온 전화 · 진짜 기관 자동 안내). */}
       <CallLegScreens
         screen={legScreen}
-        contacts={dialContactsFor(scenarioId ?? "")}
+        skin={deviceSkin.skin}
+        scenarioId={scenarioId ?? ""}
+        recents={buildRecents(phoneCallLog, inCallSms)}
         dialing={legDialing}
         onKey={(key) => setLegScreen((cur) => (cur.kind === "dialer" ? { kind: "dialer", digits: pressDialKey(cur.digits, key) } : cur))}
         onBackspace={() => setLegScreen((cur) => (cur.kind === "dialer" ? { kind: "dialer", digits: backspaceDial(cur.digits) } : cur))}
         onSetDigits={(digits) => setLegScreen((cur) => (cur.kind === "dialer" ? { kind: "dialer", digits } : cur))}
+        onView={(view) => setLegScreen((cur) => (cur.kind === "dialer" ? { kind: "dialer", digits: cur.digits, view } : cur))}
         onDial={dialLeg}
+        onCallNumber={callNumberFromPhoneApp}
         onAnswer={answerLegCallback}
+        onDecline={() => void hangupCurrentLeg("decline")}
+        onCancelDial={() => void hangupCurrentLeg("cancel_dial")}
         onEndTraining={endTrainingFromLeg}
         onOpenSms={inCallSms.length > 0 ? () => handleOpenSmsOverlay(null) : undefined}
       />
@@ -4289,7 +4405,8 @@ export default function SessionCallPage() {
           callerLabel={callerLabel}
           elapsedLabel={formatCallElapsed(elapsedSec)}
           // 실기기 신고 F1 — R2 첫 통화 전(시작 문자 화면)에는 연결된 통화가 없다.
-          noActiveCall={smsStart && (phase === "incoming" || phase === "connecting")}
+          // 2026-11-07 — 통화를 끊고 전화 앱 · 홈 화면에서 연 문자함에도 '통화 중' 표시줄이 없다(연결된 통화 0).
+          noActiveCall={(smsStart && (phase === "incoming" || phase === "connecting")) || legScreen.kind === "dialer" || legScreen.kind === "genuine"}
           scammerCaption={pillCaption}
           onClose={handleCloseSmsOverlay}
           onEndTraining={() => void handleEndTraining()}
