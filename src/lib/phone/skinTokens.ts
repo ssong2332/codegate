@@ -360,6 +360,66 @@ export function smsThreadTokensFor(skin: MessengerSkin): SmsThreadSkinTokens {
   return SMS_THREAD_TOKENS[skin];
 }
 
+// ── 2026-11-07 실기기 신고 — 받은 문자 목록(메시지 앱 첫 화면 · 번호별 행) ──────────────────────────────
+//
+// iOS형 = iOS 메시지 앱 근사(왼쪽 정렬 큰 제목 · 안 읽음 = 왼쪽 파란 점 · 시각 옆 ›) · One UI형 = 삼성 메시지 근사
+// (펼친 앱 바 가운데 큰 제목 · 안 읽음 = 시각 아래 건수 원). 동작 없는 아이콘(검색 · 새 메시지 · 편집)은 그리지 않는다(P-37 R-6).
+export type SmsListSkinTokens = {
+  bg: string;
+  title: string;
+  /** iOS형 = 머리줄 아래 왼쪽 큰 제목 · One UI형 = 펼친 앱 바 가운데 큰 제목. */
+  titleLayout: "ios-large" | "oneui-expanded";
+  chevron: string;
+  name: string;
+  preview: string;
+  time: string;
+  divider: string;
+  /** 안 읽음 표시 — iOS형 = 왼쪽 점(비텍스트) · One UI형 = 건수 원(글자). */
+  unreadStyle: "dot" | "count";
+  unreadBg: string;
+  unreadText: string;
+  /** 저장 안 된 번호의 장식 아바타(스크린리더 숨김). */
+  avatarBg: string;
+};
+
+const ONE_UI_LIST: SmsListSkinTokens = {
+  bg: "#FFFFFF",
+  title: "#1B1B1F",
+  titleLayout: "oneui-expanded",
+  chevron: "#1B1B1F",
+  name: "#1B1B1F",
+  preview: "#5F6368",
+  time: "#5F6368",
+  divider: "#FFFFFF",
+  unreadStyle: "count",
+  unreadBg: "#C2410C",
+  unreadText: "#FFFFFF",
+  avatarBg: "#B8BEC6",
+};
+
+const SMS_LIST_TOKENS: Record<MessengerSkin, SmsListSkinTokens> = {
+  ios: {
+    bg: "#FFFFFF",
+    title: "#1C1C1E",
+    titleLayout: "ios-large",
+    chevron: "#0A63C9",
+    name: "#1C1C1E",
+    preview: "#6E6E73",
+    time: "#6E6E73",
+    divider: "#D1D1D6",
+    unreadStyle: "dot",
+    unreadBg: "#0A63C9",
+    unreadText: "#FFFFFF",
+    avatarBg: "#A1A6B4",
+  },
+  samsung: ONE_UI_LIST,
+  default: ONE_UI_LIST,
+};
+
+export function smsListTokensFor(skin: MessengerSkin): SmsListSkinTokens {
+  return SMS_LIST_TOKENS[skin];
+}
+
 export type BrowserBarSkinTokens = {
   barBg: string;
   barBorder: string;
@@ -849,6 +909,7 @@ export function gridPressedPairs(skin: MessengerSkin, call: CallSkinTokens): Con
 /** T190-5·6 표면(문자함 스레드 · 브라우저 바 · 랜딩 본문 · 메신저 문자형)의 대비 쌍. */
 function smsSurfacePairs(skin: MessengerSkin): ContrastPair[] {
   const thread = smsThreadTokensFor(skin);
+  const list = smsListTokensFor(skin);
   const bar = browserBarTokensFor(skin);
   const page = LANDING_PAGE_TOKENS;
   const chat = messengerSmsTokensFor(skin);
@@ -859,6 +920,14 @@ function smsSurfacePairs(skin: MessengerSkin): ContrastPair[] {
     { name: `${skin}.thread.link`, fg: thread.link, bg: thread.bubbleBg, kind: "text" },
     { name: `${skin}.thread.time`, fg: thread.time, bg: thread.threadBg, kind: "text" },
     { name: `${skin}.thread.senderLabel`, fg: thread.headerText, bg: thread.threadBg, kind: "text" },
+    { name: `${skin}.smsList.title`, fg: list.title, bg: list.bg, kind: "text" },
+    { name: `${skin}.smsList.chevron`, fg: list.chevron, bg: list.bg, kind: "nonText" },
+    { name: `${skin}.smsList.name`, fg: list.name, bg: list.bg, kind: "text" },
+    { name: `${skin}.smsList.preview`, fg: list.preview, bg: list.bg, kind: "text" },
+    { name: `${skin}.smsList.time`, fg: list.time, bg: list.bg, kind: "text" },
+    list.unreadStyle === "count"
+      ? { name: `${skin}.smsList.unreadCount`, fg: list.unreadText, bg: list.unreadBg, kind: "text" }
+      : { name: `${skin}.smsList.unreadDot`, fg: list.unreadBg, bg: list.bg, kind: "nonText" },
     { name: `${skin}.browserBar.text`, fg: bar.text, bg: bar.fieldBg, kind: "text" },
     { name: `${skin}.browserBar.globe`, fg: bar.icon, bg: bar.fieldBg, kind: "nonText" },
     { name: `${skin}.browserBar.back`, fg: bar.back, bg: bar.barBg, kind: "text" },

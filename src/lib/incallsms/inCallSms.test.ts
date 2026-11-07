@@ -4,7 +4,11 @@ import { readFileSync } from "node:fs";
 import {
   countUnread,
   formatSmsClock,
+  groupSmsThreads,
+  initialThreadNumber,
   latestSmsId,
+  threadKeyOf,
+  threadPreviewText,
   needsTimeSeparator,
   sortByArrival,
   spellOutOtp,
@@ -167,6 +171,90 @@ test("[S3] threadHeaderLabel — 같은 번호 · 다른 안내 이름 = 첫 문
   assert.equal(senderNumberOf("A"), "A", "안내 이름 없는 라벨");
   assert.equal(sameSenderNumber(first.senderLabel, second.senderLabel), true);
   const overlay = readFileSync("src/components/InCallSmsOverlay.tsx", "utf8").replace(/\r\n/g, "\n");
-  assert.ok(overlay.includes("sorted.some((sms) => !sameSenderNumber(sms.senderLabel, sorted[0].senderLabel))"), "섞임 판정도 번호로");
-  assert.ok(overlay.includes("!sameSenderNumber(previous.senderLabel, sms.senderLabel)"), "말풍선 위 발신 줄도 번호로");
+  // 2026-11-07 — 섞인 한 스레드(제목 "메시지" + 말풍선 위 발신 줄)를 없애고 번호별 대화방으로 나눴다. 나누는 판정도 같은 번호 판정이다.
+  assert.ok(overlay.includes("const threads = groupSmsThreads(messages);"), "문자함은 번호별 대화방으로 나눈다");
+  assert.ok(!overlay.includes("mixedSenders"), "한 스레드에 섞어 말풍선 위에 발신처를 다시 적는 옛 방식이 남았다");
+});
+
+// ── 2026-11-07 실기기 신고(카드사 고급 R1) — "문자 발신처는 다른데 한 곳에서 오는 걸로 되어 있다" ─────────────────
+// 실제 메시지 앱 = 보낸 번호마다 대화방 하나 · 첫 화면은 번호별 목록(가장 최근이 위) · 알림을 누르면 그 번호의 대화방.
+const R1 = [
+  view({ smsId: "r1-a", senderLabel: "02-0762-4180", body: "[윤슬카드 배송] 반송 · 사고 접수\n접수번호 안내", arrivedAtMs: 1_000 }),
+  view({ smsId: "r1-b", senderLabel: "1600-0000", body: "[윤슬카드] 보안 점검 · 원격 지원 링크", arrivedAtMs: 2_000, openedAtMs: 2_500 }),
+  view({ smsId: "r1-c", senderLabel: "02-0715-8800", body: "[자산보호 안내] 안전계좌", arrivedAtMs: 3_000 }),
+];
+
+test("[11-07 묶기] 발신 번호가 다르면 대화방이 따로다 — 3번호 = 3방 · 각 방은 그 번호의 문자만", () => {
+  const threads = groupSmsThreads(R1);
+  assert.equal(threads.length, 3);
+  for (const item of threads) {
+    assert.equal(item.messages.length, 1);
+    assert.equal(threadKeyOf(item.messages[0].senderLabel), item.number);
+  }
+  // 머리줄 = 번호만(서버가 번호만 보내면 괄호 이름이 생기지 않는다).
+  assert.deepEqual(threads.map((t) => t.title).sort(), ["02-0715-8800", "02-0762-4180", "1600-0000"]);
+});
+
+test("[11-07 정렬] 목록 = 가장 최근 문자가 온 방이 위 · 방 안은 도착 순 · 입력 순서와 무관", () => {
+  const extra = view({ smsId: "r1-d", senderLabel: "02-0762-4180", body: "[윤슬카드 배송] 재배송 안내", arrivedAtMs: 4_000 });
+  const forward = groupSmsThreads([...R1, extra]);
+  const reversed = groupSmsThreads([extra, ...R1].reverse());
+  assert.deepEqual(forward.map((t) => t.number), ["02-0762-4180", "02-0715-8800", "1600-0000"]);
+  assert.deepEqual(reversed.map((t) => t.number), forward.map((t) => t.number));
+  const card = forward[0];
+  assert.deepEqual(card.messages.map((m) => m.smsId), ["r1-a", "r1-d"], "방 안은 오래된 것부터");
+  assert.equal(card.latest.smsId, "r1-d", "미리보기 · 시각은 그 방의 가장 최근 문자");
+  // 같은 시각이면 smsId로 안정 정렬(결과가 흔들리지 않는다).
+  const tie = groupSmsThreads([view({ smsId: "x", senderLabel: "A", arrivedAtMs: 5 }), view({ smsId: "y", senderLabel: "B", arrivedAtMs: 5 })]);
+  assert.deepEqual(tie.map((t) => t.number), ["B", "A"]);
+  assert.deepEqual(groupSmsThreads([]), []);
+});
+
+test("[11-07 안 읽음] 방마다 아직 열어 보지 않은 문자 수(countUnread와 같은 판정)", () => {
+  const threads = groupSmsThreads([
+    ...R1,
+    view({ smsId: "r1-e", senderLabel: "02-0762-4180", arrivedAtMs: 6_000 }),
+  ]);
+  const by = Object.fromEntries(threads.map((t) => [t.number, t.unreadCount]));
+  assert.deepEqual(by, { "02-0762-4180": 2, "1600-0000": 0, "02-0715-8800": 1 });
+  assert.equal(threads.reduce((sum, t) => sum + t.unreadCount, 0), countUnread(threads.flatMap((t) => t.messages)));
+});
+
+test("[11-07 옛 형식 호환] `번호 (안내 이름)` 라벨 — 같은 번호면 이름이 달라도 한 방 · 제목은 첫 문자 라벨 그대로(종전 표기)", () => {
+  const threads = groupSmsThreads([
+    view({ smsId: "a", senderLabel: "02-0762-4180 (카드 명의보호 안내)", arrivedAtMs: 1 }),
+    view({ smsId: "b", senderLabel: "02-0762-4180 (피해금 이관 안내)", arrivedAtMs: 2 }),
+    view({ smsId: "c", senderLabel: "1588-0000 (통관 안내)", arrivedAtMs: 3 }),
+    // 새 형식(번호만)과 옛 형식이 같은 번호로 섞여도 한 방이다.
+    view({ smsId: "d", senderLabel: "02-0762-4180", arrivedAtMs: 4 }),
+  ]);
+  assert.deepEqual(threads.map((t) => [t.number, t.title, t.messages.map((m) => m.smsId).join("")]), [
+    ["02-0762-4180", "02-0762-4180 (카드 명의보호 안내)", "abd"],
+    ["1588-0000", "1588-0000 (통관 안내)", "c"],
+  ]);
+});
+
+test("[11-07 처음 보일 방] 배너가 준 라벨 · 번호가 있는 방이면 그 방 · 없거나 비면 목록(null)", () => {
+  const threads = groupSmsThreads(R1);
+  assert.equal(initialThreadNumber(threads, "02-0715-8800"), "02-0715-8800");
+  assert.equal(initialThreadNumber(threads, "02-0715-8800 (자산보호 안내)"), "02-0715-8800", "옛 꼴 라벨 전체여도 번호로 맞춘다");
+  assert.equal(initialThreadNumber(threads, "010-0000-0000"), null);
+  assert.equal(initialThreadNumber(threads, null), null);
+  assert.equal(initialThreadNumber(threads, undefined), null);
+  assert.equal(initialThreadNumber(threads, ""), null);
+});
+
+test("[11-07 미리보기] 줄바꿈을 한 칸으로 편다(잘라 내기는 화면의 두 줄 제한)", () => {
+  assert.equal(threadPreviewText({ body: "[윤슬카드 배송] 반송 · 사고 접수\n\n  접수번호 안내 " }), "[윤슬카드 배송] 반송 · 사고 접수 접수번호 안내");
+  assert.equal(threadPreviewText({ body: "한 줄" }), "한 줄");
+});
+
+test("[11-07 배선] 문자함 = 목록 · 대화방 · 랜딩 세 보기(hidden 토글) · 대화방 뒤로 = 목록 · 목록 뒤로 · 하단 = 통화 복귀", () => {
+  const overlay = readFileSync("src/components/InCallSmsOverlay.tsx", "utf8").replace(/\r\n/g, "\n");
+  assert.ok(overlay.includes('hidden={view !== "list"}'), "목록 보기");
+  assert.ok(overlay.includes("useState<string | null>(() => initialThreadNumber(threads, initialThread))"), "열 때 배너가 준 방(없으면 목록)");
+  assert.ok(overlay.includes('onClick={() => setView("list")}') && overlay.includes('aria-label="메시지 목록으로"'), "대화방 뒤로 = 목록");
+  assert.ok(overlay.includes("onClick={() => openThreadOf(item.number)}"), "행 누름 = 그 번호의 대화방");
+  assert.ok(overlay.includes('else if (view === "thread") setView("list");'), "Esc(뒤로 키) — 대화방 → 목록");
+  assert.ok(overlay.includes("{threadPreviewText(item.latest)}"), "행 미리보기 = 그 방 최신 문자");
 });

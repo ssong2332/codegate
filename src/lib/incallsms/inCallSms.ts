@@ -175,6 +175,76 @@ export function sameSenderNumber(a: string, b: string): boolean {
   return senderNumberOf(a) === senderNumberOf(b);
 }
 
+// ── 2026-11-07 실기기 신고 "문자 발신처는 다른데 한 곳에서 오는 걸로 되어 있다" — 받은 문자 목록 · 번호별 대화방 ──────
+//
+// 실제 휴대폰 메시지 앱은 **보낸 번호마다 대화방 하나**다. 첫 화면 = 번호별 행(번호 · 마지막 문자 미리보기 · 시각 ·
+// 안 읽음), 행을 누르면 그 번호의 문자만. 묶는 열쇠 = `senderNumberOf(senderLabel)`(S3와 같은 판정 — 같은 번호 · 다른
+// 안내 이름 = 한 방). 서버가 라벨을 번호만으로 보내든(R1) 옛 꼴 `번호 (안내 이름)`로 보내든 같은 번호면 한 방이다.
+
+/** 번호별 대화방 하나(목록 한 행 = 대화방 하나). */
+export type SmsThreadSummary = {
+  /** 묶는 열쇠 = 발신 번호(`senderNumberOf`). */
+  number: string;
+  /** 머리줄 · 목록 제목 = 이 방 **첫 문자**의 발신 라벨(서버 라벨 그대로 — 번호만이면 번호, 옛 꼴이면 종전 표기). */
+  title: string;
+  /** 이 방의 문자 — 도착 순(오래된 것부터). */
+  messages: InCallSmsView[];
+  /** 목록 미리보기 · 시각의 원천 = 가장 최근 문자. */
+  latest: InCallSmsView;
+  /** 아직 열어 보지 않은 문자 수(`openedAtMs` 부재 — `countUnread`와 같은 판정). */
+  unreadCount: number;
+};
+
+/** 대화방 열쇠 — 발신 라벨의 번호 부분. */
+export function threadKeyOf(senderLabel: string): string {
+  return senderNumberOf(senderLabel);
+}
+
+/**
+ * 받은 문자를 번호별 대화방으로 묶는다. 목록 순서 = **가장 최근 문자가 온 방이 위**(실제 메시지 앱). 같은 시각이면
+ * 그 방 최신 문자의 smsId 역순으로 안정 정렬한다(입력 순서와 무관하게 같은 결과).
+ */
+export function groupSmsThreads(items: readonly InCallSmsView[]): SmsThreadSummary[] {
+  const byNumber = new Map<string, InCallSmsView[]>();
+  for (const sms of sortByArrival(items)) {
+    const key = threadKeyOf(sms.senderLabel);
+    const list = byNumber.get(key);
+    if (list) list.push(sms);
+    else byNumber.set(key, [sms]);
+  }
+  const threads: SmsThreadSummary[] = [];
+  for (const [number, messages] of byNumber) {
+    threads.push({
+      number,
+      title: messages[0].senderLabel,
+      messages,
+      latest: messages[messages.length - 1],
+      unreadCount: countUnread(messages),
+    });
+  }
+  return threads.sort(
+    (a, b) => b.latest.arrivedAtMs - a.latest.arrivedAtMs || b.latest.smsId.localeCompare(a.latest.smsId),
+  );
+}
+
+/** 목록 미리보기 — 본문 줄바꿈을 한 칸 띄움으로 펴고 앞뒤 공백을 지운다(잘라 내기는 화면의 줄 수 제한이 맡는다). */
+export function threadPreviewText(sms: Pick<InCallSmsView, "body">): string {
+  return sms.body.replace(/\s*\n+\s*/g, " ").trim();
+}
+
+/**
+ * 문자함을 열 때 처음 보일 대화방. 요청한 번호(배너 탭 = 그 문자를 보낸 번호)가 실제로 있으면 그 방, 아니면 `null`(= 목록).
+ * 요청한 값이 옛 꼴 라벨 전체여도 번호 부분으로 맞춘다.
+ */
+export function initialThreadNumber(
+  threads: readonly Pick<SmsThreadSummary, "number">[],
+  requested: string | null | undefined,
+): string | null {
+  if (!requested) return null;
+  const key = threadKeyOf(requested);
+  return threads.some((thread) => thread.number === key) ? key : null;
+}
+
 // ── T190-5(UX-027 v1.33 (4) — 스레드 시각) ────────────────────────────────────────────────────────
 
 /** iOS형 구분줄을 다시 넣는 간격(UX-027 v1.33 (4) — 앞 문자와 5분 이상 떨어질 때만). */
