@@ -13,7 +13,8 @@
 // | 여는 길 | 통화 중 문자 속 계좌번호 한 번 누름 → '송금' · 메신저 송금 칩 → 받는 계좌가 채워진 송금 화면 |
 // | 서버 | 송금 완료(인증 버튼) = 종전 이체 화면 제출과 **같은 기록 경로**(통화 `landing_submitted` · 메신저 `recordMockScreen(…, "submitted")`) |
 // | 입력값 | 금액은 화면 state를 벗어나지 않는다(G138 — 네트워크 · 저장소 0). N1 — 완료 콜백은 요구액 대비 **비교 결과 하나**만 싣는다(아래 판정표 C) |
-// | 비밀번호 | 숫자 입력 칸 0 — 인증은 지문 · 얼굴 버튼 하나(BA3) |
+// | 비밀번호 | 숫자 입력 칸 0(BA3) — 인증은 생체 인증 시트(`BankAuthSheet` · 지문 센서 누름 · 얼굴 자동 스캔 · 2026-11-07) |
+// | 출금 계좌 | 가상 계좌 3개 중 고른다(`withdrawAccounts.ts` — 첫 계좌 잔액 = `fictionalBalanceFor` · 잔액 · 1일 한도 판정표 W) |
 // | 클립보드 | 쓰지 않는다(기기 클립보드 API 0 · 앱 안 복사 0). 인증번호는 여전히 복사할 수 없다(AC-061 그대로) |
 // | 은행 이름 | 가상 은행명만(서버 `functions/src/shared/fictionalBank.ts` `FICTIONAL_BANK_NAMES`와 같은 목록 — 드리프트 테스트) · 실존 은행명 0 |
 // ⚠️ 이 파일은 값을 import하지 않는다(테스트 러너가 확장자 없는 상대 import를 풀지 못한다). 금액 형식 · 1회 한도 판정은 화면이
@@ -66,7 +67,7 @@ export function myBankNameFor(seed: string, avoid?: string): string {
   return FICTIONAL_BANK_NAMES[start]!;
 }
 
-/** BA4 — 세션별 고정 가상 잔액(1,000만 ~ 3,000만 원 · 1만 원 단위 · 결정적). 서버로 가지 않고 사기범도 모른다. */
+/** BA4 — 세션별 고정 가상 잔액(1,000만 ~ 3,000만 원 · 1만 원 단위 · 결정적). 서버로 가지 않고 사기범도 모른다. 출금 계좌 목록의 첫 계좌 잔액이다. */
 export function fictionalBalanceFor(seed: string): number {
   const steps = (3000 - 1000) + 1; // 만 원 단위 칸 수
   return (1000 + (hash(`balance:${seed}`) % steps)) * 10_000;
@@ -203,7 +204,7 @@ export function amountFromSmsBody(body: string): string | undefined {
 }
 
 /**
- * 화면 단계(간소화안). 받는 분 확인 → 금액 → 인증(보낼 내용 요약 + 지문 버튼) → 완료.
+ * 화면 단계(간소화안). 받는 분 확인 → 금액(출금 계좌 선택) → 인증(보낼 내용 요약 → 생체 인증 시트) → 완료.
  * | # | If (지금 · 행동) | Then |
  * |---|---|---|
  * | S1 | recipient · 다음 | amount |
@@ -238,11 +239,10 @@ export const BANK_APP_COPY = {
   recipientTitle: "받는 분이 맞는지 확인해 주세요",
   recipientNote: "받는 분 이름이 생각한 사람과 다르면 보내지 마세요.",
   amountTitle: "얼마를 보낼까요?",
-  balanceLabel: "출금 가능 금액",
   next: "다음",
   confirmCaution: "보이스피싱 주의 · 모르는 사람이 전화나 문자로 이체를 요구하면 보내기 전에 멈추고 확인하세요.",
   cancel: "취소",
-  authBody: "등록된 지문 · 얼굴로 이체를 확인합니다.",
-  authButton: "지문 · 얼굴로 인증하고 보내기",
+  /** 확인 화면 보내기 = 생체 인증 시트를 연다(실제 앱처럼 버튼은 '보내기' · 인증은 시트가 한다). */
+  authButton: "보내기",
   doneButton: "확인",
 } as const;

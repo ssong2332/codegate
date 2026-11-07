@@ -141,7 +141,9 @@ test("[BA-1 A4] 입력 칸 0 — 비밀번호 · 인증번호 칸이 없고 입�
   for (const forbidden of ['type="password"', "비밀번호를 입력", "인증번호를 입력", "OTP", "보안카드", "<textarea"]) {
     assert.ok(!overlayCode.includes(forbidden), `있으면 안 되는 것: ${forbidden}`);
   }
-  assert.ok(BANK_APP_COPY.authButton.includes("지문") && BANK_APP_COPY.authButton.includes("인증"));
+  // 2026-11-07 — 확인 화면 버튼은 실제 앱처럼 '보내기'이고, 인증은 생체 인증 시트(`BankAuthSheet` — 입력 칸 0)가 한다.
+  assert.equal(BANK_APP_COPY.authButton, "보내기");
+  assert.ok(overlayCode.includes('primaryButton(COPY.authButton, () => setSheet("auth"))') && overlayCode.includes("<BankAuthSheet"));
   // 주소창 0 — 앱에는 주소창이 없다(가짜 호스트 · `.invalid` 0).
   assert.ok(!overlayCode.includes(".invalid") && !overlayCode.includes("mockHost"));
 });

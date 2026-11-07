@@ -2,8 +2,8 @@
 // | # | 고정하는 것 |
 // |---|---|
 // | C1 | 클라 `BANK_TRANSFER_LANDINGS` = 서버 `BANK_TRANSFER_LANDINGS`(목록 드리프트 0) |
-// | C2 | 흐름 = 이체 정보(폼) → 이체 정보 확인 → 본인 인증 → 완료. 제출 콜백(속은 순간)은 **인증 버튼에서만** · 무인자(G138) |
-// | C3 | 본인 인증 화면에 비밀번호 · 인증번호 입력 칸이 없다(참가자가 실제 비밀번호를 치는 일을 만들지 않는다) |
+// | C2 | 흐름 = 이체 정보(폼) → 이체 정보 확인 → 생체 인증 시트 → 완료. 제출 콜백(속은 순간)은 **인증 성공에서만** · 무인자(G138) |
+// | C3 | 확인 화면 · 인증 시트에 비밀번호 · 인증번호 입력 칸이 없다(참가자가 실제 비밀번호를 치는 일을 만들지 않는다) |
 // | C4 | 미리 채움 = 문자 문서 구조화 필드(`prefilledTransferOf`) — 은행명 없는 옛 문서는 미리 채우지 않는다 |
 // | C5 | 실존 은행명을 쓰지 않는다 — 머리띠 은행명은 세션 가상 은행명(§81) 변수뿐 |
 import { test } from "node:test";
@@ -32,13 +32,16 @@ test("[P2 C2] 폼 → 확인 → 인증 → 완료 · 제출 콜백은 인증 �
   assert.ok(submit.includes('if (bankTransfer && bankStage === "form") {'), "폼 다음은 확인 화면");
   assert.ok(submit.indexOf('setBankStage("confirm")') < submit.indexOf("finishSubmit(event.timeStamp)"));
   assert.ok(code.includes('onClick={() => setBankStage("auth")}'), "확인 화면의 이체 버튼 → 인증");
-  assert.equal((code.match(/finishSubmit\(event\.timeStamp\)/g) ?? []).length, 2, "폼 제출(종전 랜딩) · 인증 버튼 두 곳뿐");
+  // 2026-11-07 — 인증 버튼이 생체 인증 시트로 바뀌었다: 폼 제출(종전 랜딩) 한 곳 + 시트의 인증 성공 한 곳.
+  assert.equal((code.match(/finishSubmit\(event\.timeStamp\)/g) ?? []).length, 1, "폼 제출(종전 랜딩)");
+  assert.equal((code.match(/onSuccess=\{finishSubmit\}/g) ?? []).length, 1, "생체 인증 성공 한 곳");
+  assert.ok(code.includes('onCancel={() => setBankStage("confirm")}'), "인증 취소 = 확인 화면");
   const finish = code.slice(code.indexOf("const finishSubmit"), code.indexOf("const issuerBar"));
   assert.ok(finish.includes("onCredentialSubmit?.();"), "무인자 콜백(이체 화면 밖 랜딩)");
   // 줄바꿈(LF · CRLF 체크아웃)에 무관하게 — 공백 묶음으로 본다.
   assert.match(finish, /onCredentialSubmit\?\.\(\s+recordTransferAndCompare\(/, "N1 — 이체 화면은 요구액 대비 비교 결과 하나만");
   assert.ok(code.includes('onClick={() => setBankStage("form")}'), "취소 = 폼으로");
-  for (const label of ["본인 인증", "인증하고 이체하기", "보이스피싱 주의", "출금 계좌"]) assert.ok(code.includes(label), label);
+  for (const label of ["<BankAuthSheet", "<WithdrawAccountRow", "보이스피싱 주의", "출금 계좌"]) assert.ok(code.includes(label), label);
 });
 
 test("[P2 C3] 본인 인증 화면에 입력 칸이 없다(비밀번호 · 인증번호 0)", () => {
@@ -84,7 +87,10 @@ test("[P2-d] 이체 한도 — 1회 1,000만 원 초과는 막고(이체 화면�
   assert.match(transferLimitError("10000001") ?? "", /1회 이체 한도\(1,000만 원\)/);
   assert.equal(transferLimitError(""), undefined, "빈 칸은 amountError가 먼저 막는다");
   assert.equal(TRANSFER_LIMIT_NOTE, "이체 한도 · 1회 1,000만 원 · 1일 5,000만 원");
-  assert.ok(code.includes("(amountError(raw) ?? (bankTransfer ? transferLimitError(raw) : undefined))"), "이체 화면에서만 한도 검사");
+  assert.ok(
+    code.includes("(amountError(raw) ?? (bankTransfer ? (transferLimitError(raw) ?? withdrawError(ledger, account, raw)) : undefined))"),
+    "이체 화면에서만 한도 검사(1회 → 출금 가능 금액 · 1일 — 2026-11-07)",
+  );
   assert.ok(readFileSync("src/lib/landing/amountInput.ts", "utf8").includes("kebhana.com/cont/info/info01/info0104/info010404"), "근거 주소");
 });
 

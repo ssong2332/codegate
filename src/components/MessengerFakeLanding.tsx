@@ -47,7 +47,12 @@ import {
 // §106 — 사건 기록 열람본의 피의자 칸 값(잎 모듈 · 상대 경로).
 import { recordIssueInfo, recordSubjectRows, type RecordRow } from "../lib/landing/recordDocument";
 // N1 · N4 — 같은 계좌로 보낸 합계 비교 · 완료 시각(잎 모듈 · 상대 경로 — 위 하네스 주석).
-import { recordTransferAndCompare, transferTimeText, type AmountComparison } from "../lib/bankapp/bankApp";
+import { fictionalBalanceFor, myBankNameFor, recordTransferAndCompare, transferTimeText, type AmountComparison } from "../lib/bankapp/bankApp";
+// ⭐ 2026-11-07 실기기 신고 — 출금 계좌 선택 · 생체 인증 시트(내 은행 송금 화면 `BankAppOverlay`와 같은 컴포넌트 · 같은 판정표).
+import { authMethodForSkin } from "../lib/bankapp/bankAuth";
+import { accountLabel, recordWithdrawal, withdrawAccountsFor, withdrawError, type WithdrawAccount } from "../lib/bankapp/withdrawAccounts";
+import BankAuthSheet from "./BankAuthSheet";
+import WithdrawAccountSheet, { WithdrawAccountRow } from "./WithdrawAccountSheet";
 
 /** UX-023의 목업 종류. 부재 → `credential-form`(하위호환 읽기 규칙, §15.9.1 R2). */
 export type MessengerFakeLandingKind = "credential-form" | "app-install";
@@ -290,6 +295,7 @@ export default function MessengerFakeLanding({
             prefilledAccount={prefilledAccount}
             prefilledTransfer={prefilledTransfer}
             returnLabel={returnLabel}
+            skin={skin}
           />
         )}
       </div>
@@ -906,6 +912,7 @@ function CredentialFormMockup({
   prefilledAccount,
   prefilledTransfer,
   returnLabel,
+  skin,
 }: {
   landingId?: string;
   onClose: () => void;
@@ -919,12 +926,23 @@ function CredentialFormMockup({
   prefilledTransfer?: PrefilledTransfer;
   /** 완료 화면 복귀 버튼 문면(진입 표면이 정한다 — D-93). */
   returnLabel: string;
+  /** 기기 스킨 — 훈련용 이체 화면의 인증 수단(iOS형 = 얼굴 · 그 밖 = 지문). */
+  skin: MessengerSkin;
 }) {
   // R8 — **정확 일치 키 조회**만 한다(문자열 분해·부분 일치 금지).
   const copy = (landingId ? CREDENTIAL_LANDING_COPY[landingId] : undefined) ?? GENERIC_CREDENTIAL_COPY;
   // ⭐ P2(X6) — 훈련용 이체 화면이면 첫 화면(이 폼) 뒤 실제 은행 앱 이체 흐름을 잇는다: 폼 → 이체 정보 확인 → 본인 인증 → 완료.
   const bankTransfer = landingId !== undefined && BANK_TRANSFER_LANDINGS.includes(landingId);
   const [bankStage, setBankStage] = useState<"form" | "confirm" | "auth">("form");
+  // 2026-11-07 — 출금 계좌(가상 3개 · 기본 = 머리띠 은행 입출금 · 잔액은 내 은행 송금 화면과 같은 세션 값) · 계좌 선택 시트.
+  const ledger = prefilledTransfer?.ledgerKey ?? "";
+  const appBankName = prefilledTransfer?.myBankName ?? myBankNameFor(ledger, prefilledTransfer?.bankName);
+  const [accounts] = useState(() =>
+    withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: fictionalBalanceFor(ledger), avoidBankName: prefilledTransfer?.bankName }),
+  );
+  const [accountId, setAccountId] = useState<WithdrawAccount["id"]>("main");
+  const account = accounts.find((item) => item.id === accountId) ?? accounts[0]!;
+  const [accountSheetOpen, setAccountSheetOpen] = useState(false);
   // P2 — 훈련용 이체 화면의 금액 칸(`amount`)은 문자 금액을 처음 값으로만 채운다(고칠 수 있다 · 검증 그대로). 값은 이 컴포넌트 state를 벗어나지 않는다(G138).
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(
@@ -962,7 +980,10 @@ function CredentialFormMockup({
     const raw = values[field.label] ?? "";
     if (field.format) return identityError(field.format, field.label, raw); // §114
     // P2-d — 훈련용 이체 화면의 금액은 실제 앱처럼 1회 한도를 넘으면 막는다(`transferLimitError` — 근거는 그 함수 주석).
-    return field.amount ? (amountError(raw) ?? (bankTransfer ? transferLimitError(raw) : undefined)) : requiredFieldError(field.label, raw);
+    // 2026-11-07 — 고른 출금 계좌의 출금 가능 금액 · 1일 한도도 막는다(판정표 W — `withdrawAccounts.ts`).
+    return field.amount
+      ? (amountError(raw) ?? (bankTransfer ? (transferLimitError(raw) ?? withdrawError(ledger, account, raw)) : undefined))
+      : requiredFieldError(field.label, raw);
   };
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -999,6 +1020,7 @@ function CredentialFormMockup({
       const amountRaw = values[copy.fields.find((field) => field.amount)?.label ?? ""] ?? "";
       const amountDigits = amountRaw.replace(/[^\d]/g, "");
       setReceipt({ amountText: amountDigits ? `${Number(amountDigits).toLocaleString("ko-KR")}원` : "", sentAt: new Date() });
+      recordWithdrawal(ledger, account.id, amountRaw);
       onCredentialSubmit?.(
         recordTransferAndCompare(
           prefilledTransfer?.ledgerKey ?? "",
@@ -1038,6 +1060,7 @@ function CredentialFormMockup({
     const holder = prefilledTransfer?.holder;
     // P2-c — 받는 분 이름을 모르는 진입(메신저 칩 — 예금주가 대화에서 정해진다)은 그 행을 그리지 않는다(지어낸 이름 0).
     const rows: [string, string][] = [
+      ["출금 계좌", accountLabel(account)],
       ...(holder ? [["받는 분", holder] as [string, string]] : []),
       ["받는 계좌", prefilledAccount ?? ""],
       ["보내는 금액", amountText],
@@ -1056,7 +1079,8 @@ function CredentialFormMockup({
     return (
       <>
         {issuerBar}
-        {bankStage === "confirm" ? (
+        {/* 확인 화면은 인증 시트 뒤에도 그대로 남는다(실제 앱처럼 시트가 위로 올라온다) — 시트가 열리면 뒤는 inert. */}
+        <div inert={bankStage === "auth" ? true : undefined}>
           <div className="flex flex-col gap-4 px-5 pb-6 pt-5">
             <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
               {holder ? `${holder}님에게 ${amountText}을 보낼까요?` : `이 계좌로 ${amountText}을 보낼까요?`}
@@ -1089,28 +1113,17 @@ function CredentialFormMockup({
             </button>
             {cancel}
           </div>
-        ) : (
-          <div className="flex flex-col gap-4 px-5 pb-6 pt-5">
-            <h1 className="text-xl font-bold leading-snug" style={{ color: page.headline }}>
-              본인 인증
-            </h1>
-            <p className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
-              등록된 간편 인증(지문 · 얼굴)으로 이체를 확인합니다.
-            </p>
-            <div className="flex justify-center py-4" style={{ color: page.issuerBarBg }} aria-hidden="true">
-              <PhoneIcon name="shield" size={56} />
-            </div>
-            {/* ⛔ 비밀번호 · 인증번호 입력 칸 0 — 참가자가 실제 비밀번호를 치는 일을 만들지 않는다(버튼 하나가 인증을 대신한다). */}
-            <button
-              type="button"
-              onClick={(event) => finishSubmit(event.timeStamp)}
-              className="min-h-[52px] rounded-[10px] text-base font-semibold"
-              style={{ backgroundColor: page.submitBg, color: page.submitText }}
-            >
-              인증하고 이체하기
-            </button>
-            {cancel}
-          </div>
+        </div>
+        {/* ⭐ 2026-11-07 — 본인 인증 = 생체 인증 시트(One UI형 지문 길게 누름 · iOS형 얼굴 자동 스캔 · 판정표 `bankAuth.ts` B).
+            ⛔ 비밀번호 · 인증번호 입력 칸 0. 성공 = 종전 제출 한 번(속은 순간) · 취소 = 확인 화면. */}
+        {bankStage === "auth" && (
+          <BankAuthSheet
+            method={authMethodForSkin(skin)}
+            appName={`${appBankName} 모바일뱅킹`}
+            summary={holder ? `${holder}님에게 ${amountText} 이체` : `${amountText} 이체`}
+            onSuccess={finishSubmit}
+            onCancel={() => setBankStage("confirm")}
+          />
         )}
       </>
     );
@@ -1299,6 +1312,7 @@ function CredentialFormMockup({
       ["받는 계좌", prefilledAccount ?? ""],
       ["보낸 금액", receipt.amountText],
       ["보낸 시각", transferTimeText(receipt.sentAt)],
+      ["출금 계좌", accountLabel(account)],
     ];
     return (
       <>
@@ -1358,17 +1372,29 @@ function CredentialFormMockup({
             {line}
           </p>
         ))}
-        {/* P2 — 실제 이체 화면처럼 출금 계좌를 맨 위에 둔다(번호 0 — 참가자 실제 계좌가 아니다). */}
+        {/* P2 — 실제 이체 화면처럼 출금 계좌를 맨 위에 둔다. 2026-11-07 — 눌러서 고른다(가상 계좌 · 번호 가운데 가림 · 출금 가능 금액). */}
         {bankTransfer && (
-          <p
-            className="mt-1 flex items-baseline justify-between gap-3 rounded-[10px] border px-3.5 py-3 text-[15px]"
-            style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.body }}
-          >
-            <span>출금 계좌</span>
-            <span className="font-semibold" style={{ color: page.headline }}>
-              내 입출금 통장
-            </span>
-          </p>
+          <div className="mt-1">
+            <WithdrawAccountRow
+              account={account}
+              ledgerKey={ledger}
+              onOpen={() => setAccountSheetOpen(true)}
+              colors={{ border: page.inputBorder, bg: page.inputBg, label: page.body, value: page.headline }}
+            />
+          </div>
+        )}
+        {bankTransfer && accountSheetOpen && (
+          <WithdrawAccountSheet
+            accounts={accounts}
+            selectedId={account.id}
+            ledgerKey={ledger}
+            onSelect={(id) => {
+              setAccountId(id);
+              setErrors({});
+              setAccountSheetOpen(false);
+            }}
+            onClose={() => setAccountSheetOpen(false)}
+          />
         )}
         {/* P2-d — 실제 이체 화면의 한도 안내(1회 · 1일). */}
         {bankTransfer && (

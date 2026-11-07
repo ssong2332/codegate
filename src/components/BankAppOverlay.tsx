@@ -1,20 +1,21 @@
 "use client";
 
 // ⭐ BA-1 간소화안(2026-11-01 · 사용자 승인 "간소화안으로" · 규칙 표는 `@/lib/bankapp/bankApp`) — 가상 "내 은행" **송금 화면**.
-// 문자 속 계좌번호 '송금' · 메신저 송금 칩이 받는 계좌를 채운 채 바로 연다: 받는 분 확인 → 금액 → 지문 인증 → 완료.
+// 문자 속 계좌번호 '송금' · 메신저 송금 칩이 받는 계좌를 채운 채 바로 연다: 받는 분 확인 → 금액(출금 계좌 선택) → 확인 → 생체 인증 시트 → 완료.
+// ⭐ 2026-11-07 실기기 신고 — 출금 계좌를 고른다(`WithdrawAccountSheet` · 판정표 `@/lib/bankapp/withdrawAccounts` W) · 인증은 움직이는 시트
+// (`BankAuthSheet` · 판정표 `@/lib/bankapp/bankAuth` B — One UI형 지문 · iOS형 얼굴). 두 시트는 훈련용 이체 화면(`MessengerFakeLanding`)과 같은 컴포넌트다.
 // 훈련용 홈 · 탐색 막대 · 앱 안 클립보드 · 잠금 해제 · 내 계좌 화면은 뺐다(실기기 확인 "절차가 복잡").
 //
 // ⚠️ **이것은 라우트가 아니라 화면 위에 겹치는 계층이다**(D-35 — 통화 중에는 `InCallSmsOverlay`와 같은 자리의 형제 노드). 호출부는
 // 조건부 렌더만 하고 router.push · 상위 래퍼 · `key` 변경을 하지 않는다 — 통화 세션 · 마이크 · 타이머가 그대로 이어진다(G10).
 // ⚠️ **서버 호출 0** — 기록은 호출부가 한다(인증 버튼 = `onSubmitted` 하나 · 종전 이체 화면 제출과 같은 경로).
 // 금액은 이 컴포넌트 state를 벗어나지 않는다(G138 — 네트워크 · 저장소 0). N1 — 콜백 인자는 요구액 대비 **비교 결과 하나**뿐이다(`recordTransferAndCompare`).
-// ⛔ 비밀번호 · 인증번호 숫자 입력 칸 0(BA3 — 참가자가 습관대로 실제 비밀번호를 치지 않게). 인증은 버튼 하나.
+// ⛔ 비밀번호 · 인증번호 숫자 입력 칸 0(BA3 — 참가자가 습관대로 실제 비밀번호를 치지 않게). 인증은 지문 센서 누름 · 얼굴 자동 스캔뿐.
 // ⛔ 주소창 0 — 앱에는 주소창이 없다(설계 §3.1). 실존 은행명 · 로고 0(가상 은행명 · 자체 SVG 아이콘).
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { authMethodForSkin } from "@/lib/bankapp/bankAuth";
 import {
   BANK_APP_COPY as COPY,
-  balanceError,
-  balanceText,
   nextBankAppStage,
   recipientHolderFor,
   recordTransferAndCompare,
@@ -25,17 +26,25 @@ import {
   type BankAppStage,
   type TransferTarget,
 } from "@/lib/bankapp/bankApp";
+import { accountLabel, recordWithdrawal, withdrawAccountsFor, withdrawError, type WithdrawAccount } from "@/lib/bankapp/withdrawAccounts";
 import { TRANSFER_LIMIT_NOTE, amountError, amountHint, transferLimitError } from "@/lib/landing/amountInput";
+import { detectMessengerSkin, type MessengerSkin } from "@/lib/messenger/detectSkin";
 import { CALL_BAR_TOKENS } from "@/lib/phone/skinTokens";
+import BankAuthSheet from "./BankAuthSheet";
 import PhoneIcon from "./PhoneIcon";
+import WithdrawAccountSheet, { WithdrawAccountRow } from "./WithdrawAccountSheet";
 
 type Props = {
   /** 통화 중이면 맨 위 통화 띠(탭 = 통화로 돌아가기). 통화 밖(메신저)이면 부재. */
   call?: { callerLabel: string; elapsedLabel: string };
   /** 참가자의 "내 은행"(가상 · 세션마다 결정적). */
   myBankName: string;
-  /** 고정 가상 잔액(BA4 — 화면에만 · 서버 0). */
+  /** 고정 가상 잔액(BA4 — 화면에만 · 서버 0). 출금 계좌 목록의 첫 계좌(이 은행 입출금) 잔액이다. */
   balance: number;
+  /**
+   * 기기 스킨(인증 수단 — iOS형 = 얼굴 · 그 밖 = 지문). 부재 = 이 기기 UA로 감지(`detectMessengerSkin` — 세션 문서 · 수동 선택은 호출부가 넘길 때만 반영).
+   */
+  skin?: MessengerSkin;
   /** 받는 계좌(문자 · 칩의 구조화 필드 — 참가자 입력 아님). */
   target: TransferTarget;
   /** 앱 닫기(통화 띠 · 닫기 · 완료 확인 · Esc). */
@@ -47,6 +56,9 @@ type Props = {
    */
   onSubmitted: (amountComparison: AmountComparison | undefined) => void;
 };
+
+/** UA는 바뀌지 않는다 — 구독할 것이 없다. */
+const noSubscribe = () => () => {};
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -65,8 +77,24 @@ const APP = {
   notice: "#EEF2F7",
 } as const;
 
-export default function BankAppOverlay({ call, myBankName, balance, target, ledgerKey, onClose, onSubmitted }: Props) {
+export default function BankAppOverlay({ call, myBankName, balance, skin, target, ledgerKey, onClose, onSubmitted }: Props) {
   const [stage, setStage] = useState<BankAppStage>("recipient");
+  // 출금 계좌(목록은 세션마다 결정적 · 기본 = 이 은행 입출금) · 열린 시트(계좌 선택 · 생체 인증 — 동시에 하나).
+  const ledger = ledgerKey ?? "";
+  const accounts = useMemo(
+    () => withdrawAccountsFor({ seed: ledger, appBankName: myBankName, primaryBalance: balance, avoidBankName: target.bankName }),
+    [ledger, myBankName, balance, target.bankName],
+  );
+  const [accountId, setAccountId] = useState<WithdrawAccount["id"]>("main");
+  const fromAccount = accounts.find((item) => item.id === accountId) ?? accounts[0]!;
+  const [sheet, setSheet] = useState<"account" | "auth" | null>(null);
+  // 스킨 — 호출부 값이 우선, 없으면 이 기기 UA 감지(서버 렌더 = 기본 → 지문).
+  const detectedSkin = useSyncExternalStore<MessengerSkin>(
+    noSubscribe,
+    () => detectMessengerSkin(navigator.userAgent).skin,
+    () => "default",
+  );
+  const authMethod = authMethodForSkin(skin ?? detectedSkin);
   // N4 — 완료 화면의 보낸 시각(인증 순간 · 기기 시계 · 화면에만).
   const [sentAt, setSentAt] = useState<Date | null>(null);
   // G138 — 금액은 여기 state에만 있다(문자 금액은 처음 값으로만 채운다 · 고칠 수 있다).
@@ -85,7 +113,7 @@ export default function BankAppOverlay({ call, myBankName, balance, target, ledg
     titleRef.current?.focus();
   }, [stage]);
 
-  // Esc = 앱 닫기 · Tab 초점 가두기(aria-modal — 닫기 컨트롤은 전부 패널 안에 있다).
+  // Esc = 앱 닫기 · Tab 초점 가두기(aria-modal — 닫기 컨트롤은 전부 패널 안에 있다). 시트가 열려 있으면 Esc는 시트가 먼저 받는다(window 캡처).
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -94,7 +122,7 @@ export default function BankAppOverlay({ call, myBankName, balance, target, ledg
         return;
       }
       if (event.key !== "Tab" || !panelRef.current) return;
-      const nodes = Array.from(panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((n) => n.offsetParent !== null);
+      const nodes = Array.from(panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((n) => n.offsetParent !== null && !n.closest("[inert]"));
       if (nodes.length === 0) return;
       const first = nodes[0]!;
       const last = nodes[nodes.length - 1]!;
@@ -111,7 +139,8 @@ export default function BankAppOverlay({ call, myBankName, balance, target, ledg
   }, [onClose]);
 
   const submitAmount = () => {
-    const message = amountError(amount) ?? transferLimitError(amount) ?? balanceError(amount, balance);
+    // 판정표 W — 형식 → 1회 한도 → 고른 계좌 출금 가능 금액 → 1일 한도.
+    const message = amountError(amount) ?? transferLimitError(amount) ?? withdrawError(ledger, fromAccount, amount);
     if (message) {
       setError(message);
       return;
@@ -119,10 +148,13 @@ export default function BankAppOverlay({ call, myBankName, balance, target, ledg
     go("next");
   };
 
+  // 생체 인증 시트가 성공을 알린 순간(= 송금 완료).
   const authenticate = () => {
     // S3 — 송금 완료 기록은 이 한 번뿐이다(완료 화면에서 다시 누를 버튼 0). N1 — 비교 결과만 올린다.
     onSubmitted(recordTransferAndCompare(ledgerKey ?? "", target, amount));
+    recordWithdrawal(ledger, fromAccount.id, amount);
     setSentAt(new Date());
+    setSheet(null);
     go("authenticate");
   };
 
@@ -257,8 +289,14 @@ export default function BankAppOverlay({ call, myBankName, balance, target, ledg
               {hint}
             </p>
           )}
+          <WithdrawAccountRow
+            account={fromAccount}
+            ledgerKey={ledger}
+            onOpen={() => setSheet("account")}
+            colors={{ border: APP.line, bg: APP.card, label: APP.sub, value: APP.text }}
+          />
           <p className="text-[14px]" style={{ color: APP.sub }}>
-            {COPY.balanceLabel} {balanceText(balance)} · {TRANSFER_LIMIT_NOTE}
+            {TRANSFER_LIMIT_NOTE}
           </p>
           {errorLine}
           <div className="mt-auto">{primaryButton(COPY.next, submitAmount)}</div>
@@ -266,8 +304,9 @@ export default function BankAppOverlay({ call, myBankName, balance, target, ledg
       </>
     );
   } else if (stage === "auth") {
-    // ③ 보낼 내용 요약 + 지문 인증(버튼 하나 · 입력 칸 0). 제출 전 확인 화면이라 G255(완료 화면 되비추기) 밖이다.
+    // ③ 보낼 내용 요약 → 보내기 = 생체 인증 시트(입력 칸 0). 제출 전 확인 화면이라 G255(완료 화면 되비추기) 밖이다.
     const rows: [string, string][] = [
+      ["출금 계좌", accountLabel(fromAccount)],
       ["받는 분", holder],
       ["받는 계좌", account],
       ["보내는 금액", amountWon],
@@ -291,11 +330,8 @@ export default function BankAppOverlay({ call, myBankName, balance, target, ledg
           <p role="note" className="rounded-[12px] px-4 py-3 text-[14px] leading-relaxed" style={{ backgroundColor: APP.notice, color: APP.sub }}>
             {COPY.confirmCaution}
           </p>
-          <p className="text-[15px]" style={{ color: APP.sub }}>
-            {COPY.authBody}
-          </p>
           <div className="mt-auto flex flex-col gap-2">
-            {primaryButton(COPY.authButton, authenticate)}
+            {primaryButton(COPY.authButton, () => setSheet("auth"))}
             {secondaryButton(COPY.cancel, () => go("cancel"))}
           </div>
         </div>
@@ -309,7 +345,7 @@ export default function BankAppOverlay({ call, myBankName, balance, target, ledg
       ["받는 계좌", account],
       ["보낸 금액", amountWon],
       ["보낸 시각", sentAt ? transferTimeText(sentAt) : ""],
-      ["출금 계좌", `${myBankName} 입출금`],
+      ["출금 계좌", accountLabel(fromAccount)],
     ];
     body = (
       <>
@@ -346,8 +382,33 @@ export default function BankAppOverlay({ call, myBankName, balance, target, ledg
       className="fixed inset-0 z-50 mx-auto flex h-dvh w-full max-w-[430px] flex-col"
       style={{ backgroundColor: APP.bg }}
     >
-      {callPill}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-[env(safe-area-inset-bottom)]">{body}</div>
+      {/* 시트가 열려 있으면 뒤 화면(통화 띠 포함)은 inert — 초점 · 탭이 시트 안에만 머문다. */}
+      <div className="flex min-h-0 flex-1 flex-col" inert={sheet ? true : undefined}>
+        {callPill}
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-[env(safe-area-inset-bottom)]">{body}</div>
+      </div>
+      {sheet === "account" && (
+        <WithdrawAccountSheet
+          accounts={accounts}
+          selectedId={fromAccount.id}
+          ledgerKey={ledger}
+          onSelect={(id) => {
+            setAccountId(id);
+            setError(undefined);
+            setSheet(null);
+          }}
+          onClose={() => setSheet(null)}
+        />
+      )}
+      {sheet === "auth" && (
+        <BankAuthSheet
+          method={authMethod}
+          appName={myBankName}
+          summary={`${holder}님께 ${amountWon} 보내기`}
+          onSuccess={authenticate}
+          onCancel={() => setSheet(null)}
+        />
+      )}
     </div>
   );
 }
