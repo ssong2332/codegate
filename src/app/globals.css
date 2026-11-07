@@ -416,3 +416,171 @@ body {
     animation: none;
   }
 }
+
+/* --- 이체 출금 계좌 · 생체 인증 시트(2026-11-07 실기기 신고 — "생체인식 화면에서도 별 모션 없이 그냥 넘어간다") ---
+   `WithdrawAccountSheet` · `BankAuthSheet`(두 이체 화면 공용). 시트는 아래에서 올라오고, 지문 센서는 기다리는 동안 퍼지는 고리 ·
+   누르는 동안 차오르는 고리(`--bank-hold` 동안) · 실패면 흔들림 · 성공이면 체크가 그려진다. 얼굴(iOS형)은 가운데 표시가 커지며 나타나고
+   얼굴 윤곽이 스캔하듯 숨 쉰다. ⚠️ CSS 키프레임만(§23.6 A1) — prefers-reduced-motion이면 전부 정지(아래 블록 · G457). 정지해도 고리는
+   다 찬 모양(기본 stroke-dashoffset 0) · 체크는 다 그려진 모양으로 보인다(흐름 · 컨트롤은 같다). */
+@keyframes bank-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes bank-dim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes bank-hud-in {
+  from {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes bank-fp-ring {
+  from {
+    stroke-dashoffset: var(--bank-ring);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes bank-fp-ripple {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.82);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes bank-fp-press {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(0.94);
+  }
+}
+
+@keyframes bank-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-8px);
+  }
+  40%,
+  80% {
+    transform: translateX(8px);
+  }
+}
+
+@keyframes bank-check-draw {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes bank-pop {
+  0% {
+    transform: scale(0.6);
+  }
+  70% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes bank-face-scan {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+}
+
+.bank-sheet-up {
+  animation: bank-sheet-up 0.3s cubic-bezier(0.22, 0.7, 0.3, 1);
+}
+
+.bank-sheet-dim {
+  animation: bank-dim-in 0.24s ease-out;
+}
+
+.bank-hud-in {
+  animation: bank-hud-in 0.22s cubic-bezier(0.22, 0.7, 0.3, 1);
+}
+
+.bank-fp-ring {
+  animation: bank-fp-ring var(--bank-hold, 650ms) linear both;
+}
+
+.bank-fp-ripple {
+  animation: bank-fp-ripple 1.6s ease-out infinite;
+}
+
+.bank-fp-press {
+  animation: bank-fp-press 0.15s ease-out forwards;
+}
+
+.bank-shake {
+  animation: bank-shake 0.4s ease-in-out;
+}
+
+.bank-check-draw {
+  animation: bank-check-draw 0.35s ease-out 0.05s both;
+}
+
+.bank-pop {
+  display: inline-flex;
+  animation: bank-pop 0.32s ease-out;
+}
+
+.bank-face-scan {
+  display: inline-flex;
+  animation: bank-face-scan 0.9s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bank-sheet-up,
+  .bank-sheet-dim,
+  .bank-hud-in,
+  .bank-fp-ring,
+  .bank-fp-ripple,
+  .bank-fp-press,
+  .bank-shake,
+  .bank-check-draw,
+  .bank-pop,
+  .bank-face-scan {
+    animation: none;
+  }
+}
