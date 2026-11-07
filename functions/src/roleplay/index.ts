@@ -99,6 +99,7 @@ import { wasTurnInstructionSpoken } from "./announceMarking";
 import { planOtpFollowUp } from "./otpFollowUp";
 import { OTP_HOLD_INSTRUCTION, claimMatchesPurpose, combineReplyGuards, otpDemandGuardFor, replyClaimsSmsSent } from "./smsClaim";
 import { extractEscalationSignal } from "./escalationSignal";
+import { installDoneCallNextInstruction, installLeadsToCall } from "./installCallNext";
 import {
   callPhaseMockTacticHints,
   callPhaseScenarioPrompt,
@@ -589,6 +590,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     let mockConsentSurface: MockScreenEntrySurface | undefined;
     // §128(1) — 응낙 항목 id(설치 뒤 통화가 아닌 항목이면 전화 예고 없는 응낙 지시).
     let mockConsentLandingId: string | undefined;
+    // Edge 재시험 3 표 T2(`installCallNext.ts`) — 설치 뒤 통화가 설계인 메신저 링크 설치를 이미 알렸는가.
+    let installCallAnnounced = false;
     // T194-a(리뷰 m1) — 카탈로그 소속이 아니라 **이 세션에서 도달 가능한** 설치 항목이 있을 때만 읽는다. 도달 불가 항목은
     // `recordMockScreenEvent`가 응낙 문서를 만들지 않으므로(G588 · ⑤) 동작은 같고, parcel 초급 · 중급의 매 턴 읽기 1회가 사라진다.
     if (listAppInstallMockScreens(session.scenarioId).some((item) => isMockScreenReachable(session, item))) {
@@ -598,6 +601,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         const mockSnap = await sessionRef.collection("mockScreens").get();
         const pending = mockSnap.docs.find(
           (doc) => Boolean(doc.get("consentedAt")) && !doc.get("consentAnnouncedAt"),
+        );
+        installCallAnnounced = mockSnap.docs.some(
+          (doc) =>
+            Boolean(doc.get("consentAnnouncedAt")) &&
+            findMockScreenItem(session.scenarioId, doc.id)?.entrySurface === "messenger-link" &&
+            installLeadsToCall(doc.id),
         );
         if (pending) {
           mockConsentRef = pending.ref;
@@ -761,6 +770,17 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       saidCallUnavailableRecently(storedHistory.filter((m) => m.role === "scammer").map((m) => m.textMasked))
         ? CALL_AFTER_EXCUSE_INSTRUCTION
         : undefined;
+    // Edge 재시험 3 표 T2 — 설치를 마쳤고 다음 단계가 통화인데 아직 메신저면 "다음은 담당자 통화 · 문자로 이체 등 더 요구 금지" 1줄.
+    // 전환은 여전히 모델의 신호 · 대사 예고로만(아래 ③-b′ · ③-b″ 같은 판정) — 이 줄은 지시일 뿐이다(G54).
+    const installCallNextInstruction = installDoneCallNextInstruction({
+      messengerStage: session.channel === "messenger",
+      everEscalated: (session.channelHistory ?? []).some((entry) => entry.from === "messenger" && entry.to === "voice"),
+      installCallAnnounced,
+      otherAppInstruction: turnChoice !== "none",
+      canTransitionNow:
+        resolveTransitionNow(session, PUBLIC_SCENARIOS) !== undefined &&
+        !isEscalationTooEarly(turnsSinceMessengerEntry(turnCount, session.channelHistory)),
+    });
     // §131(13) 판정표 R — 참가자가 이미 송금했다고 말했으면 같은 송금을 다시 요구하지 않게 1줄(`actionAcknowledgement.ts`).
     // §131(7) 판정표 P — 지인 · 자녀 사칭 메신저는 역할 고정 1줄(`personaGuard.ts` · 그 밖 시나리오 = 없음).
     const turnFacts = {
@@ -785,6 +805,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         repeatBreakInstruction(repeatBreakKind),
         beginnerRetreatInstruction(beginnerRetreatKind),
         callAfterExcuseInstruction,
+        installCallNextInstruction,
         turnFacts.transferReported ? TRANSFER_REPORTED_INSTRUCTION : undefined,
         personaAnchorInstruction(session.scenarioId),
       ]
