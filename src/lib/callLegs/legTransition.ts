@@ -138,6 +138,8 @@ export const LEG_DIAL_CONTACTS: Readonly<Record<string, readonly { label: string
   "card-company-impersonation": [
     { label: "윤슬카드 고객센터", number: "02-0715-8800" },
     { label: "금융감독기관 대표번호", number: "02-0700-3324" },
+    // 2026-11-07 넘김 축소 — 감독기관 → 검사를 참가자가 직접 거는 통화로(공식 번호 가로채기).
+    { label: "한빛지방검찰청 대표번호", number: "02-0746-2108" },
   ],
 };
 

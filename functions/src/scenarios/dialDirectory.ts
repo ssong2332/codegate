@@ -4,7 +4,7 @@
 // ⛔ 실제 전화망 0(AC-019) — 이 번호들은 앱 안 화면에서만 쓰인다(`tel:` · 외부 이동 0).
 // ⛔ 실제 번호 0 — 국번이 0으로 시작하는 가상 관례(`inCallSms.ts` `SMS_SENDER_NUMBER`와 같은 꼴 · 서로 다른 값).
 // ⛔ 이 파일은 `verifyIntercept.ts` 카탈로그(전화번호 필드 0 · G86-a)와 별개다 — T110(호 전환)의 결정은 그 카탈로그에 그대로 남는다.
-import { CARD_REBUILD_NAMES } from "./fictionalNames";
+import { CARD_REBUILD_NAMES, CASE_RECORD_NAMES } from "./fictionalNames";
 
 export type DialEntry = {
   /** 번호 id(변형 레그 `dialTarget`이 참조). */
@@ -19,6 +19,7 @@ export type DialEntry = {
 
 const CARD = CARD_REBUILD_NAMES.cardCompany;
 const SUPERVISOR = CARD_REBUILD_NAMES.supervisor;
+const PROSECUTION = CASE_RECORD_NAMES.office;
 
 /** 배송원이 문자로 보낸 가짜 카드사 대표번호(연락처에 없다). */
 export const CARD_FAKE_CALLBACK_NUMBER_ID = "card-fake-callback";
@@ -26,6 +27,12 @@ export const CARD_FAKE_CALLBACK_NUMBER_ID = "card-fake-callback";
 export const CARD_GENUINE_CENTER_NUMBER_ID = "card-genuine-center";
 /** 연락처에 저장된 감독기관 공식 대표번호(악성 앱이 있으면 가로채진다). */
 export const SUPERVISOR_OFFICIAL_NUMBER_ID = "supervisor-official";
+/**
+ * 연락처에 저장된 검찰청 공식 대표번호(악성 앱이 있으면 가로채진다 — 감독기관 번호와 같은 장치). 2026-11-07 넘김 축소: 감독기관 → 검사를 통화 중 넘김 대신
+ * 참가자가 직접 거는 통화로(조사 문서 `card-company-scam-reality-2026-11-01.md` §7 6단계 "가상 검찰청 번호로 걸게 함"). 번호 안내 문자를 새로 두지 않는 이유:
+ * R1 문자가 4통이 되어 고급 문자 범위(PRD AC-096 (b) 0~3)를 넘는다.
+ */
+export const PROSECUTOR_OFFICIAL_NUMBER_ID = "prosecutor-official";
 
 export const DIAL_DIRECTORY: Readonly<Record<string, readonly DialEntry[]>> = {
   "card-company-impersonation": [
@@ -47,6 +54,16 @@ export const DIAL_DIRECTORY: Readonly<Record<string, readonly DialEntry[]>> = {
       genuineNotice: [
         `${SUPERVISOR} 대표번호 자동 안내입니다.`,
         "저희는 전화로 개인에게 이체 · 앱 설치 · 안전계좌를 요구하지 않습니다.",
+        "이런 요구를 받으셨다면 통화를 끊고 가족 등 다른 사람의 전화로 함께 확인하세요.",
+      ],
+    },
+    {
+      numberId: PROSECUTOR_OFFICIAL_NUMBER_ID,
+      number: "02-0746-2108",
+      contactLabel: `${PROSECUTION} 대표번호`,
+      genuineNotice: [
+        `${PROSECUTION} 대표번호 자동 안내입니다.`,
+        "검찰은 전화로 개인에게 이체 · 안전계좌 · 자산 보호를 요구하지 않습니다.",
         "이런 요구를 받으셨다면 통화를 끊고 가족 등 다른 사람의 전화로 함께 확인하세요.",
       ],
     },

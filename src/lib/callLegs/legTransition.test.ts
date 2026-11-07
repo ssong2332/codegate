@@ -73,15 +73,16 @@ test("[§142 미러] 연락처 = 서버 번호부의 연락처 항목(번호 · 
   const server = read("functions/src/scenarios/dialDirectory.ts");
   const names = read("functions/src/scenarios/fictionalNames.ts");
   const contacts = dialContactsFor("card-company-impersonation");
-  assert.equal(contacts.length, 2);
+  assert.equal(contacts.length, 3);
   for (const contact of contacts) {
     assert.ok(server.includes(`"${contact.number}"`), `서버 번호부에 ${contact.number}가 없다`);
   }
   assert.ok(names.includes('cardCompany: "윤슬카드"') && names.includes('supervisor: "금융감독기관"'));
-  assert.ok(server.includes("`${CARD} 고객센터`") && server.includes("`${SUPERVISOR} 대표번호`"));
+  assert.ok(server.includes("`${CARD} 고객센터`") && server.includes("`${SUPERVISOR} 대표번호`") && server.includes("`${PROSECUTION} 대표번호`"));
+  assert.ok(names.includes('office: "한빛지방검찰청"') && server.includes("const PROSECUTION = CASE_RECORD_NAMES.office;"));
   assert.deepEqual(
     contacts.map((c) => c.label),
-    ["윤슬카드 고객센터", "금융감독기관 대표번호"],
+    ["윤슬카드 고객센터", "금융감독기관 대표번호", "한빛지방검찰청 대표번호"],
   );
   for (const list of Object.values(LEG_DIAL_CONTACTS)) {
     for (const { number } of list) {

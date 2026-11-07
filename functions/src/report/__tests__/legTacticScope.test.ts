@@ -14,12 +14,12 @@ const read = (rel: string) => readFileSync(path.resolve(__dirname, "../../../src
 const R2 = () => findFlowVariant("fv-r8vb")!;
 const msgs = (rows: [AnalysisMessage["role"], string, number | undefined][]): AnalysisMessage[] =>
   rows.map(([role, textMasked, legIndex], i) => ({ role, textMasked, turnIndex: i, createdAtMs: i * 1000, ...(legIndex !== undefined ? { legIndex } : {}) }));
-// R2 재실측 실제 대사(레그 3 — 감독기관 두 번째 통화).
+// R2 재실측 실제 대사(당시 레그 3 — 감독기관 두 번째 통화 · 2026-11-07 넘김 축소 뒤 같은 일은 마지막 레그 2(검사)가 맡는다).
 const SAFE_ACCOUNT_LINE = "조사가 끝날 때까지 자산을 안전하게 보호해야 합니다. 방금 보내 드린 안전계좌 안내 문자 링크를 통해 구백팔십만 원을 옮겨 주세요.";
 
 test("[§142 N3 재현 · 수정] 마지막 통화 안전계좌 이체 응답 — 통화 범위 없음 = 설치 요구(결함) · 통화 범위 = 자산 보호 이체 요구", () => {
   const v = R2();
-  const m = msgs([["scammer", SAFE_ACCOUNT_LINE, 3], ["user", "네, 보냈어요.", 3]]);
+  const m = msgs([["scammer", SAFE_ACCOUNT_LINE, 2], ["user", "네, 보냈어요.", 2]]);
   assert.deepEqual(analyzeConversation(m, 0, [...v.tactics]).deceivedMoments.map((d) => d.tactic), ["보안 점검 앱 설치 요구"]);
   assert.deepEqual(analyzeConversation(m, 0, [...v.tactics], [], multiCallLegTactics(v)).deceivedMoments.map((d) => d.tactic), ["자산 보호 이체 요구"]);
 });
@@ -29,8 +29,8 @@ test("[§142 N3] 상담원 통화의 설치 요구 응답은 그대로 설치 �
   const m = msgs([
     ["scammer", "피해가 번지지 않게 휴대폰 보안 점검부터 하셔야 합니다, 방금 보내 드린 문자의 링크에서 원격 지원 도우미를 설치해 주세요.", 0],
     ["user", "네, 눌러서 설치했어요.", 0],
-    ["scammer", SAFE_ACCOUNT_LINE, 3],
-    ["user", "네, 보냈어요.", 3],
+    ["scammer", SAFE_ACCOUNT_LINE, 2],
+    ["user", "네, 보냈어요.", 2],
   ]);
   const a = analyzeConversation(m, 0, [...v.tactics], [], multiCallLegTactics(v));
   assert.deepEqual(a.deceivedMoments.map((d) => d.tactic), ["보안 점검 앱 설치 요구", "자산 보호 이체 요구"]);
@@ -60,7 +60,7 @@ test("[§142 N3] 통화별 수법 목록 = 레그 프롬프트가 모델에게 �
 });
 
 test("[§142 N3 메시지 통화 번호] 서버 relay 기준 · 다통화 아님 · 다른 시나리오 = undefined", () => {
-  assert.equal(messageLegIndex(R2(), { scenarioId: SCENARIO, relay: { legIndex: 3, legStartUserTurns: [0, 7, 9, 11], legEnded: 3 } }), 3);
+  assert.equal(messageLegIndex(R2(), { scenarioId: SCENARIO, relay: { legIndex: 2, legStartUserTurns: [0, 7, 9], legEnded: 2 } }), 2);
   assert.equal(messageLegIndex(R2(), { scenarioId: SCENARIO }), 0);
   assert.equal(messageLegIndex(findFlowVariant("fv-akj5"), { scenarioId: SCENARIO }), undefined);
   assert.equal(messageLegIndex(R2(), { scenarioId: "institutional-impersonation" }), undefined);

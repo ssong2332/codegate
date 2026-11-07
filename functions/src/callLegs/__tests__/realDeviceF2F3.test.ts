@@ -22,9 +22,10 @@ test("[F2 판정표] 번호 문자 대기 = 나감 dial ∧ 이 레그 필수 �
   // 3행 — 상담원 레그(R1 레그 1 · R2 레그 0): 필수 문자는 링크(설치)라 번호 문자가 아니다 — 다음 번호는 연락처에 있다.
   assert.equal(isLegDialSmsPending(r1(), relayAt(1), []), false);
   assert.equal(isLegDialSmsPending(r2(), relayAt(0), []), false);
-  // 1행 — 나감 transfer · 마지막 레그 · 다통화 아님.
+  // 3행 — 감독기관 레그(R1 레그 2 · 2026-11-07부터 나감 dial): 번호 문자 선언 0 — 검찰청 대표번호는 연락처에 있다.
   assert.equal(isLegDialSmsPending(r1(), relayAt(2), []), false);
-  assert.equal(isLegDialSmsPending(r1(), relayAt(4), []), false);
+  // 1행 — 마지막 레그 · 다통화 아님.
+  assert.equal(isLegDialSmsPending(r1(), relayAt(3), []), false);
   assert.equal(isLegDialSmsPending(findFlowVariant("fv-akj5"), undefined, []), false);
   assert.equal(isLegDialSmsPending(undefined, undefined, []), false);
   assert.ok(!/\d{3,}/.test(LEG_DIAL_SMS_PENDING_GUIDANCE), "지시에 번호 0");

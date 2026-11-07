@@ -24975,3 +24975,16 @@ PR-2 화면 계약(이 PR이 전제하는 것):
 | 통화별 수법 목록 | `flowVariants.ts` `multiCallLegTactics` | 레그 프롬프트가 모델에게 주는 목록과 같은 값(`legTacticsOf` 한 곳) |
 | 판정 | `analyzeConversation(…, legTactics)` | 사기범 대사의 문구 일치 · 요구 어형 표 · 대표 수법 폴백을 그 대사의 통화 목록에서만. `legIndex` 부재(옛 문서) · 범위 밖 · 인자 부재 = 종전 그대로 |
 | 리포트 | `generateReportCore.ts` | 메시지 `legIndex`를 읽어 `multiCallLegTactics(multiCallVariant)`와 함께 넘긴다 |
+
+### 142.13 앞 통화 맥락 인계 · 넘김 축소(2026-11-07 실기기 시험 세션 1d84811b · 사용자 승인 수정 1 · 2)
+신고: ① "방금 한 말만 반영되고 그 전 대화는 반영 안 된다" · 참가자가 "카드 두 장 시켰다"고 세 번 반박했는데 배송원이 같은 문장을 세 번 되풀이 ② "통화 넘기는 게 너무 많다"(R2 4통 · R1 5통).
+
+| # | 원인 | 수정 | 파일 |
+|---|---|---|---|
+| 1-a | Live 레그 인계가 메시지 문서를 `{ role, text }`로 읽었는데 문서 필드는 `textMasked` — 인계 블록이 늘 0줄(폴백 · 확인 실측 프로브는 `text`를 직접 넘겨 드러나지 않았다) | `textMasked` · `legIndex` · `notSpoken`을 읽는다 | `realtime/index.ts` |
+| 1-b | 인계가 마지막 16줄만 실었다 | 참가자 줄 전부 + 그 답의 바로 앞 상대 줄(100자) + 마지막 8줄 · 상한 48줄(넘으면 오래된 상대 줄부터) · 통화별 머리줄 · 추가 LLM 호출 0 | `callLegs/legPlan.ts` `buildPriorLegContext` |
+| 1-c | '신청했다' 갈래가 같은 미끼 문장만 지시 | 구체적 반박이면 답을 그 내용에 맞게 바꾸고 같은 문장 되풀이 금지 · 반박이 이어지면 문자로 확인하라고 넘김(지시문 — 대사 정규식 0) | `flowVariants.ts` `CARD_APPLIED_REBUTTAL_RULE` · `cardRebuildLegs.prompt.ts` 배송원 |
+| 2-a | 검사 → 다시 감독기관 레그(출처 없음) | 없앴다 — 검사 레그가 안전계좌 980만 원 · 은행 답변 코칭까지(조사 S1 부제) · R1 5→4통 · R2 4→3통 | `flowVariants.ts` · `cardRebuildLegs.prompt.ts` |
+| 2-b | 감독기관 → 검사가 통화 중 넘김(transfer — 출처 없음) | 감독기관이 "검찰청 대표번호로 직접 걸어 담당 검사를 찾으라"고 하고 참가자가 연락처의 가상 검찰청 대표번호(`prosecutor-official` · 02-0746-2108)로 건다 — 감독기관 번호와 같은 공식 번호 가로채기(원격 지원 앱 응낙 뒤 = 검사 레그 · 전 = 진짜 안내)(조사 §7 6단계) · 걸지 않으면 D4 callback. 번호 안내 문자를 새로 두지 않은 이유: R1 문자 4통 = 고급 범위(PRD AC-096 (b) 0~3) 초과 | `dialDirectory.ts` · `flowVariants.ts` · 클라 연락처 미러 `src/lib/callLegs/legTransition.ts` |
+
+레그 표(변경 뒤): 배송원(R1만 · incoming → dial) · 상담원(dial → dial) · 감독기관(dial · 공식 번호 가로채기 → dial) · 검사(dial · 공식 번호 가로채기 · 마지막). 문자 R1 3통 · R2 2통(무변경). 카드사 재구성 변형의 `transfer` 레그는 0이 됐다(런타임 · 화면의 transfer 경로는 그대로 남는다). 리포트 교육점 4개 · 수법 라벨 문면 무변경(변형 수법 = 레그 라벨 합집합 — 감독기관 두 번째 통화의 라벨이 검사 레그로 옮겨졌다). 안전계좌 문자 발신 라벨 = 검찰청 자산보호 안내 · 하한 3(검사 레그 협박 · 비밀 유지 뒤).

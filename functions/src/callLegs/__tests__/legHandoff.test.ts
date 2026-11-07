@@ -25,45 +25,58 @@ const relayAt = (legIndex: number, start: number, entry?: RelayState["entry"]): 
   ...(entry ? { entry } : {}),
 });
 
-test("[§142 D1 페르소나] 감독기관 첫 레그 프롬프트에 마지막 레그의 일(980만 원 · 가족 사업 자금 · 안전계좌)이 없다 · 마지막 레그에는 있다", () => {
-  for (const [variantId, firstSupervisor, lastSupervisor] of [["fv-k3dn", 2, 4], ["fv-r8vb", 1, 3]] as const) {
-    const first = resolveSessionScenarioPrompt(SCENARIO, variantId, firstSupervisor)!.personaPrompt;
-    const last = resolveSessionScenarioPrompt(SCENARIO, variantId, lastSupervisor)!.personaPrompt;
+// 2026-11-07 넘김 축소 — 카드사 재구성 변형에 transfer 레그가 없어졌다(감독기관 → 검사 = 참가자 발신 · 검사 → 다시 감독기관 레그 삭제).
+// 넘김 판정 · 끝 규칙은 런타임에 그대로 남으므로 R1 레그 2를 transfer로 바꾼 시험용 변형으로 계속 고정한다.
+const withTransfer = () => {
+  const v = r1();
+  return { ...v, legs: v.legs.map((leg, i) => (i === 2 ? { ...leg, exit: "transfer" as const } : i === 3 ? { ...leg, entry: "transfer" as const } : leg)) };
+};
+
+test("[§142 D1 페르소나] 감독기관 레그 프롬프트에 마지막 레그의 일(980만 원 · 가족 사업 자금 · 안전계좌)이 없다 · 마지막(검사) 레그에는 있다", () => {
+  for (const [variantId, supervisor, last] of [["fv-k3dn", 2, 3], ["fv-r8vb", 1, 2]] as const) {
+    const first = resolveSessionScenarioPrompt(SCENARIO, variantId, supervisor)!.personaPrompt;
+    const lastPrompt = resolveSessionScenarioPrompt(SCENARIO, variantId, last)!.personaPrompt;
     for (const phrase of ["980만 원", "가족 사업 자금", "안전계좌"]) {
-      assert.ok(!first.includes(phrase), `${variantId} 첫 감독기관 레그에 "${phrase}"`);
-      assert.ok(last.includes(phrase), `${variantId} 마지막 레그에 "${phrase}" 없음`);
+      assert.ok(!first.includes(phrase), `${variantId} 감독기관 레그에 "${phrase}"`);
+      assert.ok(lastPrompt.includes(phrase), `${variantId} 마지막 레그에 "${phrase}" 없음`);
     }
   }
-  // 같은 인물 · 같은 목소리(speakerId)는 그대로.
-  assert.equal(r1().legs[2].speakerId, r1().legs[4].speakerId);
+  assert.equal(r1().legs[2].speakerId, "supervisor");
+  assert.equal(r1().legs[3].speakerId, "prosecutor");
 });
 
-test("[§142 D1 끝 규칙] 나감이 transfer인 레그 = 넘김은 이 통화를 끝내는 것(끊기 규칙) · '잠시만' 뒤 이어가기 금지", () => {
-  for (const legIndex of [2, 3]) {
-    const prompt = resolveSessionScenarioPrompt(SCENARIO, "fv-k3dn", legIndex)!.personaPrompt;
-    assert.ok(prompt.includes("통화를 넘기는 것은 네 쪽에서 이 통화를 끝내는 것이다"), `레그 ${legIndex}`);
-    assert.ok(prompt.includes("[진행 강제]의 끊기 규칙대로"), `레그 ${legIndex}`);
+test("[§142 D1 끝 규칙] 카드사 재구성 레그에 transfer 0 · 넘김 끝 규칙(이 통화를 끝내는 것)은 런타임에 남는다", () => {
+  for (const v of [r1(), r2()]) {
+    assert.ok(v.legs.every((leg) => leg.exit !== "transfer"), v.variantId);
+    for (let i = 0; i < v.legs.length - 1; i += 1) {
+      const prompt = resolveSessionScenarioPrompt(SCENARIO, v.variantId, i)!.personaPrompt;
+      assert.ok(prompt.includes("이 통화에서 다음 사람의 일(앱 · 신고 · 조사 · 이체)을 대신 진행하지 않는다"), `${v.variantId} 레그 ${i}`);
+    }
   }
+  const src = read("scenarios/flowVariants.ts");
+  assert.ok(src.includes("통화를 넘기는 것은 네 쪽에서 이 통화를 끝내는 것이다"));
+  assert.ok(src.includes('leg.exit === "transfer" ? MULTI_CALL_LEG_END_TRANSFER'));
 });
 
 test("[§142 D1 넘김 판정표] transfer 레그 · 문자 0 · 레그 시작 뒤 발화 = minUserTurns + 1부터 넘김 · 그 전 wait · 그 밖 undefined", () => {
-  const v = r1();
+  const v = withTransfer();
   const min = v.legs[2].minUserTurns ?? 0;
   assert.equal(planLegHandoff(v, relayAt(2, 13), 13 + min), "wait");
   assert.equal(planLegHandoff(v, relayAt(2, 13), 13 + min + 1), "handoff");
-  assert.equal(planLegHandoff(v, relayAt(3, 20), 20 + (v.legs[3].minUserTurns ?? 0) + 1), "handoff");
   // 1행 — dial 레그(상담원) · 마지막 레그 · 다통화 아님.
   assert.equal(planLegHandoff(v, relayAt(1, 7), 30), undefined);
-  assert.equal(planLegHandoff(v, relayAt(4, 25), 40), undefined);
+  assert.equal(planLegHandoff(v, relayAt(3, 25), 40), undefined);
   assert.equal(planLegHandoff(findFlowVariant("fv-akj5"), undefined, 30), undefined);
   assert.equal(planLegHandoff(undefined, undefined, 30), undefined);
-  // R2 감독기관 첫 레그 = 1번.
-  assert.equal(planLegHandoff(r2(), relayAt(1, 6), 6 + (r2().legs[1].minUserTurns ?? 0) + 1), "handoff");
+  // 실제 카탈로그 — 감독기관 레그는 이제 dial이라 넘김 판정 밖.
+  assert.equal(planLegHandoff(r1(), relayAt(2, 13), 40), undefined);
+  assert.equal(planLegHandoff(r2(), relayAt(1, 6), 40), undefined);
 });
 
-test("[§142 D1 뒤 레그 문자] 감독기관 첫 레그의 transfer 요청 = 뒤 레그 문자(넘김 거절 문면) · 지금 레그 · 다통화 아님 = false", () => {
+test("[§142 D1 뒤 레그 문자] 감독기관 레그의 transfer 요청 = 뒤 레그 문자(거절 문면) · 지금 레그 · 다통화 아님 = false", () => {
   assert.equal(isLaterLegSmsPurpose(r1(), relayAt(2, 13), "transfer"), true);
-  assert.equal(isLaterLegSmsPurpose(r1(), relayAt(4, 25), "transfer"), false);
+  assert.equal(isLaterLegSmsPurpose(r2(), relayAt(1, 6), "transfer"), true);
+  assert.equal(isLaterLegSmsPurpose(r1(), relayAt(3, 25), "transfer"), false);
   assert.equal(isLaterLegSmsPurpose(r1(), relayAt(1, 7), "link"), false);
   assert.equal(isLaterLegSmsPurpose(r1(), relayAt(2, 13), undefined), false);
   assert.equal(isLaterLegSmsPurpose(findFlowVariant("fv-akj5"), undefined, "transfer"), false);
