@@ -64,7 +64,7 @@ test("[판 3] L2 — 비밀번호를 말로 묻지 말라는 줄이 [진행 강�
   const example = live.indexOf("계좌 비밀번호");
   assert.ok(example >= 0 && example < live.indexOf(LIVE_CALL_PASSWORD_RULE), "예시 뒤에 금지 줄");
   assert.match(LIVE_CALL_PASSWORD_RULE, /우선한다/);
-  // 판 33(메인 추가 자료) — 은행 사칭 · 기관 사칭의 수법 문면 자체가 "계좌 비밀번호 불러 달라"를 지시한다(전 난이도). 수법 목록보다도 우선임을 밝힌다.
+  // 판 33(메인 추가 자료) — 은행 사칭 · 기관 사칭 수법 문면에 "계좌 비밀번호" 예시가 있다(2026-11-07부터 앱 안 본인 인증 입력 유도형). 수법 목록보다도 우선임을 밝힌다.
   assert.ok(live.indexOf("계좌 비밀번호까지") >= 0 && live.indexOf("계좌 비밀번호까지") < live.indexOf(LIVE_CALL_PASSWORD_RULE), "수법 문면 뒤");
   assert.match(LIVE_CALL_PASSWORD_RULE, /수법 목록/);
   for (const difficultyLevel of LEVELS) {
