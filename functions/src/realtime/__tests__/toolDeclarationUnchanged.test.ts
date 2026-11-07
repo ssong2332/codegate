@@ -63,13 +63,14 @@ function declaredNames(
 }
 
 // R1 ① — 카탈로그·게이트 둘 다 없는 시나리오 ⇒ tools가 빈 배열이다(회귀 0, G388의 유일한 레버).
-test("[§59.9 R1①] 카탈로그·확인 무력화 둘 다 없는 시나리오(kidnapping-threat) — tools는 빈 배열", () => {
+// 2026-11-07 — 납치 협박(kidnapping-threat)에 고급 계좌 문자 카탈로그가 생겨(Edge 시험 판 7) "카탈로그 · 게이트 둘 다 없는 시나리오" 예를 가족 사고(clone · 카탈로그 0 · 확인 무력화 0)로 바꿨다.
+test("[§59.9 R1①] 카탈로그·확인 무력화 둘 다 없는 시나리오(family-accident-deepvoice) — tools는 빈 배열", () => {
   for (const difficultyLevel of ["beginner", "intermediate", "advanced"] as const) {
-    const tools = buildLiveToolDeclarations("kidnapping-threat", difficultyLevel, undefined, NO_END_CALL);
+    const tools = buildLiveToolDeclarations("family-accident-deepvoice", difficultyLevel, undefined, NO_END_CALL);
     assert.deepEqual(tools, [], `difficulty=${difficultyLevel}에서도 빈 배열이어야 한다`);
   }
   // difficultyLevel 부재(폴백 강등 등)에서도 동일하다.
-  assert.deepEqual(buildLiveToolDeclarations("kidnapping-threat", undefined, undefined, NO_END_CALL), []);
+  assert.deepEqual(buildLiveToolDeclarations("family-accident-deepvoice", undefined, undefined, NO_END_CALL), []);
 });
 
 // R1 ② — 문자 카탈로그만 있는 시나리오 ⇒ 이름 집합이 정확히 {send_prepared_sms}다.

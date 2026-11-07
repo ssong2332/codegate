@@ -38,6 +38,7 @@ import type { AxisExitBlock } from "./axes";
 import { SCENARIO_PROMPTS } from "./index";
 import { PARCEL_ADVANCED_INSTALL_TACTIC, PARCEL_ADVANCED_LEG_PERSONA } from "./messengerParcelSmishingSms.prompt";
 import { CARD_DELIVERY_PERSONA } from "./cardDeliveryCall.prompt";
+import { KIDNAPPING_SCREEN_TRANSFER_PERSONA, KIDNAPPING_SCREEN_TRANSFER_TACTIC } from "./kidnappingThreat.prompt";
 import {
   CARD_AGENT_SUPERVISOR_NUMBER_RULE,
   CARD_REBUILD_AGENT_PERSONA,
@@ -61,6 +62,7 @@ import {
   PROSECUTION_SITE_EXTRA_TACTICS,
   PROSECUTION_SITE_PERSONA,
   prosecutionRoutePersona,
+  prosecutionVoucherRoutePersona,
 } from "./prosecutionCooperationCall.prompt";
 import { extractTacticLabel } from "./tacticFlavor";
 import { hasVerifyIntercept } from "./verifyIntercept";
@@ -420,6 +422,23 @@ const SMS_STAGE_CALL_FIRST =
 const VERBAL_ENDING_WRAP =
   "상대가 하겠다고 약속하면 같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다. 상대가 답을 미루면 한 번만 다시 요구한 뒤 마무리한다.";
 const withSmsFirst = (stage: string) => `${stage} ${SMS_STAGE_CALL_FIRST}`;
+// ⭐ 2026-11-07(Edge 시험 판 7 · 사용자 결정 "앱 안 화면 추가") — 납치 협박 고급의 계좌 문자 · 이체 화면 결말(아래 kidnapping-threat 주석).
+const KIDNAP_TRANSFER_STAGE_TAIL = withSmsFirst(
+  "문자 보내기 도구로 계좌 · 금액 안내 문자를 보낸 뒤 문자 속 링크의 이체 화면에서 지금 바로 보내라고 요구한다. 은행 앱 · 창구 · ATM · 편의점에서 따로 보내라고 하지 않는다. 망설이면 시간 제한과 아이 이야기로 한 번 더 재촉하고, 그래도 보내지 않으면 더 조르지 않고 마무리한다. 이체 화면에서 보낸 기록이 오기 전에는 입금하고 다시 연락하라며 원하던 것을 얻은 것처럼 통화를 끝내지 않는다.",
+);
+const KIDNAP_TRANSFER_STAGE = `소액을 지금 바로 받아 내려고 ${KIDNAP_TRANSFER_STAGE_TAIL}`;
+const KIDNAP_SCREEN_DROP_LABELS = ["즉시 송금 요구", "금액 조정 재요구"];
+const KIDNAP_ACCOUNT_SMS: FlowVariantSms = {
+  purpose: "transfer",
+  smsId: "kidnap-ransom-account",
+  required: true,
+  notBeforeUserTurns: 2,
+  backstopUserTurns: 1,
+};
+/** 0번 화자 = 원본 협박범(이름 · 성별 그대로)이되 "화면 · 문자가 없다" 전제 2줄만 바꾼 페르소나(`kidnappingThreat.prompt.ts`). */
+const KIDNAP_SCREEN_LEG: FlowVariantLeg[] = [
+  { callerLabel: "신원 불상", personaPrompt: KIDNAPPING_SCREEN_TRANSFER_PERSONA, speakerGender: "male", minUserTurns: 0, maxUserTurns: 20 },
+];
 const FAST_BACKSTOP = { backstopUserTurns: 1 } as const;
 // §127(메인 세션 라이브 확인 2026-10-24 · 텍스트 폴백) — 백스톱 간격을 1로 줄이자 인증번호 문자가 흐름의 인증번호 단계(4단계 — 자산 질문 뒤)보다 먼저
 // 발화 4에 도착했고, 사기범은 흐름 순서대로 자산 질문을 이어 가 문자를 언급하지도 번호를 묻지도 않았다. 인증번호 하한을 3 → 5로 올려 강제 도착을
@@ -625,15 +644,26 @@ const PROSECUTION_SITE_FOLLOW_UP_STAGE_V2 =
 const PROSECUTION_OPENING_V2 = `${PROSECUTION_STAGES[0]} ${INVESTIGATION_CARD_USE}`;
 
 // 검찰 고급 ② 상품권형 — 근거 경찰청(정책브리핑 2024-04-15 · 위조 우편물 → 검사 사칭 → "자금 검수" 명목 현금 · 문화상품권 · 가상자산 요구 — 사례 C24 · S44).
-const PROSECUTION_VOUCHER_PERSONA = prosecutionRoutePersona(
+// ⭐ 2026-11-07(Edge 시험 판 12 — 마지막 요구 "문화상품권을 구매하신 뒤 핀 번호를 불러 주시면"이 앱 밖 구매였다 · 사용자 결정 "앱 안 화면 추가") —
+// 상품권 구매 안내 문자(`prosecution-voucher-link` → 앱 안 구매 화면 `voucher-purchase` — 권종 · 수량 → 결제 확인 → 결제 인증 → 핀 번호 표시)를 보내고
+// 화면에 뜬 핀 번호를 불러 달라고 한다. 결정 화면이 생겨 끊기 4-c 대상이 된다(`goalAction.ts` `VERBAL_DECISION_VARIANTS`에서 뺐다).
+// ⚠️ 실제 사례의 구매처(편의점 · 온라인)와 다르게 사기범이 문자로 판매처 링크를 준다 — 실제 앱 · 매장으로 가지 않게 하는 대가(추정 · 공개 사례 미확인).
+const PROSECUTION_VOUCHER_PERSONA = prosecutionVoucherRoutePersona(
   "자금 검수 명목으로 문화상품권을 사서 그 핀 번호를 불러 달라고 요구하는 상황을 연기한다.",
-  "- 상품권은 '문화상품권'이라고만 하고 실제 판매처 · 발행사 · 매장 이름은 쓰지 않는다. 핀 번호는 네가 지어내 부르지 않고, 살 곳을 정해 주지도 않는다.",
+  "- 상품권은 '문화상품권'이라고만 하고 실제 판매처 · 발행사 · 매장 이름은 쓰지 않는다. 사는 곳은 문자로 보낸 상품권 구매 안내의 링크 화면뿐이고, 편의점 · 다른 매장 · 다른 앱에서 사라고 하지 않는다. 핀 번호는 네가 지어내 부르지 않는다 — 구매 화면에 뜬 번호를 상대가 불러 주게 한다.",
 );
-const PROSECUTION_VOUCHER_STAGE_BASE =
-  "자금 검수를 해야 한다며 '계좌 자금이 범죄 수익과 섞였는지 확인하려면 계좌 거래 기록이 남지 않는 상품권으로 바꿔 그 핀 번호를 검수번호로 제출하셔야 합니다, 확인이 끝나면 같은 금액으로 돌려드립니다'처럼 이유부터 설명하고, 예금으로 문화상품권을 사서 핀 번호를 불러 달라고 요구한다. 살 곳 · 금액 단위는 정해 주지 않는다. 상대가 거절하거나 망설이면 구속 가능성을 한 번 더 비춘 뒤 더 조르지 않고 마무리한다.";
-const PROSECUTION_VOUCHER_STAGE = `${PROSECUTION_VOUCHER_STAGE_BASE} ${VERBAL_ENDING_WRAP}`;
+const PROSECUTION_VOUCHER_STAGE = withSmsFirst(
+  "자금 검수를 해야 한다며 '계좌 자금이 범죄 수익과 섞였는지 확인하려면 계좌 거래 기록이 남지 않는 상품권으로 바꿔 그 핀 번호를 검수번호로 제출하셔야 합니다, 확인이 끝나면 같은 금액으로 돌려드립니다'처럼 이유부터 설명하고, 문자 보내기 도구로 상품권 구매 안내 문자를 보낸 뒤 문자 속 링크의 구매 화면에서 문화상품권을 사게 한다. 권종 · 수량은 화면에서 고르게 하고 금액을 지어내 정해 주지 않는다. 구매를 마치면 화면에 뜬 핀 번호를 불러 달라고 하고, 불러 주면 검수번호로 등록됐다고 짧게 말한 뒤 마무리한다. 구매 화면에서 결제한 기록이 오기 전에는 원하던 것을 얻은 것처럼 통화를 끝내지 않는다. 상대가 거절하거나 망설이면 구속 가능성을 한 번 더 비춘 뒤 더 조르지 않고 마무리한다.",
+);
 const PROSECUTION_VOUCHER_DEMAND =
-  "상품권 핀 번호 요구 — '자금 검수라서 예금을 문화상품권으로 바꾸셔야 합니다, 사신 상품권 핀 번호를 불러 주시면 검수번호로 등록됩니다' 처럼 상품권을 사서 핀 번호를 불러 달라고 한다. 판매처 · 발행사 이름과 핀 번호를 지어내지 않는다.";
+  "상품권 핀 번호 요구 — '자금 검수라서 예금을 문화상품권으로 바꾸셔야 합니다, 문자로 보내 드린 구매 안내 링크에서 사시고 화면에 뜬 핀 번호를 불러 주시면 검수번호로 등록됩니다' 처럼 문자 속 구매 화면에서 상품권을 사서 핀 번호를 불러 달라고 한다. 사는 곳은 문자로 보낸 것을 확인하게 하고, 판매처 · 발행사 이름과 핀 번호를 지어내지 않고, 편의점 · 다른 매장 · 다른 앱에서 사라고 하지 않는다.";
+const PROSECUTION_VOUCHER_SMS: FlowVariantSms = {
+  purpose: "transfer",
+  smsId: "prosecution-voucher-link",
+  required: true,
+  notBeforeUserTurns: 5,
+  backstopUserTurns: 1,
+};
 // 검찰 고급 ③ 대출금 전달형 — 근거 전북일보 2025-08-21(검사 · 금감원 사칭 → 대출 실행 → 대출금 현금 전달 직전 저지 · S40) · C07(교사 · 6,000만 원 대출 지시)
 // · 금감원 소비자경보 2024-35호(정상 대출 입증 명목 · S42). 숙박업소 격리 부분은 넣지 않는다(§115.2).
 const PROSECUTION_LOAN_PERSONA = prosecutionRoutePersona(
@@ -1507,6 +1537,9 @@ const SPECS: VariantSpec[] = [
   },
 
   // ── kidnapping-threat (§2.6.3 7행 — S26 · C16 · C17) ─────────────────────────────────────
+  // ⭐ 2026-11-07(Edge 시험 판 7 · 사용자 결정 "앱 안 화면 추가") — 고급 2종(fv-k268 · fv-w7tb)은 계좌를 말로만 부르지 않고 계좌 문자(`kidnap-ransom-account`
+  // — 계좌 · 금액 50만 원)를 보내 문자 속 링크의 이체 화면에서 보내게 한다. 끊기 4-c(결정 화면 전 goal 끊기 금지) · 화면 행동만 인정 · 요구액 비교는 이 선언에서
+  // 자동으로 붙는다(`goalAction.ts` `isDecisionScreenPending` · `roleplay/screenAction.ts`). 초 · 중급은 무변경(문자 0).
   {
     variantId: "fv-c5ih",
     scenarioId: "kidnapping-threat",
@@ -1543,17 +1576,20 @@ const SPECS: VariantSpec[] = [
     stages: st(
       "자녀가 자기 쪽에 있다고 말하고, 아이가 울고 있다고 말로만 전한다.",
       "상대가 먼저 말한 자녀 이름만 되받아 이미 다 알고 있는 척한다.",
-      "소액을 즉시 이체하라고 요구하고, 망설이면 금액을 조정해 다시 요구한다.",
+      KIDNAP_TRANSFER_STAGE,
     ),
+    // 2026-11-07 — 계좌 문자 + 이체 화면(위 상수 주석). "즉시 송금 요구"는 같은 라벨의 문자 · 화면 문면으로 바꾸고, 문자 금액과 어긋나는 "금액 조정 재요구"는 뺀다.
+    dropLabels: KIDNAP_SCREEN_DROP_LABELS,
     extraTactics: [
       "가족 정보 언급 — 상대가 먼저 말한 자녀 이름만 되받아 '○○이 지금 여기 있습니다' 처럼 이미 다 아는 척한다. 학원 같은 장소는 '○○학원'처럼 가린 형태로만 말하고, 상대가 말하지 않은 이름은 지어내 단정하지 않는다.",
       "울음 언급 협박 — '지금 옆에서 아이가 울고 있습니다' 처럼 말로만 전해 공포를 키운다. 우는 소리를 흉내 내거나 신체 위해를 묘사하지 않는다.",
+      KIDNAPPING_SCREEN_TRANSFER_TACTIC,
     ],
     exitBlock: ["D2_secrecy", "D4_procedural_legitimacy", "D5_call_retention", "D6_report_blocking"],
-    sms: [],
-    legs: ONE_LEG("신원 불상", "male"),
+    sms: [KIDNAP_ACCOUNT_SMS],
+    legs: KIDNAP_SCREEN_LEG,
     ...ADVANCED,
-    channels: ["voice"],
+    channels: ["voice", "sms"],
     demandStages: 2,
     sources: ["S26", "C16", "C17"],
   },
@@ -1567,18 +1603,20 @@ const SPECS: VariantSpec[] = [
     stages: st(
       "자녀가 자기 물건을 망가뜨리고 욕을 해서 지금 붙잡고 있다고 말하고, 아이가 울고 있다고 말로만 전한다.",
       "상대가 먼저 말한 자녀 이름만 되받아 이미 다 알고 있는 척한다.",
-      "큰돈이 아니라 수리비 정도만 지금 바로 보내면 아이를 보내 주겠다며 소액 즉시 이체를 요구하고, 망설이면 금액을 조정해 한 번 더 요구한 뒤 더 조르지 않고 마무리한다.",
+      `큰돈이 아니라 수리비 정도만 지금 바로 보내면 아이를 보내 주겠다며 ${KIDNAP_TRANSFER_STAGE_TAIL}`,
     ),
+    dropLabels: KIDNAP_SCREEN_DROP_LABELS,
     extraTactics: [
       "일상 시비 핑계 협박 — '댁 아이가 제 휴대폰 액정을 깨고 욕까지 해서 지금 데리고 있습니다' 처럼 납치가 아닌 일상 시비를 붙잡아 둔 이유로 댄다. 실제 장소 · 차량 · 신체 위해는 말하지 않는다.",
       "가족 정보 언급 — 상대가 먼저 말한 자녀 이름만 되받아 '○○이 지금 여기 있습니다' 처럼 이미 다 아는 척한다. 학원 같은 장소는 '○○학원'처럼 가린 형태로만 말하고, 상대가 말하지 않은 이름은 지어내 단정하지 않는다.",
       "울음 언급 협박 — '지금 옆에서 아이가 울고 있습니다' 처럼 말로만 전해 공포를 키운다. 우는 소리를 흉내 내거나 신체 위해를 묘사하지 않는다.",
+      KIDNAPPING_SCREEN_TRANSFER_TACTIC,
     ],
     exitBlock: ["D2_secrecy", "D4_procedural_legitimacy", "D5_call_retention", "D6_report_blocking"],
-    sms: [],
-    legs: ONE_LEG("신원 불상", "male"),
+    sms: [KIDNAP_ACCOUNT_SMS],
+    legs: KIDNAP_SCREEN_LEG,
     ...ADVANCED,
-    channels: ["voice"],
+    channels: ["voice", "sms"],
     demandStages: 2,
     sources: ["S26", "C16"],
   },
@@ -2213,12 +2251,13 @@ const SPECS: VariantSpec[] = [
     dropLabels: ["권위 암시", "수사 서류 언급", "코인 구매·송금 요구"],
     extraTactics: [PROSECUTION_CASE_RECORD_AUTHORITY_TACTIC, PROSECUTION_CASE_RECORD_TACTIC, ASSET_INFO, PROSECUTION_VOUCHER_DEMAND, PROSECUTION_SITE_EXTRA_TACTICS[0]!],
     exitBlock: ["D2_secrecy", "D4_procedural_legitimacy", "D5_call_retention"],
-    sms: [{ ...PROSECUTION_CASE_LINK_SMS }],
+    // 2026-11-07 — 상품권 구매 안내 문자(결정 화면)를 사건 조회 문자 뒤에 선언한다(선언 순서 = 단계 순서 · AC-096 (b) 고급 문자 2통).
+    sms: [{ ...PROSECUTION_CASE_LINK_SMS }, PROSECUTION_VOUCHER_SMS],
     legs: [{ callerLabel: "검찰 수사관", personaPrompt: PROSECUTION_VOUCHER_PERSONA, speakerGender: "male", minUserTurns: 0, maxUserTurns: 20 }],
     ...ADVANCED,
     channels: ["voice", "sms"],
     demandStages: 3,
-    decisionMoment: "상품권을 사서 핀 번호를 불러 주겠다고 하는 순간",
+    decisionMoment: "문자 속 링크의 구매 화면에서 상품권을 결제하고 화면에 뜬 핀 번호를 불러 주는 순간",
     sources: ["S44", "C24"],
   },
   {
