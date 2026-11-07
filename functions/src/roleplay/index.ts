@@ -17,7 +17,6 @@ import { completeWithFallback, getLlmClient, LLM_FIRST_TURN_TIMEOUT_MS } from ".
 import { triggerReportGeneration } from "../report";
 import { findFlowVariant, resolveSessionScenarioPrompt, routeEndsWithoutAccount, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
 import {
-  buildPriorLegContext,
   currentLegIndex,
   legHangupAdjustments,
   legStartUserTurns,
@@ -325,14 +324,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // ② 서버에서 scenarioPrompts 기반으로 조립한 프롬프트 + 사용자 입력 구분자 감싸기(ADR-0004) →
     // LLM 어댑터(functions/src/llm) 호출.
     // T191 — 사용자 입력 속 `[[SMS:` 흉내는 `wrapUserInputAsData`(promptAssembly `escapeSentinelLookalikes`)가 무력화한다.
-    // §142(PR-3) — 다통화 레그 1 이후는 모델 이력을 현재 레그로 자르고 앞 통화는 인계 블록으로 넘긴다(Live 새 연결과 같은 입력).
+    // §142(PR-3) — 다통화 레그 1 이후는 모델 이력을 현재 레그로 자른다(Live 새 연결과 같은 입력).
     const legHistory =
       sessionCallLeg && sessionCallLeg.legIndex > 0
         ? splitLegHistory(storedHistory, legStartUserTurns(session.relay, sessionCallLeg.legIndex))
         : undefined;
-    const priorLegBlock = legHistory
-      ? buildPriorLegContext(legHistory.prior.map((m) => ({ role: m.role, text: m.textMasked, legIndex: m.legIndex, notSpoken: m.notSpoken === true })))
-      : undefined;
+    // 2026-11-07 — 앞 통화(`legHistory.prior`)는 싣지 않는다(새 통화 화자는 앞 통화 대화를 모른다 · 사건 골격은 레그 프롬프트 `caseBrief`).
     const llmHistory = toLlmHistory(legHistory ? legHistory.current : storedHistory);
     llmHistory.push({ role: "user", content: wrapUserInputAsData(maskedUserText) });
 
@@ -776,9 +773,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       // G170 — 턴 번호만(대사 0).
       logger.info("[§132] 인증번호 다시 요구 지시", { sessionId, userTurns: userTurnsNow, since: otpArrivedSince });
     }
-    // §142(PR-3) — 다통화 레그 1 이후는 앞 통화 인계 블록을 맨 앞에(그 밖 = undefined = 종전 바이트 동일).
+    // §142(PR-3)의 앞 통화 인계 블록은 2026-11-07에 없앴다(위 `legHistory` 주석).
     const turnInstructionWithSms =
-      [priorLegBlock, promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction, otpFollowUpInstruction, otpHoldInstruction]
+      [promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction, otpFollowUpInstruction, otpHoldInstruction]
         .filter(Boolean)
         .join("\n") || undefined;
     // §120 — 사진 턴이면 캐릭터 유지형 반응 지시 1줄을 맨 뒤에 붙인다(`photoTurn.ts` 표 · 그 밖 턴 = 없음 · 문면 바이트 동일).

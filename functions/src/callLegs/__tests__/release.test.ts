@@ -13,11 +13,12 @@ import { Timestamp } from "firebase-admin/firestore";
 const SCENARIO = "card-company-impersonation";
 const read = (rel: string) => readFileSync(path.resolve(__dirname, "../../../src", rel), "utf8").replace(/\r\n/g, "\n");
 
-test("[§142 PR-4 배정] 카드사 고급 배정 풀 = 재구성 2루트(fv-k3dn · fv-r8vb) · fv-x7ue · fv-w3dq는 은퇴(옛 세션 해석은 그대로)", () => {
+// 2026-11-07(사용자 승인 "R1로 축소·진행") — R2(fv-r8vb)도 배정 은퇴. 배정 풀 = R1(fv-k3dn) 하나(단언 `cardR1Reduce.test.ts`).
+test("[§142 PR-4 배정] 카드사 고급 배정 풀 = 재구성 R1(fv-k3dn) · fv-x7ue · fv-w3dq · fv-r8vb는 은퇴(옛 세션 해석은 그대로)", () => {
   const pool = listFlowVariants(SCENARIO, "advanced").map((v) => v.variantId);
-  assert.ok(pool.includes("fv-k3dn") && pool.includes("fv-r8vb"), `배정 풀: ${pool.join(", ")}`);
+  assert.ok(pool.includes("fv-k3dn") && !pool.includes("fv-r8vb"), `배정 풀: ${pool.join(", ")}`);
   assert.ok(!pool.includes("fv-x7ue") && !pool.includes("fv-w3dq"));
-  for (const id of ["fv-x7ue", "fv-w3dq"]) {
+  for (const id of ["fv-x7ue", "fv-w3dq", "fv-r8vb"]) {
     assert.equal(findFlowVariant(id)?.retired, true, `${id}는 은퇴 표식`);
     assert.ok(findFlowVariant(id), `${id} 옛 세션 해석은 남는다`);
   }

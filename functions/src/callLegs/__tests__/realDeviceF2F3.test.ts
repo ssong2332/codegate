@@ -81,15 +81,16 @@ test("[F2 배선] 실시간 · 폴백 두 경로가 같은 판정을 쓴다", ()
   assert.ok(read("roleplay/index.ts").includes("followUpPending: isLegDialSmsPending(legVariant, session.relay, smsDelivered.map((d) => d.smsId)),"));
 });
 
-test("[F3] '신청했다'는 답에도 이어 간다 — 배송원(R1 레그 0) · R2 첫 상담원(레그 0)에만 · R1 상담원(레그 1)은 종전", () => {
+// 2026-11-07(R1 축소) — 새 통화 화자는 앞 통화를 모른다 ⇒ R1 상담원(레그 1)도 '신청했다' 갈래를 갖는다(종전 "R1 상담원은 배송원 통화에서 미신청을 들었다" 전제 폐기).
+test("[F3] '신청했다'는 답에도 이어 간다 — 배송원(R1 레그 0) · R2 첫 상담원(레그 0) · R1 상담원(레그 1, 2026-11-07부터)", () => {
   const courier = resolveSessionScenarioPrompt(SCENARIO, "fv-k3dn", 0)!.personaPrompt;
   assert.ok(courier.includes("상대가 카드를 신청했다고 하면 끝내지 말고"));
   assert.ok(courier.includes("상대가 카드를 신청했다고 하면 통화를 끝내지 말고"));
   const r2Agent = resolveSessionScenarioPrompt(SCENARIO, "fv-r8vb", 0)!.personaPrompt;
   assert.ok(r2Agent.includes("상대가 카드를 직접 신청했다고 하면 끝내지 말고"));
   const r1Agent = resolveSessionScenarioPrompt(SCENARIO, "fv-k3dn", 1)!.personaPrompt;
-  assert.ok(!r1Agent.includes("직접 신청했다고 하면"));
-  // R2 첫 상담원도 단계 수 · 순서 그대로(첫 단계만 늘었다).
-  assert.equal(r2().legs[0].stages?.length, r1().legs[1].stages?.length);
-  assert.deepEqual(r2().legs[0].stages?.slice(1), r1().legs[1].stages?.slice(1));
+  assert.ok(r1Agent.includes("상대가 카드를 직접 신청했다고 하면 끝내지 말고"));
+  // R2 첫 상담원 = R1 상담원과 같은 단계(사건 골격만 다르다).
+  assert.deepEqual(r2().legs[0].stages, r1().legs[1].stages);
+  assert.notEqual(r2().legs[0].caseBrief, r1().legs[1].caseBrief);
 });

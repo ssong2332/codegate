@@ -191,70 +191,14 @@ export function resolveLegEntry(
   return variant.legs[legIndex]?.entry ?? "incoming";
 }
 
-/**
- * 앞 레그 인계 블록(D5 — 새 연결은 앞 통화를 모른다). 같은 일당이 이어받은 설정이라 정보는 알고 있되, 앞 사람이 아니며 그 말을 되풀이하지 않는다.
- * 입력 = 이번 레그 시작 전까지의 대화(세션 `messages` — 앞 레그 전사는 레그 끝에 제출된다). 결정적(추가 LLM 호출 0).
- *
- * 2026-11-07 실기기 신고(세션 1d84811b — "방금 한 말만 반영되고 그 전 대화는 반영 안 된다") — 종전에는 마지막 16줄만 실어 4번째 통화쯤이면
- * 첫 통화에서 참가자가 말한 사실(카드 신청 여부 · 밖이라 못 받음 등)이 빠졌다. 이제 줄 고르기 규칙(이 순서대로):
- * | # | If | Then |
- * |---|---|---|
- * | 1 | 사용자 · 사기범 줄이 아니다 · 빈 줄 · 참가자에게 도달하지 않은 줄(`notSpoken`) | 뺀다 |
- * | 2 | 참가자 줄 | 전부 싣는다(앞 통화들 전체 — 참가자가 말한 사실 · 한 일) |
- * | 3 | 참가자 줄 바로 앞의 상대 줄(그 답의 질문 — "네"만으로는 뜻이 없다) | 싣는다(`PRIOR_LEG_CONTEXT_LINE_MAX_CHARS`자로 자름) |
- * | 4 | 마지막 `PRIOR_LEG_RECENT_LINES`줄(직전 통화 끝부분) | 싣는다 |
- * | 5 | 고른 줄이 `PRIOR_LEG_MAX_LINES`를 넘는다 | 끝부분(4행) 밖의 상대 줄을 오래된 것부터 빼고 · 그래도 넘으면 오래된 참가자 줄을 뺀다 |
- * 줄에 `legIndex`(§142 N3)가 있으면 통화마다 머리줄을 넣는다. 빠진 줄 자리는 "(…)" 한 줄로 표시한다.
- */
-export const PRIOR_LEG_MAX_LINES = 48;
-export const PRIOR_LEG_RECENT_LINES = 8;
-export const PRIOR_LEG_USER_LINE_MAX_CHARS = 160;
-export const PRIOR_LEG_CONTEXT_LINE_MAX_CHARS = 100;
-export type PriorLegMessage = { role: string; text?: string; legIndex?: number; notSpoken?: boolean };
-
-const clip = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max)}…` : text);
-
-export function buildPriorLegContext(messages: readonly PriorLegMessage[]): string | undefined {
-  const rows = messages
-    .filter((m) => (m.role === "user" || m.role === "scammer") && m.notSpoken !== true && typeof m.text === "string" && m.text.trim().length > 0)
-    .map((m) => ({ user: m.role === "user", text: m.text!.trim(), leg: m.legIndex }));
-  if (rows.length === 0) return undefined;
-  const recentFrom = Math.max(0, rows.length - PRIOR_LEG_RECENT_LINES);
-  const keep = rows.map((row, i) => row.user || i >= recentFrom || rows[i + 1]?.user === true);
-  const count = () => keep.filter(Boolean).length;
-  for (let i = 0; i < recentFrom && count() > PRIOR_LEG_MAX_LINES; i += 1) if (!rows[i].user) keep[i] = false;
-  for (let i = 0; i < recentFrom && count() > PRIOR_LEG_MAX_LINES; i += 1) keep[i] = false;
-
-  const byLeg = rows.some((row) => row.leg !== undefined);
-  const lines: string[] = [];
-  let lastLeg: number | undefined;
-  let gap = false;
-  rows.forEach((row, i) => {
-    if (byLeg && row.leg !== undefined && row.leg !== lastLeg) {
-      lines.push(`— ${row.leg + 1}번째 통화 —`);
-      lastLeg = row.leg;
-      gap = false;
-    }
-    if (!keep[i]) {
-      if (!gap) lines.push("(…)");
-      gap = true;
-      return;
-    }
-    gap = false;
-    const max = row.user || i >= recentFrom ? PRIOR_LEG_USER_LINE_MAX_CHARS : PRIOR_LEG_CONTEXT_LINE_MAX_CHARS;
-    lines.push(`${row.user ? "참가자" : "앞 통화 상대"}: ${clip(row.text, max)}`);
-  });
-  return [
-    "[앞선 통화 기록] 이 통화 전에 참가자가 같은 일당의 다른 사람들과 나눈 통화들이다. 너는 그 사람들이 아니다.",
-    "참가자가 한 말은 첫 통화부터 빠짐없이 싣는 것을 우선했고, 상대 말은 참가자 답의 바로 앞 질문과 직전 통화 끝부분만 실었다.",
-    "기록에 나온 사실(참가자가 말한 정보 · 한 일 · 이미 답한 것)은 이미 전달받은 것처럼 자연스럽게 이어 가되, 앞 사람의 말을 되풀이하거나 기록을 읽어 주지 않는다. 참가자가 이미 답한 것을 처음 듣는 것처럼 다시 묻지 않는다.",
-    ...lines,
-  ].join("\n");
-}
+// 2026-11-07 실기기 신고(카드사 고급 R1 · 사용자 "a와 이야기 한 내용을 b나 c가 알면 안되지" · "새로 통화가 시작되면 나를 확인하는 과정이 있어야 하는데
+// 그게 없어") — 앞 통화 대화 인계 블록(`buildPriorLegContext` — 참가자 발화 전부 + 마지막 8줄, #498)을 **없앴다**. 다음 통화 화자는 앞 통화에서 참가자가
+// 한 말을 모르고, 같은 일당이 넘겨받았을 사건 골격(레그 `caseBrief` — 서버 고정 문면)만 안다. 그 골격은 레그 프롬프트(`flowVariants.ts`
+// `resolveMultiCallLegPrompt`)에 실린다 — Live · 폴백 · 프로브가 같은 입력을 본다(앞 통화 메시지 읽기 0).
 
 /**
  * 폴백(텍스트 턴) 이력을 레그 경계로 나눈다. 레그 시작 = 앞 레그의 마지막 사용자 발화(`legStartUserTurns`번째)와 그 발화에 대한 사기범 답 1개 뒤.
- * 새 레그의 모델 이력은 `current`만 — 앞 통화는 `buildPriorLegContext(prior)`로 인계한다(Live 새 연결과 같은 입력).
+ * 새 레그의 모델 이력은 `current`만 — 앞 통화(`prior`)는 모델에 싣지 않는다(Live 새 연결과 같은 입력 · 사건 골격은 레그 프롬프트).
  */
 export function splitLegHistory<T extends { role: "user" | "scammer" }>(
   messages: readonly T[],

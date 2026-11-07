@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Timestamp } from "firebase-admin/firestore";
 import {
-  buildPriorLegContext,
   legHangupAdjustments,
   legVoiceSlot,
   planLegStart,
@@ -113,9 +112,10 @@ test("[§142.3] 레그 문자 게이트 — 현재 레그 문자만 · 하한은
   const leg0 = resolveDeclaredSms(SCENARIO, "fv-k3dn", { relay: undefined }).declared;
   assert.deepEqual(leg0.map((s) => s.smsId), ["card-callback-number"]);
   const leg1 = resolveDeclaredSms(SCENARIO, "fv-k3dn", { relay: { legIndex: 1, legStartUserTurns: [0, 4], connected: true } }).declared;
-  assert.deepEqual(leg1.map((s) => [s.smsId, s.notBeforeUserTurns]), [["card-remote-support-link", 2 + 4]]);
+  // 2026-11-07 — 새 통화 본인 확인 단계로 레그 하한 +1(원격 지원 2 → 3 · 안전계좌 3 → 4).
+  assert.deepEqual(leg1.map((s) => [s.smsId, s.notBeforeUserTurns]), [["card-remote-support-link", 3 + 4]]);
   const last = resolveDeclaredSms(SCENARIO, "fv-k3dn", { relay: { legIndex: 3, legStartUserTurns: [0, 4, 9, 12], connected: true } }).declared;
-  assert.deepEqual(last.map((s) => [s.smsId, s.notBeforeUserTurns]), [["card-safe-account", 3 + 12]]);
+  assert.deepEqual(last.map((s) => [s.smsId, s.notBeforeUserTurns]), [["card-safe-account", 4 + 12]]);
   // 범위 인자 부재(도달 랜딩 · 계좌 해석 등 변형 전체를 보는 지점) = 종전(전체 선언).
   assert.equal(resolveDeclaredSms(SCENARIO, "fv-k3dn").declared.length, R1.sms.length);
 });
@@ -138,7 +138,7 @@ test("[§142.3 D5] 레그 목소리 — 남성 인물 셋(배송원 · 감독기
   assert.equal(resolveSessionCallLeg(findFlowVariant("fv-akj5"), { scenarioId: SCENARIO }), undefined);
 });
 
-test("[§142.3] 폴백 이력 분할 — 레그 시작 = 앞 레그 마지막 사용자 발화와 그 답 뒤 · 앞 통화는 인계 블록", () => {
+test("[§142.3] 폴백 이력 분할 — 레그 시작 = 앞 레그 마지막 사용자 발화와 그 답 뒤 · 앞 통화는 모델에 싣지 않는다(2026-11-07)", () => {
   const history = [
     { role: "scammer" as const, textMasked: "a0" },
     { role: "user" as const, textMasked: "u1" },
@@ -151,10 +151,6 @@ test("[§142.3] 폴백 이력 분할 — 레그 시작 = 앞 레그 마지막 �
   assert.deepEqual(prior.map((m) => m.textMasked), ["a0", "u1", "a1", "u2", "a2"]);
   assert.deepEqual(current.map((m) => m.textMasked), ["u3"]);
   assert.deepEqual(splitLegHistory(history, 0).current.length, history.length);
-  const block = buildPriorLegContext(prior.map((m) => ({ role: m.role, text: m.textMasked })));
-  assert.ok(block?.startsWith("[앞선 통화 기록]"));
-  assert.ok(block?.includes("참가자: u2"));
-  assert.equal(buildPriorLegContext([]), undefined);
 });
 
 test("[§142 R7] 다통화 변형은 확인 창구 세션이 아니다 — 끊기 4행(호 전환 전 금지)이 열릴 길이 없다 · 종전 변형은 그대로", () => {

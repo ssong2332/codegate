@@ -85,3 +85,24 @@ export function lookupDialedNumber(scenarioId: string, dialed: string): DialEntr
   if (key.length === 0) return undefined;
   return (DIAL_DIRECTORY[scenarioId] ?? []).find((entry) => normalizeDialedNumber(entry.number) === key);
 }
+
+const DIGIT_WORDS = ["공", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구"] as const;
+
+/**
+ * 2026-11-07(R1 축소 · 클라 연락처 제거) — 사기범이 공식 대표번호를 **말로 불러 줄 때**의 꼴. 숫자를 한 자리씩 읽고 하이픈 묶음은 쉼표로 나눈다
+ * ("02-0700-3324" → "공이, 공칠공공, 삼삼이사"). 모델이 숫자를 지어내거나 "칠백" 식으로 읽지 않게 서버가 읽는 꼴까지 정해 준다.
+ */
+export function spokenDialNumber(number: string): string {
+  return number
+    .split("-")
+    .map((group) => [...group].filter((ch) => /\d/.test(ch)).map((d) => DIGIT_WORDS[Number(d)]!).join(""))
+    .filter((group) => group.length > 0)
+    .join(", ");
+}
+
+/** 번호부 항목의 화면 번호(없으면 예외 — 데이터 상수 오류는 모듈 로드에서 드러나야 한다). */
+export function dialNumberOf(scenarioId: string, numberId: string): string {
+  const entry = findDialEntry(scenarioId, numberId);
+  if (!entry) throw new Error(`dialDirectory: ${scenarioId}/${numberId} 없음`);
+  return entry.number;
+}
