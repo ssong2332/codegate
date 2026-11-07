@@ -148,6 +148,13 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     listOtpItems(session.scenarioId).map((item) => withSessionOtp(item, sessionId).otpCode!),
     // §142 N3 — 다통화 변형은 대사의 수법을 그 통화 목록에서만 고른다(통화 번호 = 메시지 `legIndex`).
     multiCallLegTactics(multiCallVariant),
+    // ⭐ PR-B — 정당한 제3자 통화(대출 실행 확인 상담원)는 사기 대사가 아니고, 그 결과(실행)만 속은 순간으로 올린다(판정표 G).
+    multiCallVariant?.legs.some((leg) => leg.genuine)
+      ? {
+          legIndexes: multiCallVariant.legs.flatMap((leg, i) => (leg.genuine ? [i] : [])),
+          ...(session.loanReview ? { loanReview: session.loanReview.outcome } : {}),
+        }
+      : undefined,
   );
 
   // ②-b 통화 중 문자 이벤트 스냅샷(T89, §15.1.5, AC-059) — `sessions/{sid}/inCallSms`를 **1회 추가

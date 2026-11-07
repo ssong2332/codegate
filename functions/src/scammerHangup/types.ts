@@ -20,5 +20,5 @@ export type RequestScammerHangupResponse = {
    * §142 — 다통화 변형의 마지막이 아닌 레그에서 승인된 끊기 = **레그 끝**(세션은 이어진다). 클라는 통화를 내리고 `exit`대로 다음 레그를 연다
    * (`dial` = 전화 앱 다이얼 · `transfer` = 대기음 뒤 자동 연결). 부재 = 종전(세션 끝).
    */
-  legEnd?: { exit: "dial" | "transfer" };
+  legEnd?: { exit: "dial" | "transfer" | "incoming" };
 };

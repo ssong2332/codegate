@@ -33,6 +33,8 @@ export type HangupLegScope = {
   turnsSinceLegStart: number;
   /** 실기기 신고 F2 — 이 레그의 번호 문자가 아직 도착하지 않았다(`callLegs/legHandoff.ts` `isLegDialSmsPending`) → 4-b행. 부재 = 거짓. */
   dialSmsPending?: boolean;
+  /** ⭐ PR-B — 화면 보류 레그(`holdUntilScreens`)의 화면이 남았다(`goalAction.ts` `isLegScreenHoldPending`) → 4-c행. 부재 = 거짓(종전). */
+  screenHoldPending?: boolean;
 };
 
 /** 클라 주장값(OQ-A120 — S5b와 같은 등급). T192 C3: 하한 입력이 사기범 턴에서 사용자 발화로 바뀌었다(§79.19 (2) 8). */
@@ -123,7 +125,7 @@ export async function decideAndMarkRealtimeHangup<Ref>(
     // §142 — 마지막이 아닌 레그에는 후속 단계 · 결정 화면이 없다(4-b · 4-c 입력 거짓).
     // F2 — 마지막이 아닌 레그는 번호 문자가 남았을 때만 4-b(다음 번호가 문자에만 있는 레그 · 사유 무관).
     followUpPending: legScope ? legScope.dialSmsPending === true : followUpPending,
-    decisionScreenPending: legScope ? false : decisionScreenPending,
+    decisionScreenPending: legScope ? legScope.screenHoldPending === true : decisionScreenPending,
     // P1 M1 — 실시간은 모델의 `end_call` 사유가 판정 시점에 있다(4-c행만 읽는다).
     hangupKind: claims.kind,
     userTurns: claims.userTurns,

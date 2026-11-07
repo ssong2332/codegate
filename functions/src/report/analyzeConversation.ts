@@ -807,6 +807,15 @@ export function analyzeConversation(
    * 겹쳐도 그 통화에서 쓰지 않은 수법은 붙지 않는다). `legIndex`가 없거나 범위 밖인 메시지 · 인자 부재 = `weakenedTactics`(종전).
    */
   legTactics?: readonly (readonly string[])[],
+  /**
+   * ⭐ PR-B(2026-11-07 · 기관 사칭 고급 3통화 — 설계 §5 · D10 확인된 사실만) — 정당한 제3자 통화(대출 실행 확인 상담원)의 레그 번호 · 그 통화 결과.
+   * | # | If | Then |
+   * |---|---|---|
+   * | G1 | 대사가 정당한 제3자 레그의 것 | 사기 대사로 보지 않는다(수법 · 속은 순간 · 위험 신호 판정 0) |
+   * | G2 | 결과 = 실행 ∧ 그 통화에 참가자 발화가 있다 | 그 통화의 마지막 참가자 발화에 속은 순간 1개("확인 전화 얼버무리기 코칭" — 금융회사 확인에 사실과 다르게 답해 대출이 실행됐다) |
+   * | G3 | 그 밖(보류 · 결과 없음 · 인자 부재) | 순간 0(종전) |
+   */
+  genuineLegs?: { legIndexes: readonly number[]; loanReview?: "approved" | "held" },
 ): ConversationAnalysis {
   // ⭐ §55 D3 — **낭독되지 않은 문서는 분석에 넣지 않는다.** 넣으면 ⓐ 말한 적 없는 대사가
   // `tacticsUsed`("시도된 수법")에 오르고 ⓑ 바로 뒤 참가자 발화와 **짝지어져** 없는 "속은 순간"을
@@ -834,9 +843,13 @@ export function analyzeConversation(
   // §128(2) H4 — 지금까지 송금을 요구한 가장 최근 사기범 대사(없으면 undefined).
   let transferDemand: AnalysisMessage | undefined;
 
+  const isGenuineLegMessage = (message: AnalysisMessage): boolean =>
+    genuineLegs !== undefined && message.legIndex !== undefined && genuineLegs.legIndexes.includes(message.legIndex);
   for (let i = 0; i < sorted.length; i += 1) {
     const msg = sorted[i];
     if (msg.role !== "scammer") continue;
+    // PR-B G1 — 정당한 제3자 통화의 말은 사기 대사가 아니다.
+    if (isGenuineLegMessage(msg)) continue;
     if (PHOTO_DEMAND.test(msg.textMasked)) photoDemand = msg;
     if (isTransferDemand(msg.textMasked)) transferDemand = msg;
 
@@ -965,6 +978,22 @@ export function analyzeConversation(
     });
   }
 
+  // PR-B G2 — 대출 실행 확인 결과 = 실행(서버 기록 `loanReview` — 확인된 사실). 그 통화의 마지막 참가자 발화가 속은 순간이다.
+  if (genuineLegs?.loanReview === "approved") {
+    const lastGenuineReply = [...sorted].reverse().find((m) => m.role === "user" && isGenuineLegMessage(m));
+    if (lastGenuineReply && !deceivedMoments.some((moment) => moment.turnIndex === lastGenuineReply.turnIndex)) {
+      tacticLabelsUsed.add(LOAN_CHECK_COACHED_TACTIC);
+      deceivedMoments.push({
+        turnIndex: lastGenuineReply.turnIndex,
+        timeLabel: elapsedLabel(lastGenuineReply, sessionCreatedAtMs),
+        tactic: LOAN_CHECK_COACHED_TACTIC,
+        correctAction: LOAN_CHECK_CORRECT_ACTION,
+        tacticCategory: resolveTacticCategory(LOAN_CHECK_COACHED_TACTIC),
+      });
+      deceivedMoments.sort((a, b) => a.turnIndex - b.turnIndex);
+    }
+  }
+
   return {
     wasDeceived: deceivedMoments.length > 0,
     deceivedMoments,
@@ -972,6 +1001,12 @@ export function analyzeConversation(
     riskSignals,
   };
 }
+
+/** PR-B G2 — 수법 라벨(변형 수법 "확인 전화 둘러대기 코칭 — …"의 라벨과 같은 글자). */
+export const LOAN_CHECK_COACHED_TACTIC = "확인 전화 얼버무리기 코칭";
+/** PR-B G2 — 그 순간의 올바른 대처(리포트는 세션 밖 화면이라 실제 대응 안내 · 근거 금감원 소비자경보 2024-35호 · 금융소비자보호법 제46조). */
+export const LOAN_CHECK_CORRECT_ACTION =
+  "금융회사의 대출 확인 전화는 나를 지키는 절차입니다. 누가 대출을 권했는지 · 지금 누구와 통화 중인지 사실대로 말하세요 — 검찰 · 경찰 · 금융감독원은 대출을 받으라고 하지 않습니다. 이미 대출을 받았다면 그 금융회사와 112에 바로 알리고, 14일 안이면 대출계약 철회를 신청하세요.";
 
 /** "N초 시점" — 속은 순간 · 위험 신호가 같은 시간축을 쓴다(AC-026). */
 function elapsedLabel(message: AnalysisMessage, sessionCreatedAtMs: number): string {

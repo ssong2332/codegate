@@ -19,7 +19,7 @@ import {
   spokenDialNumber,
   SUPERVISOR_OFFICIAL_NUMBER_ID,
 } from "../../scenarios/dialDirectory";
-import { CARD_R1_SMS_SENDER, findInCallSmsItem, IN_CALL_SMS, SMS_SENDER_NUMBER } from "../../scenarios/inCallSms";
+import { CARD_R1_SMS_SENDER, findInCallSmsItem, IN_CALL_SMS, INSTITUTION_LOAN_SMS_SENDER, SMS_SENDER_NUMBER } from "../../scenarios/inCallSms";
 import { buildInCallSmsDoc } from "../../inCallSms/buildDoc";
 import * as legPlan from "../legPlan";
 
@@ -157,6 +157,8 @@ test("[R1 축소 4] R1 밖 카드사 문자 · 다른 시나리오 문자의 발
   for (const [scenarioId, items] of Object.entries(IN_CALL_SMS)) {
     for (const item of items) {
       if (scenarioId === SCENARIO && r1Ids.has(item.smsId)) continue;
+      // PR-B — 기관 사칭 고급 입금 안내(가상 캐피탈 발신 — `INSTITUTION_LOAN_SMS_SENDER` 표 · 단언은 `smsSenderNumber.test.ts`).
+      if (scenarioId === "institutional-impersonation" && INSTITUTION_LOAN_SMS_SENDER[item.smsId] !== undefined) continue;
       const expected = SMS_SENDER_NUMBER[scenarioId]!;
       assert.ok(item.senderLabel === expected || item.senderLabel.startsWith(`${expected} (`), `${scenarioId}/${item.smsId}: ${item.senderLabel}`);
     }

@@ -198,6 +198,7 @@ import InCallSmsOverlay from "@/components/InCallSmsOverlay";
 import CallLegScreens from "@/components/CallLegScreens";
 import {
   LEG_CALLBACK_DELAY_MS,
+  LEG_INCOMING_CALL_DELAY_MS,
   LEG_DIAL_CONNECT_MS,
   LEG_TRANSFER_CONNECT_MS,
   LEG_TRANSFER_HOLD_TONE,
@@ -219,6 +220,8 @@ import {
 import { buildRecents, officialNumberForTitle, type PhoneCallLog } from "@/lib/callLegs/phoneApp";
 import BankAppOverlay from "@/components/BankAppOverlay";
 import { fictionalBalanceFor, isBankAppEnabled, latestDemandAmount, myBankNameFor, type TransferTarget } from "@/lib/bankapp/bankApp";
+import { disburseLoan, loanDisbursedAmount } from "@/lib/bankapp/withdrawAccounts";
+import { LOAN_DISBURSED_SMS_ID, LOAN_SAFE_TRANSFER_LANDING_ID } from "@/lib/bankapp/loanFlow";
 import { readDebugFlagSearch } from "@/lib/realtime/debugFlags";
 import VerifyCallOverlay from "@/components/VerifyCallOverlay";
 import { LoadingStatus } from "@/components/ui";
@@ -449,6 +452,10 @@ export default function SessionCallPage() {
   // ⚠️ 이 값들은 타이머 effect(:phase만 의존)·한도 자동종료 effect·오디오 재생 어디에도 들어가지
   // 않는다(§15.1.1 — 넣으면 통화가 멈춰 이 기능의 존재 이유가 무너진다).
   const [inCallSms, setInCallSms] = useState<InCallSmsView[]>([]);
+  // ⭐ PR-B — 가상 캐피탈 입금 안내 문자가 도착하면(대출 실행 확인 결과 = 실행) 신청한 대출금이 첫 계좌에 들어온다(탭 메모리 · 서버 0 · 한 번).
+  useEffect(() => {
+    if (sessionId && inCallSms.some((sms) => sms.smsId === LOAN_DISBURSED_SMS_ID)) disburseLoan(sessionId);
+  }, [inCallSms, sessionId]);
   const [smsOverlayOpen, setSmsOverlayOpen] = useState(false);
   // 2026-11-07 실기기 신고 3(번호별 대화방) — 배너로 열면 그 문자를 보낸 번호의 대화방을 바로 연다. 그 밖(메시지 버튼 · 다이얼 · 시작 화면) = null → 받은 문자 목록.
   const [smsOverlayThread, setSmsOverlayThread] = useState<string | null>(null);
@@ -1897,7 +1904,7 @@ export default function SessionCallPage() {
     audioRef.current?.pause();
     speech.stop();
     // 넘김은 같은 통화가 이어진다(최근 기록 한 줄 = 화면에 보인 통화 하나). 직접 걸기로 끝나면 이 통화가 최근 기록에 남는다.
-    if (legEnd.exit === "dial") logCurrentCallEnded();
+    if (legEnd.exit === "dial" || legEnd.exit === "incoming") logCurrentCallEnded();
     try {
       await flushTranscript(legDiag);
     } catch {
@@ -1909,6 +1916,12 @@ export default function SessionCallPage() {
       // 2026-11-07 — 통화 화면 그대로(통화 시간 계속) · 연결음 대신 통화 대기음.
       startHoldTone();
       legTimeout(() => void openNextLeg("transfer"), LEG_TRANSFER_CONNECT_MS);
+      return;
+    }
+    // ⭐ PR-B — 다른 사람이 따로 걸어 오는 통화(대출 실행 확인 전화 · 검사 재통화). 조건 화면(대출 신청)을 마치지 않았으면 서버가 `not_ready`를
+    // 돌려주고 아래 `openNextLeg` 종전 갈래대로 훈련이 끝난다(대출을 신청하지 않았으면 확인 전화는 오지 않는다).
+    if (legEnd.exit === "incoming") {
+      legTimeout(() => void openNextLeg("callback"), LEG_INCOMING_CALL_DELAY_MS);
       return;
     }
     // D4 — 참가자가 다시 걸지 않으면 상대가 다시 걸어 온다.
@@ -4433,11 +4446,14 @@ export default function SessionCallPage() {
           bankIdentity={{ myBankName: myBankNameFor(sessionId ?? "", sortedSms.find((sms) => sms.bankName)?.bankName), ledgerKey: sessionId ?? "" }}
           // ⭐ PR-A(2026-11-07 — 적은 금액이 통과) — 요구액 판정표 R1: 올린 대사(`messages`)와 아직 올리지 않은 실시간 전사 중 사기범이 마지막으로 말한 금액.
           // 금액 값은 화면 안 비교에만 쓰인다(G138 — 기록 경로에는 비교 결과 하나).
-          demandAmountNow={() =>
-            latestDemandAmount([
-              ...messages.filter((m) => m.role === "scammer").map((m) => m.text),
-              ...transcriptRef.current.filter((t) => t.role === "scammer").map((t) => t.text),
-            ])
+          demandAmountNow={(landingId) =>
+            landingId === LOAN_SAFE_TRANSFER_LANDING_ID
+              ? // ⭐ PR-B — 대출금 보관 이체: 이 통화(재통화)에서 말한 금액 → 없으면 입금된 대출금(탭 메모리). 앞 통화의 안전계좌 금액은 쓰지 않는다.
+                (latestDemandAmount(transcriptRef.current.filter((t) => t.role === "scammer").map((t) => t.text)) ?? loanDisbursedAmount(sessionId ?? ""))
+              : latestDemandAmount([
+                  ...messages.filter((m) => m.role === "scammer").map((m) => m.text),
+                  ...transcriptRef.current.filter((t) => t.role === "scammer").map((t) => t.text),
+                ])
           }
         />
       )}

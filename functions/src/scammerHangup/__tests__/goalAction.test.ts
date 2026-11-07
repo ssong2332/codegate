@@ -191,7 +191,7 @@ test("[§108 배선] 실시간 콜러블 · 텍스트 폴백이 같은 함수로
 // §124(#239) — 말로 끝나는 결말(현금 · 금 · 대출금 전달 약속 · 현금 상환)의 새 루트 5벌이 후속 값 4를 갖는다.
 test("[§115 C-5 · §117 · §124] 후속 단계가 있는 변형 = 기관 사칭 고급 대출 유도 2벌(3) + 말로 끝나는 결말 5벌(4) · 나머지 확인 무력화 고급 변형은 종전 판정 그대로", () => {
   const withFollowUp = Object.fromEntries(FLOW_VARIANTS.filter((v) => v.goalFollowUpUserTurns !== undefined).map((v) => [v.variantId, goalFollowUpFor(v.scenarioId, v.variantId)]));
-  assert.deepEqual(withFollowUp, { "fv-c5fj": 3, "fv-pgqt": 3, "fv-q7cn": 4, "fv-g2ld": 4, "fv-r4hc": 6, "fv-e5mv": 4 });
+  assert.deepEqual(withFollowUp, { "fv-pgqt": 3, "fv-q7cn": 4, "fv-g2ld": 4, "fv-r4hc": 6, "fv-e5mv": 4 }); // PR-B — fv-c5fj는 3통화(화면 보류 · 4-c)
   assert.equal(goalFollowUpFor("card-company-impersonation", "fv-c5fj"), undefined, "시나리오가 다르면 적용 안 함");
   assert.equal(goalFollowUpFor("institutional-impersonation", undefined), undefined, "변형 없음 = 종전");
   // 다른 확인 무력화 고급 6종(기관 사칭 밖) — 후속 값이 없으므로 같은 입력에 같은 판정(넣든 빼든)
@@ -239,12 +239,13 @@ test("[§115 로그 재현] b6dfcbcf — 기관 사칭 고급 · 계좌 문자 �
 // ⭐ §117 — 운영 세션 f7047187(2026-10-23 11:56~11:59 KST · 기관 사칭 고급) 로그 재현: 계좌 문자 도착 발화 6 · 대출 요구 = 발화 7 응답 ·
 // 작별 인사 = 발화 8 응답. 종전(4)은 발화 9 `blocked_transfer` → 10 수락(참가자 "전화 안 끊어?" · "여보세요"). 이제 9에서 수락 · 대출 단계 몫(7 · 8)은 막는다.
 test("[§117 로그 재현] f7047187 — 이체 문자 도착(발화 6) 뒤 발화 7 · 8은 막고(대출 단계 몫) 발화 9 끊기를 받는다 · 종전 값 4는 9를 막았다", () => {
-  const declared = FLOW_VARIANTS.find((v) => v.variantId === "fv-c5fj")!.sms;
+  // ⭐ PR-B — fv-c5fj가 3통화로 바뀌어 후속 단계 값이 없다. 같은 값(3) · 같은 두 문자 구조인 은퇴 fv-pgqt로 판정표를 재현한다(운영 세션 당시 판정과 같은 입력).
+  const declared = FLOW_VARIANTS.find((v) => v.variantId === "fv-pgqt")!.sms;
   const delivered: DeliveredSmsRecord[] = [
     { smsId: "institution-otp", userTurnsAtArrival: 4 },
-    { smsId: "institution-asset-safe-account", userTurnsAtArrival: 6 }, // PR-A — 현행 fv-c5fj 선언 문자(금액 줄 · 같은 계좌)
+    { smsId: "institution-safe-account", userTurnsAtArrival: 6 },
   ];
-  const followUp = goalFollowUpFor("institutional-impersonation", "fv-c5fj");
+  const followUp = goalFollowUpFor("institutional-impersonation", "fv-pgqt");
   const input: GoalActionInput = { delivered, mockScreens: [], declared, declaredKnown: true, userTurns: 9, followUpUserTurns: followUp };
   assert.deepEqual(decide({ ...input, userTurns: 7 }), { status: "blocked_transfer", hangup: false, row: "4" }, "대출 요구에 답하기 전");
   assert.deepEqual(decide({ ...input, userTurns: 8 }), { status: "blocked_transfer", hangup: false, row: "4" }, "용도 코칭 몫(하한)");

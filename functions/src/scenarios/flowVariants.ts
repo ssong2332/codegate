@@ -86,12 +86,21 @@ export type FlowVariantSms = {
    * 부재 = 종전(세션 전체 · 레그 구분 없음).
    */
   leg?: number;
+  /**
+   * ⭐ PR-B(2026-11-07 · 기관 사칭 고급 앱 안 대출 체험 — docs/research/institution-advanced-loan-design-2026-11-07.md §6) — 대출 실행 확인 상담원
+   * 통화의 결과가 이 값일 때만 선언한다(세션 `loanReview.outcome`). 결과가 없거나 다르면 이 문자는 선언에서 빠진다(발송 · 결정 화면 · 백스톱 0).
+   * 부재 = 늘 선언(종전).
+   */
+  whenLoanReview?: "approved";
 };
 
 /** §142 — 레그로 들어오는 방식(판정표 Architecture.md §142.2). */
 export type FlowVariantLegEntry = "incoming" | "dial" | "transfer";
-/** §142 — 레그가 끝난 뒤 다음 레그로 가는 방식. */
-export type FlowVariantLegExit = "dial" | "transfer";
+/**
+ * §142 — 레그가 끝난 뒤 다음 레그로 가는 방식. ⭐ PR-B — `incoming` = 이 통화가 끝난 뒤 **다음 사람이 참가자에게 전화를 걸어 온다**(수신 화면 →
+ * 받기 · `startCallLeg({action:"callback"})`). 대출 실행 확인 상담원 · 그 뒤 검사 재통화가 이 방식이다.
+ */
+export type FlowVariantLegExit = "dial" | "transfer" | "incoming";
 
 export type FlowVariantLeg = {
   /** 화면 표시값(S7 화자 표기 · UX 계약 C-6/C-8) — 실제 부서명 · 이름 0(AC-102 (c)). */
@@ -122,6 +131,22 @@ export type FlowVariantLeg = {
    * 부재 = 블록 0(첫 수신 레그 — 배송원).
    */
   caseBrief?: string;
+  /**
+   * ⭐ PR-B — 이 레그의 상대는 **사기범이 아니다**(정당한 제3자 — 대출 실행 확인 상담원). 시스템 프롬프트는 사기범 조립(`buildSystemPrompt`)이 아니라
+   * `roleplay/genuineLegPrompt.ts`로 짓고, 실시간 도구는 결과 보고(`report_loan_review`) · 끊기만 선언한다(문자 · 확인 창구 0). 리포트는 이 통화의
+   * 대사를 사기 수법으로 해석하지 않는다(레그 수법 0). ⛔ `false`를 쓰지 않는다 — 부재가 거짓이다.
+   */
+  genuine?: true;
+  /**
+   * ⭐ PR-B — 마지막이 아닌 레그에서도 이 레그의 화면(선언 문자가 여는 모의 화면)을 마치기 전 · 적게 보낸 상태에서는 goal 끊기를 막는다(4-c행을 레그
+   * 범위로 · `goalAction.ts` `isLegScreenHoldPending`). 부재 = 종전(마지막이 아닌 레그는 4-c 입력 거짓).
+   */
+  holdUntilScreens?: true;
+  /**
+   * ⭐ PR-B — 나감이 `incoming`인 레그: 이 landingId의 화면을 제출했을 때만 다음 레그(상대가 걸어 오는 통화)를 연다. 미충족이면 `startCallLeg`가
+   * `not_ready`를 돌려주고 화면은 훈련을 끝낸다(대출을 신청하지 않았으면 대출 확인 전화는 오지 않는다). 부재 = 조건 없음.
+   */
+  opensNextAfterLanding?: string;
 };
 
 export type FlowVariant = {
@@ -451,10 +476,7 @@ const INSTITUTION_ADVANCED_OPENING = `검사라며 본인 명의가 범죄에 �
 // "코칭 직후 바로 끊음")는 그대로 둔다.
 const LOAN_PROOF_REASON =
   "'검수 과정에서 고객님 계좌가 부정 사기 대출에 연루된 정황이 함께 나왔습니다. 고객님이 직접 정상 절차로 대출을 한 번 받아 보시면 그 대출이 정상으로 나오는지로 명의 도용 여부가 입증됩니다. 받으신 대출금은 입증이 끝날 때까지 보관했다가 확인 뒤 상환 처리됩니다'처럼 왜 대출을 받아야 하는지부터 분명히 설명한다";
-const INSTITUTION_ADVANCED_LOAN_STAGE_V2 = `이체가 끝났다고 하면 ${LOAN_PROOF_REASON}. 그다음 금융회사에서 대출을 받아 그 돈도 같은 안전계좌로 옮기라고 요구한다. 은행 직원이 대출 용도를 물으면 생활비라고만 답하라고 시키고, 수사 기밀이라 가족 · 은행에 알리면 안 된다고 다시 다짐받는다. 상대가 거절하거나 망설이면 불이익을 한 번 암시한 뒤 더 조르지 않고 마무리한다.`;
-const INSTITUTION_LOAN_DEMAND_V2 =
-  "대출금 이체 요구 — '고객님 계좌가 부정 사기 대출에 연루돼 있어서, 정상 절차로 대출을 받아 보셔야 명의 도용 여부가 입증됩니다, 받으신 대출금은 입증이 끝날 때까지 안전계좌에 보관합니다' 처럼 대출을 받아야 하는 이유를 먼저 대고 대출금을 옮기게 하며, 은행 직원이 물으면 용도를 둘러대라고 시킨다. 실제 금융회사 이름 · 금액은 지어내 말하지 않는다.";
-
+// ⭐ PR-B(2026-11-07) — 종전 `fv-c5fj` 전용 대출 단계 · 수법(`INSTITUTION_ADVANCED_LOAN_STAGE_V2` · `INSTITUTION_LOAN_DEMAND_V2` — 앱 밖 대출)은 아래 3통화 상수로 바뀌었다.
 // 기관 사칭 고급 새 루트 2 — 결말만 다르고 앞 4단계(검사 · 안심 · 자산 파악 · 인증번호)는 fv-c5fj와 같다.
 // ② 현금 · 수표 예탁형 — 근거 C10(한국경제 2026-04-15 · "금감원 예탁 명목, 계좌 현금 전부 인출해 수표로 → 대면 전달") · C11 · S16.
 // ③ 금 구매형 — 근거 데일리안 2025-12-24(부산경찰 · "자산 실물 전수 조사" 명목 퇴직금 · 적금 해지 → 금 구입 → 골드바 대면 전달, 금 거래소 신고로 저지).
@@ -962,6 +984,123 @@ const CARD_REBUILD_R2 = cardRebuildSpec(
   { openerSmsId: "card-issue-notice", retired: true },
 );
 
+// ── ⭐ PR-B(2026-11-07 사용자 신고 *"대출 관련돼서 안내하다가 그냥 전화 끊는 문제"* · 사용자 결정 *"앱 안 대출 체험 만들기"* · D-L1 ~ D-L7) ─────────
+// 설계 docs/research/institution-advanced-loan-design-2026-11-07.md §3 · §6 · §7. 기관 사칭 고급 `fv-c5fj`를 3통화로 나눈다.
+// | 통화 | 상대 | 들어옴 · 나감 | 할 일 |
+// |---|---|---|---|
+// | 1 | 검사(사기범) | 수신 · 상대가 다시 걸어 옴 | 머리 4단계 → 안전계좌 980만 원(이체 화면) → 대출 이유 → 대출 안내 문자 → 앱 안 대출 신청(`loan-apply`) → 확인 전화 코칭 |
+// | 2 | 가상 캐피탈 대출 실행 확인 상담원(**사기범 아님**) | 수신 · 상대가 다시 걸어 옴 | 본인 신청 · 용도 · 누가 권했는지 · 통화 중인지 확인 → 결과 보고(실행 · 보류) |
+// | 3 | 같은 검사(같은 번호 · 같은 목소리) | 수신 · 마지막 | 실행이면 대출금 보관 계좌 문자 → 이체 화면 · 추가 요구 1회 · 보류면 "직원이 방해" 압박 1회 → 포기 |
+// ⛔ 앱 밖 행동 0 — 대출은 문자 링크의 앱 안 신청 화면에서만, 대출금 이체는 문자 링크의 이체 화면에서만. 실제 금융회사 이름 0(가상 캐피탈 — §83).
+// 근거: 금감원 소비자경보 2024-35호("정상 대출임을 입증해야 한다며 대출금 요구" · "국가기관은 대출을 권유하지 않는다") · 2025-1호(가족 · 금융회사에 알리지 말라).
+// 대출 실행 확인 전화 자체는 공개 사례 미확인 — D10 근거 수준 '중'(설계 §3 F7).
+const INSTITUTION_LOAN_CALLER_NUMBER = "02-6478-2718"; // 통화 1 · 3 = 시나리오 발신 번호(`src/content/scenarios/institutionalImpersonation.ts` callerLabel과 같다)
+const INSTITUTION_LOAN_OFFICER_NUMBER = "02-0719-3300"; // 통화 2 = 가상 캐피탈 대출센터(국번 0 — 실제로 없는 번호 형식)
+const INSTITUTION_LOAN_APPLY_STAGE = withSmsFirst(
+  `이체가 끝났다고 하면 ${LOAN_PROOF_REASON}. 그다음 대출 안내 문자를 보내고, 그 문자 속 링크의 비대면 대출 신청 화면에서 본인 확인 · 한도 조회 · 신청까지 마치게 한다. 대출 용도는 '생활비'로 고르라고 미리 일러 준다. 은행 · 금융회사 창구나 다른 앱에서 따로 대출을 받으라고 하지 않는다. 상대가 대출을 거절하거나 망설이면 ${PERSUADE_ONCE_BEFORE_SKIP} 그래도 거절하면 불이익을 한 번 암시한 뒤 더 조르지 않고 마무리한다(포기 끝내기).`,
+);
+const INSTITUTION_LOAN_COACH_STAGE =
+  "상대가 대출 신청을 마쳤다고 하면 곧 금융회사에서 대출 실행 확인 전화가 갈 거라고 알린다. 그 전화에서 용도를 물으면 생활비라고만 답하고, 누가 대출을 권했는지 · 지금 누구와 통화 중인지 · 수사기관에서 연락받았는지 물으면 모두 아니라고 답하라고 미리 일러 준다. 수사 기밀이라 가족 · 금융회사에 알리면 안 된다고 다시 다짐받고, 확인 전화가 끝나면 다시 연락하겠다고 한다.";
+const INSTITUTION_LOAN_APPLY_DEMAND =
+  "대출 신청 링크 유도 — '고객님 계좌가 부정 사기 대출에 연루돼 있어서, 정상 절차로 대출을 한 번 받아 보셔야 명의 도용 여부가 입증됩니다, 문자로 보내 드린 안내 링크에서 비대면으로 바로 신청하시면 됩니다' 처럼 대출을 받아야 하는 이유를 먼저 대고 문자 속 대출 신청 화면에서 신청하게 한다. 실제 금융회사 이름 · 금액은 지어내 말하지 않는다.";
+const INSTITUTION_LOAN_COACH_DEMAND =
+  "확인 전화 얼버무리기 코칭 — '금융회사에서 확인 전화가 오면 용도는 생활비라고만 하시고, 누가 시켰냐 통화 중이냐 물으면 아니라고만 하세요, 수사 기밀입니다' 처럼 금융회사의 확인 질문에 사실과 다르게 답하라고 미리 시킨다.";
+const INSTITUTION_LOAN_TRANSFER_DEMAND =
+  "대출금 이체 요구 — '대출금은 입증이 끝날 때까지 보관 계좌에 두셔야 합니다, 문자로 보내 드린 보관 계좌 링크에서 들어온 대출금 그대로 옮기시면 됩니다' 처럼 문자 속 링크의 이체 화면에서 대출금을 옮기게 한다. 은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다. 금액은 상대가 말한 입금액 그대로 쓰고 지어내지 않는다.";
+const INSTITUTION_LOAN_RECALL_DEMAND =
+  "확인 결과 무력화 — '그 직원이 범죄 조직과 연결돼 있을 수 있습니다, 그렇게 말씀하시면 수사가 방해됩니다' 처럼 정당한 확인 절차를 방해로 몰아 다시 따르게 하려 한다.";
+// 통화 1 — 검사(수신 · 나감 = 상대가 다시 걸어 옴 · 대출 신청 화면 제출이 있어야 통화 2가 온다).
+const INSTITUTION_LOAN_LEG_PROSECUTOR: FlowVariantLeg = {
+  callerLabel: INSTITUTION_LOAN_CALLER_NUMBER,
+  speakerGender: "male",
+  speakerId: "prosecutor",
+  minUserTurns: 3,
+  maxUserTurns: 24,
+  exit: "incoming",
+  holdUntilScreens: true,
+  opensNextAfterLanding: "loan-apply",
+  stages: [
+    INSTITUTION_HEAD_STAGES[0],
+    INSTITUTION_HEAD_STAGES[1],
+    INSTITUTION_HEAD_STAGES[2],
+    INSTITUTION_HEAD_STAGES[3],
+    withSmsFirst(INSTITUTION_ADVANCED_SAFE_AMOUNT_STAGE),
+    INSTITUTION_LOAN_APPLY_STAGE,
+    INSTITUTION_LOAN_COACH_STAGE,
+  ],
+  tacticLabels: [
+    "권위 암시",
+    "불이익 암시",
+    "신원정보 직접 요구",
+    "부인 시 명의 도용 암시",
+    "안전계좌 이체 요구",
+    "비밀 유지 요구",
+    "전화 끊음 저지",
+    "거래 은행·자산 정보 수집",
+    "인증번호 요구",
+    "이체 화면 유도",
+    "대출 신청 링크 유도",
+    "확인 전화 얼버무리기 코칭",
+    "안심 유도",
+  ],
+};
+/**
+ * 통화 2 — 가상 캐피탈 대출 실행 확인 상담원(**사기범 아님** — `genuine`). 페르소나 · 단계는 `roleplay/genuineLegPrompt.ts`가 사기범 블록 없이 조립한다.
+ * 캐피탈 이름 자리 `○○캐피탈`은 세션 가상 캐피탈명으로 바뀐다(§83 — 문자 발신 표기와 같은 이름).
+ */
+export const INSTITUTION_LOAN_OFFICER_PERSONA =
+  "너는 ○○캐피탈 비대면 대출센터에서 대출 실행 전 확인 전화를 거는 상담원이다(40대 여성 · 정중하고 차분한 존댓말). 너는 사기범이 아니고, 고객이 보이스피싱에 속아 대출을 받는 일을 막는 것이 이 확인 전화의 목적이다. 방금 이 고객 명의로 비대면 신용대출 신청이 접수됐다. 너는 그 신청이 있었다는 사실만 알고, 신청 금액 · 용도 · 고객이 누구와 무슨 통화를 했는지는 모른다 — 고객에게 직접 듣는다.";
+const INSTITUTION_LOAN_LEG_OFFICER: FlowVariantLeg = {
+  entry: "incoming",
+  callerLabel: INSTITUTION_LOAN_OFFICER_NUMBER,
+  personaPrompt: INSTITUTION_LOAN_OFFICER_PERSONA,
+  speakerGender: "female",
+  speakerId: "loan-officer",
+  minUserTurns: 3,
+  maxUserTurns: 10,
+  exit: "incoming",
+  genuine: true,
+  stages: [
+    "○○캐피탈 비대면 대출센터 상담원이라고 밝히고, 방금 접수된 비대면 신용대출을 고객님 본인이 직접 신청하셨는지 확인한다.",
+    "신청하신 대출의 용도가 어떻게 되는지 묻는다(용도를 미리 말하거나 단정하지 않는다).",
+    "보이스피싱 예방 확인이라며, 혹시 누가 대출을 권했거나 지금 누군가와 통화하면서 안내를 받아 신청하셨는지, 검찰 · 경찰 · 금융감독원이라며 연락받은 적이 있는지 묻는다.",
+    "대출금 사용 · 상환 계획을 한 문장으로 묻는다.",
+    "판단: 고객 답에 수사기관 · 금융감독원 · 안전계좌 · 명의 도용 입증 · 누가 시켰다는 말이 나오면 보류 — 먼저 결과 보고 도구를 보류로 부르고, '검찰 · 경찰 · 금융감독원은 대출을 받으라고 하지 않습니다, 보이스피싱이 의심되어 대출 실행을 보류합니다, 지금 통화하던 분과는 연락을 끊고 경찰에 확인해 주세요'처럼 안내한다. 고객이 끝까지 본인 의사라고 하고 다른 사람이 없다고 답하면 실행 — 먼저 결과 보고 도구를 실행으로 부르고, '확인됐습니다, 오늘 중 신청하신 계좌로 대출금이 입금됩니다'라고 안내한다. 어느 쪽이든 안내를 마치면 인사하고 통화를 끝낸다.",
+  ],
+  tacticLabels: [],
+};
+// 통화 3 — 같은 검사가 다시 건다(마지막 · 대출금 이체 화면이 결정 화면 — 실행일 때만 문자 선언).
+const INSTITUTION_LOAN_LEG_RECALL: FlowVariantLeg = {
+  entry: "incoming",
+  callerLabel: INSTITUTION_LOAN_CALLER_NUMBER,
+  speakerGender: "male",
+  speakerId: "prosecutor",
+  minUserTurns: 2,
+  maxUserTurns: 12,
+  stages: [
+    "앞서 통화한 같은 검사로서 다시 걸어, 금융회사 확인 전화는 받으셨는지 짧게 묻는다. 대출 확인 결과는 앱이 따로 알려 준 줄을 따른다.",
+    withSmsFirst(
+      "대출이 실행됐으면, 입증이 끝날 때까지 대출금을 보관해야 한다며 대출금 보관 계좌 안내 문자를 보내고, 그 문자 속 링크의 이체 화면에서 들어온 대출금을 옮기게 한다. 금액은 상대에게 입금된 금액을 물어 그 금액 그대로 말한다(지어내지 않는다).",
+    ),
+    `대출금 이체가 끝나면 입증이 끝나는 대로 대출은 상환 처리된다고 안심시키고, 남은 적금도 다음 확인 때 같은 절차가 필요할 수 있다고 한 번만 말로 일러 둔 뒤(지금 진행하지 않는다) 비밀을 다시 당부하고 통화를 끝낸다. ${VERBAL_ENDING_WRAP}`,
+    "대출이 보류됐으면, 그 직원이 범죄 조직과 연결됐을 수 있다 · 그렇게 말하면 수사가 방해된다며 한 번 탓하고 다시 따르라고 한 번만 요구한다. 상대가 따르지 않으면 불이익을 한 번 암시한 뒤 포기 끝내기로 통화를 끝낸다. 이 경우 보관 계좌 문자는 보내지 않는다.",
+  ],
+  tacticLabels: ["권위 암시", "불이익 암시", "비밀 유지 요구", "대출금 이체 요구", "확인 결과 무력화"],
+};
+/** PR-B — 이 루트 리포트의 교육 포인트(설계 §4 · 근거 금감원 소비자경보 2024-35호 · 금융소비자보호법 제46조 청약철회 — 리포트는 세션 밖 화면이라 실제 대응 안내다). */
+export const INSTITUTION_LOAN_REPORT_LESSONS: readonly string[] = [
+  "검찰 · 경찰 · 금융감독원은 대출을 받으라고 하지 않습니다. '명의 도용을 입증하려면 대출을 받아 보라'는 말은 사기입니다.",
+  "금융회사의 확인 전화 · 창구 질문은 나를 지키는 절차입니다. 누가 시킨 대로 용도를 둘러대라는 말 자체가 사기 신호이니 사실대로 말하세요.",
+  "대출금이나 예금을 '안전계좌 · 보관 계좌'로 옮기라는 요구는 100% 사기입니다.",
+  "이미 대출금을 보냈다면 바로 112와 그 금융회사에 지급정지를 요청하세요. 대출 뒤 14일 안이면 대출계약 철회를 신청할 수 있습니다(신용대출 4,000만 원 이하).",
+];
+const INSTITUTION_LOAN_SMS: FlowVariantSms[] = [
+  { ...INSTITUTION_ADVANCED_SMS_V3[0], leg: 0 },
+  { ...INSTITUTION_ADVANCED_SMS_V3[1], leg: 0 },
+  { purpose: "link", smsId: "institution-loan-guide", required: true, notBeforeUserTurns: 9, leg: 0, ...FAST_BACKSTOP },
+  { purpose: "transfer", smsId: "institution-loan-safe-account", required: true, notBeforeUserTurns: 1, leg: 2, whenLoanReview: "approved", ...FAST_BACKSTOP },
+];
+
 const SPECS: VariantSpec[] = [
   // ── institutional-impersonation (§2.6.3 1행 — 사례 C10 · C11 · C09, S16 · S11 · S27) ──────
   {
@@ -1007,36 +1146,33 @@ const SPECS: VariantSpec[] = [
     scenarioId: "institutional-impersonation",
     level: "advanced",
     authoring: "authored",
-    // ⭐ 2026-10-21 사용자 실기 신고(라이브 main 676eeb3 · 기관 사칭 × 고급 Live) — "인증번호를 요구하지 않았고, 이체도 웹사이트
-    // 형태가 아니라 내가 알아서 이체하는 것으로 됐다". 원인: 고급 2벌이 문자 선언 0(`sms: []`)이라 인증번호 문자 · 안전계좌 링크 문자 ·
-    // 이체 랜딩(UX-023 `safe-account-transfer` · D-115 계좌 미리 채움 + 금액 사용자 입력)이 **고급에서만** 도달 불가였고, 마지막 단계가
-    // 현금 전달(CASH_HANDOFF) · 코인(COIN_TRANSFER) 말 요구였다. 두 수법은 고급 전용 시나리오(`asset-protection-notice-call` fv-bmiq ·
-    // `prosecution-cooperation-call` fv-nss6)가 그대로 다룬다 — 여기서 빼도 수법 커버리지 손실 0.
-    // ⇒ 고급 2벌 모두 인증번호(identity · 필수) → 안전계좌 링크 문자(transfer · 필수 · 랜딩) 순서를 거친다. 필수 2개 선례 = loan fv-m3hd.
-    //    하한 2 · 4 — `planSmsBackstop`이 먼저 열리는 인증번호를 먼저 강제하고, 계좌 문자는 그 뒤 간격(2)을 지켜 열린다.
-    // §124(#239) — 사용자 실기 신고 (2) 대출 단계 이유 · (3) 내 정보 활용 · (9) 문자 도구 먼저. 단계 순서 · 문자 선언 목적 · 결정 순간은 그대로.
-    stages: st(...INSTITUTION_HEAD_STAGES, withSmsFirst(INSTITUTION_ADVANCED_SAFE_AMOUNT_STAGE), INSTITUTION_ADVANCED_LOAN_STAGE_V2),
+    // ⭐ 2026-10-21 사용자 실기 신고 — 인증번호 문자 · 안전계좌 링크 이체 화면(종전 주석 요지: 고급에서 화면이 닿지 않던 결함 수정).
+    // §124(#239) — 대출 단계 이유 · 내 정보 활용 · 문자 도구 먼저. PR-A(2026-11-07) — 안전계좌 980만 원(말 · 문자 · 화면 같은 금액).
+    // ⭐ PR-B(2026-11-07 사용자 신고 *"대출 관련돼서 안내하다가 그냥 전화 끊는 문제"* · 결정 *"앱 안 대출 체험"*) — 3통화(위 상수 주석 표).
+    // 종전 후속 단계 판정(`goalFollowUpUserTurns` · C-5)은 쓰지 않는다 — 통화 1은 화면 보류(`holdUntilScreens`) · 통화 3은 결정 화면(4-c)이 맡는다.
+    stages: st(...[INSTITUTION_LOAN_LEG_PROSECUTOR, INSTITUTION_LOAN_LEG_OFFICER, INSTITUTION_LOAN_LEG_RECALL].flatMap((leg) => leg.stages ?? [])),
     keepLabels: ["권위 암시", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "안전계좌 이체 요구", "비밀 유지 요구", "전화 끊음 저지"],
     extraTactics: [
       ASSET_INFO,
       INSTITUTION_OTP_DEMAND,
       INSTITUTION_SAFE_AMOUNT_TRANSFER,
-      INSTITUTION_LOAN_DEMAND_V2,
+      INSTITUTION_LOAN_APPLY_DEMAND,
+      INSTITUTION_LOAN_COACH_DEMAND,
+      INSTITUTION_LOAN_TRANSFER_DEMAND,
+      INSTITUTION_LOAN_RECALL_DEMAND,
       "안심 유도 — '협조만 하시면 약식으로 조용히 끝납니다' 처럼 위협과 번갈아 안심시켜 경계를 낮춘다.",
     ],
     // D2 · D5(콘텐츠) + D3 · D4(고급 오버레이 — 확인 무력화 카탈로그 보유 → d3_and_d4)
     exitBlock: ["D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy", "D5_call_retention"],
-    sms: [...INSTITUTION_ADVANCED_SMS_V3],
-    legs: [
-      { callerLabel: "검사", speakerGender: "male", minUserTurns: 3, maxUserTurns: 8 },
-      { callerLabel: "금융감독원 직원", speakerGender: "female", minUserTurns: 2, maxUserTurns: 10 },
-    ],
+    sms: INSTITUTION_LOAN_SMS,
+    legs: [INSTITUTION_LOAN_LEG_PROSECUTOR, INSTITUTION_LOAN_LEG_OFFICER, INSTITUTION_LOAN_LEG_RECALL],
     ...ADVANCED,
     channels: ["voice", "sms"],
     demandStages: 4,
-    decisionMoment: INSTITUTION_ADVANCED_DECISION_MOMENT,
-    goalFollowUpUserTurns: INSTITUTION_ADVANCED_FOLLOW_UP_USER_TURNS,
-    sources: ["C10", "C11", "C01", "S16", "S11"],
+    decisionMoment: "문자 링크의 이체 화면에서 안전계좌 · 대출금을 보내거나, 대출 실행 확인 전화에서 시킨 대로 용도를 둘러대는 순간",
+    sources: ["C10", "C11", "C01", "S16", "S11", "S42", "S40"],
+    multiCall: true,
+    reportLessons: INSTITUTION_LOAN_REPORT_LESSONS,
   },
   {
     variantId: "fv-pgqt",
@@ -2328,6 +2464,12 @@ const MULTI_CALL_LEG_END_DIAL =
 const MULTI_CALL_LEG_END_TRANSFER =
   "이 통화의 마지막 단계를 마치면 '연결해 드리겠습니다'처럼 짧게 말하고 통화를 넘긴다. 통화를 넘기는 것은 네 쪽에서 이 통화를 끝내는 것이다 — 넘기겠다고 말하는 그 응답에서 [진행 강제]의 끊기 규칙대로 원하던 것을 얻은 끝내기로 끝낸다. '잠시만 기다려 주세요'라고 한 뒤 이 통화에서 상대와 이야기를 이어 가지 않고, 다음 사람의 일을 대신 진행하지 않는다.";
 const MULTI_CALL_LAST_LEG = "이 통화가 이번 흐름의 마지막 통화다. 다른 사람에게 넘기겠다는 말은 하지 않는다.";
+/**
+ * ⭐ PR-B — 나감이 `incoming`인 레그(기관 고급 통화 1 · 통화 2). 이 통화가 끝나면 다른 사람이 참가자에게 따로 전화를 걸어 온다 — 넘기기 · 바꿔 주기가 아니다.
+ * 마지막 단계를 마치면 이 통화를 네 쪽에서 끝낸다([진행 강제]의 끊기 규칙 — 원하던 것을 얻은 끝내기).
+ */
+export const MULTI_CALL_LEG_END_INCOMING =
+  "이 통화의 마지막 단계를 마치면 짧게 인사하고 [진행 강제]의 끊기 규칙대로 원하던 것을 얻은 끝내기로 이 통화를 끝낸다. 다음 통화는 다른 사람이 따로 걸어 오는 것이라, 다른 사람에게 넘기거나 바꿔 주겠다는 말은 하지 않고 그 사람의 일을 대신 진행하지 않는다.";
 
 /**
  * §142 · R7(docs/research/realdevice-fixes-probe-2026-11-01.md — 확인 무력화 세션에서 포기 끊기가 4행에 막혀 통화가 끝나지 않음) —
@@ -2336,6 +2478,17 @@ const MULTI_CALL_LAST_LEG = "이 통화가 이번 흐름의 마지막 통화다.
  */
 export function sessionUsesVerifyIntercept(scenarioId: string, isAdvanced: boolean, flowVariantId: string | undefined): boolean {
   return hasVerifyIntercept(scenarioId) && isAdvanced && findFlowVariant(flowVariantId)?.multiCall !== true;
+}
+
+/**
+ * ⭐ PR-B — 이 세션의 현재 레그가 정당한 제3자 레그(`genuine`)면 그 레그(다통화 변형만 · 레그 번호 부재 = 0). 토큰 발급(`realtime/geminiProvider.ts`) ·
+ * 결과 기록(`recordLoanReview`)이 같은 판정을 쓴다. 그 밖 = undefined(사기범 레그 — 종전).
+ */
+export function genuineLegOf(flowVariantId: string | undefined, legIndex: number | undefined): FlowVariantLeg | undefined {
+  const variant = findFlowVariant(flowVariantId);
+  if (!variant?.multiCall) return undefined;
+  const leg = variant.legs[multiCallLegIndex(variant, legIndex ?? 0)];
+  return leg?.genuine ? leg : undefined;
 }
 
 /** §142 — 다통화 변형의 레그 번호 보정(범위 밖 · 비정수 = 마지막 레그). */
@@ -2352,8 +2505,10 @@ export const MULTI_CALL_IDENTITY_FIRST_RULE = "그래서 이 통화는 아래 �
 
 function resolveMultiCallLegPrompt(base: ScenarioPromptDoc, variant: FlowVariant, legIndex: number): ScenarioPromptDoc {
   const leg = variant.legs[multiCallLegIndex(variant, legIndex)];
-  const endRule =
-    leg.exit === "dial" ? MULTI_CALL_LEG_END_DIAL : leg.exit === "transfer" ? MULTI_CALL_LEG_END_TRANSFER : MULTI_CALL_LAST_LEG;
+  // ⭐ PR-B — 나감 incoming = 다른 사람이 따로 걸어 온다(넘기기 아님).
+  const endRule = leg.exit === "incoming"
+    ? MULTI_CALL_LEG_END_INCOMING
+    : leg.exit === "dial" ? MULTI_CALL_LEG_END_DIAL : leg.exit === "transfer" ? MULTI_CALL_LEG_END_TRANSFER : MULTI_CALL_LAST_LEG;
   const lines = [FLOW_BLOCK_HEADER, FLOW_BLOCK_LEAD, ...(leg.stages ?? []).map((summary, i) => `${i + 1}. ${summary}`), endRule];
   const brief = leg.caseBrief
     ? [MULTI_CALL_CASE_BRIEF_HEADER, `- ${leg.caseBrief}`, `- ${MULTI_CALL_NO_PRIOR_TALK_RULE}`, `- ${MULTI_CALL_IDENTITY_FIRST_RULE}`].join("\n")

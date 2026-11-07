@@ -315,7 +315,7 @@ const SESSION_WIDE_VARIANTS = FLOW_VARIANTS.filter((v) => !v.multiCall);
 
 test("[§142 배정 해제] 다통화 변형 = 레그 게이트를 지난다 — 레그마다 그 레그 문자만 · 범위 인자 없는 해석은 전체 선언(PR-4 배정 해제 뒤)", () => {
   const multi = FLOW_VARIANTS.filter((v) => v.multiCall);
-  assert.deepEqual(multi.map((v) => v.variantId).sort(), ["fv-k3dn", "fv-r8vb"]);
+  assert.deepEqual(multi.map((v) => v.variantId).sort(), ["fv-c5fj", "fv-k3dn", "fv-r8vb"]); // PR-B — 기관 사칭 고급 3통화
   for (const v of multi) {
     for (const [legIndex] of v.legs.entries()) {
       const relay = { legIndex, legStartUserTurns: v.legs.map((_, i) => i * 5), connected: true };

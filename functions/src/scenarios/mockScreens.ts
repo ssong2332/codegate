@@ -298,6 +298,8 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `courier-safe-transfer` | `scenarios/inCallSms.ts` COURIER_CUSTOMS_SCAM(문자 본문·칩 — P2 X6) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "안전계좌 이체 정보를 확인해 주세요" | "안전계좌로 이체하기" |
 // | `card-remote-support-install` | `scenarios/inCallSms.ts` CARD_COMPANY_IMPERSONATION(문자 본문·칩 — §142) | "아래에서 원격 지원 도우미를 설치해 주세요." | 링크에서 원격 지원 앱 설치 | "원격 지원 도우미를 설치해야 보안 점검이 시작됩니다" | "설치하고 권한 허용하기" |
 // | `card-safe-transfer` | `scenarios/inCallSms.ts` CARD_COMPANY_IMPERSONATION(문자 본문·칩 — §142) | "아래에서 자산 보호 이체를 진행해 주세요." | 링크에서 안전계좌 이체 | "자산 보호 조치가 완료되지 않았습니다" | "자산 보호 이체하기" |
+// | `loan-apply` | `scenarios/inCallSms.ts` INSTITUTIONAL_IMPERSONATION(문자 본문·칩 — PR-B) | "[명의도용 입증 절차] 비대면 대출 신청 안내" | 링크에서 비대면 대출 신청 | "비대면 신용대출 신청" | "대출 신청하기" |
+// | `loan-safe-transfer` | `scenarios/inCallSms.ts` INSTITUTIONAL_IMPERSONATION(문자 본문·칩 — PR-B) | "입금된 대출금 전액을 아래에서 이체해 주세요." | 링크에서 대출금 보관 이체 | "대출금 보관 이체가 아직 완료되지 않았습니다" | "보관 계좌로 이체하기" |
 // | `child-bank-transfer` | `roleplay/linkMarker.ts` LINK_LABELS(칩 라벨 — P2-c) | "이체하기" | 링크에서 이체 | "이체 금액을 입력해 주세요" | "이체하기" |
 // | `friend-bank-transfer` | `roleplay/linkMarker.ts` LINK_LABELS(칩 라벨 — P2-c) | "송금하기" | 링크에서 송금 | "송금할 금액을 입력해 주세요" | "송금하기" |
 // | `tax-refund-fee-transfer` | `scenarios/inCallSms.ts` TAX_REFUND_SCAM(문자 본문·칩 — P2-d) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "수수료 이체 정보를 확인해 주세요" | "수수료 이체하기" |
@@ -383,6 +385,8 @@ export const BANK_TRANSFER_LANDINGS: readonly string[] = [
   "protect-account-transfer",
   // §142 — 카드사 고급 재구성(다통화) 결말 안전계좌 이체.
   "card-safe-transfer",
+  // ⭐ PR-B — 기관 사칭 고급 3통화 결말 대출금 보관 이체.
+  "loan-safe-transfer",
 ];
 
 /** P2 — 이 랜딩이 훈련용 이체 화면인가(문자 문서의 받는 분 · 금액 미리 채움 필드를 싣는 단일 판별자 — `inCallSms/buildDoc.ts`). */
@@ -572,6 +576,47 @@ const INSTITUTIONAL_IMPERSONATION: MockScreenItem[] = [
     momentTactic: "범죄 연루 자금 보호를 빌미로 한 안전계좌 이체 유도",
     correctAction:
       "'안전계좌로 옮기라'며 계좌번호와 금액을 입력하라고 하면 그 자리에서 멈추세요 — 어떤 수사·금융기관도 돈을 다른 계좌로 옮기라고 하지 않습니다. ① 통화를 끊고 이미 알고 있는 은행 대표번호로 직접 확인하기 ② 계좌번호·금액을 문자 링크에 넣지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+  // ⭐ PR-B(2026-11-07 — 설계 docs/research/institution-advanced-loan-design-2026-11-07.md §6) — 앱 안 비대면 대출 신청(`institution-loan-guide` 문자).
+  // 렌더 정본 = 클라 `src/components/MessengerFakeLanding.tsx` `LoanApplyMockup`(본인 확인 → 한도 조회 → 금액 · 용도 → 약정 확인 → 전자서명 → 신청 완료).
+  // 기록은 마지막 신청 버튼을 눌렀다는 사실 하나(`landing_submitted`) — 금액 · 용도 · 인증 값은 서버로 가지 않는다(AC-045 · G138).
+  // ⛔ 실제 금융회사 이름 0(화면의 캐피탈명은 세션 가상 캐피탈 — 문자 본문에서 읽는다) · 실제 대출 0.
+  {
+    landingId: "loan-apply",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "비대면 신용대출 신청",
+    bodyLines: [
+      "본인 확인 후 대출 한도를 조회하고 바로 신청할 수 있습니다.",
+      "신청 내용은 실행 전 확인 절차를 거칩니다.",
+    ],
+    issuerLabel: "ⓒ 비대면 대출센터",
+    mockHost: "credit-loan-apply.invalid",
+    fields: ["대출 신청 금액", "대출 용도"],
+    submitLabel: "대출 신청하기",
+    successHeadline: "대출 신청이 접수되었습니다.",
+    momentTactic: "명의 도용 입증을 빌미로 한 비대면 대출 신청 유도",
+    correctAction:
+      "'명의 도용을 입증하려면 대출을 받아 보라'고 하면 그 자리에서 멈추세요 — 검찰 · 경찰 · 금융감독원은 대출을 받으라고 하지 않습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 금융회사 확인 전화에는 누가 시켰는지 사실대로 말하기 ③ 이미 대출을 받았다면 그 금융회사에 바로 알리고 14일 안에 대출계약 철회를 신청하기 ④ 112(경찰) · 1332(금융감독원)에 신고하기.",
+  },
+  // ⭐ PR-B — 대출금 보관 계좌 이체(`institution-loan-safe-account` 문자 · 통화 3). 훈련용 이체 화면(`BANK_TRANSFER_LANDINGS`)과 같은 흐름.
+  {
+    landingId: "loan-safe-transfer",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "대출금 보관 이체가 아직 완료되지 않았습니다",
+    bodyLines: [
+      "명의 도용 입증이 끝날 때까지 대출금을 보관 계좌에 두셔야 합니다.",
+      "보내실 금액을 적고 아래 버튼을 눌러 주세요.",
+    ],
+    issuerLabel: "ⓒ 대출금 보관 안내센터",
+    mockHost: "loan-keep-account.invalid",
+    fields: ["보관 계좌 번호", "이체 금액"],
+    submitLabel: "보관 계좌로 이체하기",
+    successHeadline: "보관 계좌로 이체가 완료되었습니다.",
+    momentTactic: "대출 실행 뒤 명의 도용 입증을 빌미로 한 대출금 이체 유도",
+    correctAction:
+      "'대출금을 보관 계좌로 옮기라'고 하면 100% 사기입니다 — 어떤 수사 · 금융기관도 대출금을 다른 계좌로 옮기라고 하지 않습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 문자 속 링크로 이체하지 않기 ③ 이미 보냈다면 112(경찰)와 그 은행 · 대출 금융회사에 바로 지급정지를 요청하기 ④ 대출 14일 안이면 대출계약 철회를 신청하기.",
   },
 ];
 

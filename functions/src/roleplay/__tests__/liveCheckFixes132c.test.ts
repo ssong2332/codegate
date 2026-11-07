@@ -19,7 +19,7 @@ test("[§132.7 N4] 이체 화면 제출을 처음 기록하면 실시간 맥락 
   assert.match(
     src,
     // N1(2026-11-01) — 요구액 대비 비교로 문면을 고른다(같음 · 많음 · 모름 = 종전 `LANDING_SUBMITTED_INSTRUCTION` — `landingSubmittedInstructionFor` L3).
-    /if \(!snap\.get\(field\)\) \{\n\s*await smsRef\.update\(\{ \[field\]: Timestamp\.now\(\), \.\.\.comparisonUpdate \}\);\n(?:\s*\/\/[^\n]*\n)*\s*if \(event === "landing_submitted"\) return \{ recorded: true, contextInstruction: landingSubmittedInstructionFor\(amountComparison, false\) \};\n\s*\}/,
+    /if \(!snap\.get\(field\)\) \{\n\s*await smsRef\.update\(\{ \[field\]: Timestamp\.now\(\), \.\.\.comparisonUpdate \}\);\n(?:\s*\/\/[^\n]*\n)*(?:\s*if \(event === "landing_submitted" && snap\.get\("fakeLandingId"\) === LOAN_APPLY_LANDING_ID\) return \{ recorded: true, contextInstruction: LOAN_APPLY_SUBMITTED_INSTRUCTION \};\n)?\s*if \(event === "landing_submitted"\) return \{ recorded: true, contextInstruction: landingSubmittedInstructionFor\(amountComparison, false\) \};\n\s*\}/,
   );
 });
 

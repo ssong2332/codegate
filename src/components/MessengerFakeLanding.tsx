@@ -50,7 +50,8 @@ import { recordIssueInfo, recordSubjectRows, type RecordRow } from "../lib/landi
 import { fictionalBalanceFor, myBankNameFor, recordTransferAndCompare, transferTimeText, type AmountComparison } from "../lib/bankapp/bankApp";
 // ⭐ 2026-11-07 실기기 신고 — 출금 계좌 선택 · 생체 인증 시트(내 은행 송금 화면 `BankAppOverlay`와 같은 컴포넌트 · 같은 판정표).
 import { authMethodForSkin } from "../lib/bankapp/bankAuth";
-import { accountLabel, recordWithdrawal, withdrawAccountsFor, withdrawError, type WithdrawAccount } from "../lib/bankapp/withdrawAccounts";
+import { accountLabel, recordLoanApplication, recordWithdrawal, withdrawAccountsFor, withdrawError, type WithdrawAccount } from "../lib/bankapp/withdrawAccounts";
+import { LOAN_PURPOSES, loanApplyError, loanOfferFor } from "../lib/bankapp/loanFlow";
 import BankAuthSheet from "./BankAuthSheet";
 import WithdrawAccountSheet, { WithdrawAccountRow } from "./WithdrawAccountSheet";
 
@@ -122,6 +123,11 @@ type MessengerFakeLandingProps = {
    * 부재 = 받는 분 "확인 중" 표기 · 금액 빈 칸. ⛔ 참가자 입력이 아니다 — 어떤 콜백에도 싣지 않는다.
    */
   prefilledTransfer?: PrefilledTransfer;
+  /**
+   * ⭐ PR-B — 앱 안 대출 신청 화면(`loan-apply`)의 맥락: 탭 메모리 장부 열쇠(세션 id) · 가상 캐피탈 이름(문자 본문). 부재 = 그 화면도 종전 폼으로 그린다.
+   * ⛔ 참가자 입력이 아니다 — 대출 금액 · 용도는 `LoanApplyMockup` 밖으로 나가지 않는다(G138).
+   */
+  loanContext?: { ledgerKey: string; lenderName: string };
 };
 
 /**
@@ -164,6 +170,7 @@ export default function MessengerFakeLanding({
   onLandingStep,
   prefilledAccount,
   prefilledTransfer,
+  loanContext,
 }: MessengerFakeLandingProps) {
   const bar = browserBarTokensFor(skin);
   const returnLabel = RETURN_LABELS[entrySurface];
@@ -285,6 +292,16 @@ export default function MessengerFakeLanding({
             onClose={onClose}
             onConsent={onInstallConsent}
             returnLabel={returnLabel}
+          />
+        ) : landingId === "loan-apply" && loanContext ? (
+          // ⭐ PR-B — 앱 안 비대면 대출 신청(여러 단계 · 생체 인증 · 전자서명). 제출 사실 하나만 종전 제출 콜백으로(무인자 — 비교 결과 0).
+          <LoanApplyMockup
+            ledgerKey={loanContext.ledgerKey}
+            lenderName={loanContext.lenderName}
+            skin={skin}
+            returnLabel={returnLabel}
+            onClose={onClose}
+            onSubmit={() => onCredentialSubmit?.()}
           />
         ) : (
           <CredentialFormMockup
@@ -552,6 +569,37 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     mockHost: "card-relief-desk.invalid",
   },
   // §142(카드사 고급 재구성) — 안전계좌 이체(훈련용 이체 화면). 서버 카탈로그(mockScreens.ts)와 글자 단위로 동일(G76).
+  // ⭐ PR-B — 기관 사칭 고급 3통화(서버 `mockScreens.ts`와 글자 단위로 같다). `loan-apply`는 `LoanApplyMockup`이 그리고, 이 표는 주소 · 드리프트 대조용이다.
+  "loan-apply": {
+    headline: "비대면 신용대출 신청",
+    bodyLines: [
+      "본인 확인 후 대출 한도를 조회하고 바로 신청할 수 있습니다.",
+      "신청 내용은 실행 전 확인 절차를 거칩니다.",
+    ],
+    fields: [
+      { label: "대출 신청 금액", placeholder: "신청하실 금액을 입력하세요", inputMode: "numeric", amount: true },
+      { label: "대출 용도", placeholder: "용도를 고르세요" },
+    ],
+    submitLabel: "대출 신청하기",
+    successHeadline: "대출 신청이 접수되었습니다.",
+    issuerLabel: "ⓒ 비대면 대출센터",
+    mockHost: "credit-loan-apply.invalid",
+  },
+  "loan-safe-transfer": {
+    headline: "대출금 보관 이체가 아직 완료되지 않았습니다",
+    bodyLines: [
+      "명의 도용 입증이 끝날 때까지 대출금을 보관 계좌에 두셔야 합니다.",
+      "보내실 금액을 적고 아래 버튼을 눌러 주세요.",
+    ],
+    fields: [
+      { label: "보관 계좌 번호", placeholder: "문자로 받은 보관 계좌 번호를 입력하세요", inputMode: "numeric", prefill: "account" },
+      { label: "이체 금액", placeholder: "보내실 금액을 입력하세요", inputMode: "numeric", amount: true },
+    ],
+    submitLabel: "보관 계좌로 이체하기",
+    successHeadline: "보관 계좌로 이체가 완료되었습니다.",
+    issuerLabel: "ⓒ 대출금 보관 안내센터",
+    mockHost: "loan-keep-account.invalid",
+  },
   "card-safe-transfer": {
     headline: "자산 보호 조치가 완료되지 않았습니다",
     bodyLines: [
@@ -709,6 +757,8 @@ const BANK_TRANSFER_LANDINGS: readonly string[] = [
   "protect-account-transfer",
   // §142 — 카드사 고급 재구성 결말 안전계좌 이체.
   "card-safe-transfer",
+  // ⭐ PR-B — 기관 사칭 고급 3통화 대출금 보관 이체(서버 목록과 같다).
+  "loan-safe-transfer",
 ];
 
 /** S2(실기기 확인 2026-11-01) — 대화방 링크 카드가 이체 화면 칩인가(그림 자리 없는 송금 카드로 그린다 · 정확 일치). */
@@ -903,6 +953,280 @@ function IdentityBox({
     </span>
   );
 }
+
+// ⭐ PR-B(2026-11-07 · §15.9.1 R1 — 가짜 랜딩은 이 파일 안 서브 컴포넌트만 · 사용자 결정 "앱 안 대출 체험" · D-L2 용도는 알리지 않음 — docs/research/institution-advanced-loan-design-2026-11-07.md §6) —
+// 문자 링크(`institution-loan-guide`)로 여는 **앱 안 비대면 신용대출 신청**. 실제 대출 · 실제 금융회사 0(가상 캐피탈 이름 = 문자 본문에서 읽는다).
+//
+// | 단계 | 화면 | 다음 |
+// |---|---|---|
+// | intro | 상품 안내(가상 캐피탈 · 금리 범위 · 최대 한도) | "본인 확인하고 한도 조회" |
+// | verify | 생체 인증 시트(`BankAuthSheet`) — 본인 확인 | 성공 → limit · 취소 → intro |
+// | limit | 조회된 한도 · 금리 · 신청 금액 입력 · 용도 선택(생활비 · 사업자금 · 주택 · 대환 · 기타) · 입금 계좌 | "다음"(금액 검증 L1 ~ L3) |
+// | terms | 약정 확인(금액 · 금리 · 기간 · 상환 방식 · 입금 계좌 · 14일 철회 안내) · 동의 | "전자서명하고 신청" |
+// | sign | 생체 인증 시트 — 전자서명 | 성공 → done(신청 사실 1회 기록) · 취소 → terms |
+// | done | 신청 접수 · "실행 전 확인 전화를 드릴 수 있습니다" | 복귀 |
+//
+// 금액 판정표(앞 행이 먼저):
+// | # | If | Then |
+// |---|---|---|
+// | L1 | 빈 칸 · 숫자 아님 · 0 | `amountError` 안내 |
+// | L2 | 조회된 한도 초과 | "대출 가능 한도를 넘었습니다." |
+// | L3 | 용도 미선택 | "대출 용도를 선택해 주세요." |
+//
+// ⛔ G138 · AC-045 — 금액 · 용도 · 인증 값은 콜백 · 네트워크 · 저장소로 나가지 않는다. 밖으로 나가는 것은 마지막 신청 버튼을 눌렀다는 사실(`onSubmit()` 무인자)뿐이다.
+// 신청 금액은 같은 탭 메모리 장부(`recordLoanApplication`)에만 적는다 — 입금 안내 문자가 오면 그 금액이 첫 계좌에 들어오고(`disburseLoan`), 대출금 보관
+// 이체 화면이 요구액 대사가 없을 때 그 금액을 비교 기준으로 쓴다(서버 0).
+// ⛔ 세션 중 화면이라 '모의' · '훈련' 문구 0(G437).
+type LoanApplyStage = "intro" | "verify" | "limit" | "terms" | "sign" | "done";
+
+const loanWon = (value: number): string => `${String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}원`;
+
+type LoanApplyProps = {
+  /** 세션 id(한도 · 입금 계좌의 결정적 씨앗 · 탭 메모리 장부 열쇠). */
+  ledgerKey: string;
+  /** 가상 캐피탈 이름(문자 본문). */
+  lenderName: string;
+  skin: MessengerSkin;
+  returnLabel: string;
+  onClose: () => void;
+  /** 마지막 신청 버튼을 눌렀다는 사실 하나(무인자 — G138). */
+  onSubmit?: () => void;
+};
+
+function LoanApplyMockup({ ledgerKey, lenderName, skin, returnLabel, onClose, onSubmit }: LoanApplyProps) {
+  const page = LANDING_PAGE_TOKENS;
+  const [stage, setStage] = useState<LoanApplyStage>("intro");
+  const [amount, setAmount] = useState("");
+  const [purpose, setPurpose] = useState<string | undefined>(undefined);
+  const [agreed, setAgreed] = useState(false);
+  const [error, setError] = useState<string | undefined>(undefined);
+  const offer = loanOfferFor(ledgerKey);
+  const appBankName = myBankNameFor(ledgerKey);
+  const depositAccount = withdrawAccountsFor({ seed: ledgerKey, appBankName, primaryBalance: fictionalBalanceFor(ledgerKey) })[0]!;
+  const amountValue = Number(amount.replace(/[\s,]/g, "")) || 0;
+  const hint = amountHint(amount);
+
+  const header = (
+    <div className="px-5 py-3 text-sm font-semibold" style={{ backgroundColor: page.issuerBarBg, color: page.issuerBarText }}>
+      {lenderName} 비대면 대출
+    </div>
+  );
+  const primary = (label: string, onClick: () => void, disabled = false) => (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="min-h-[52px] rounded-[10px] text-base font-semibold disabled:opacity-50"
+      style={{ backgroundColor: page.submitBg, color: page.submitText }}
+    >
+      {label}
+    </button>
+  );
+  const secondary = (label: string, onClick: () => void) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="min-h-[48px] rounded-[10px] border px-6 py-2.5 text-base font-semibold"
+      style={{ borderColor: page.inputBorder, color: page.headline }}
+    >
+      {label}
+    </button>
+  );
+  const rows = (items: [string, string][]) => (
+    <dl className="flex flex-col divide-y rounded-[10px] border" style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg }}>
+      {items.map(([label, value]) => (
+        <div key={label} className="flex items-baseline justify-between gap-3 px-3.5 py-3 text-[15px]" style={{ borderColor: page.inputBorder }}>
+          <dt style={{ color: page.body }}>{label}</dt>
+          <dd className="break-all text-right font-semibold" style={{ color: page.headline }}>
+            {value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+
+  if (stage === "done") {
+    return (
+      <>
+        {header}
+        <div className="flex flex-col gap-4 px-5 pb-6 pt-8">
+          <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
+            대출 신청이 접수되었습니다.
+          </h1>
+          <p className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
+            대출 실행 전 본인 확인을 위해 {lenderName}에서 확인 전화를 드릴 수 있습니다. 실행되면 문자로 알려 드립니다.
+          </p>
+          {rows([
+            ["신청 금액", loanWon(amountValue)],
+            ["입금 계좌", accountLabel(depositAccount)],
+          ])}
+          {secondary(returnLabel, onClose)}
+        </div>
+      </>
+    );
+  }
+
+  if (stage === "terms" || stage === "sign") {
+    return (
+      <>
+        {header}
+        <div inert={stage === "sign" ? true : undefined}>
+          <div className="flex flex-col gap-4 px-5 pb-6 pt-5">
+            <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
+              대출 약정 내용을 확인해 주세요
+            </h1>
+            {rows([
+              ["대출 금액", loanWon(amountValue)],
+              ["금리", `연 ${offer.ratePercent}% (고정)`],
+              ["대출 기간", "12개월"],
+              ["상환 방식", "원리금 균등 분할 상환"],
+              ["입금 계좌", accountLabel(depositAccount)],
+            ])}
+            <p
+              role="note"
+              className="rounded-[10px] px-3.5 py-3 text-[14px] leading-relaxed [word-break:keep-all]"
+              style={{ backgroundColor: page.fieldReadonlyBg, color: page.body }}
+            >
+              대출 계약일부터 14일 안에 대출계약 철회를 신청할 수 있습니다. 누군가 대출을 받으라고 시켰다면 신청하지 마세요.
+            </p>
+            <label className="flex min-h-[48px] items-center gap-3 text-[15px]" style={{ color: page.headline }}>
+              <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="h-5 w-5" />
+              약정 내용과 대출 상품 설명을 확인했습니다
+            </label>
+            {primary("전자서명하고 신청", () => setStage("sign"), !agreed)}
+            {secondary("이전", () => setStage("limit"))}
+          </div>
+        </div>
+        {stage === "sign" && (
+          <BankAuthSheet
+            method={authMethodForSkin(skin)}
+            appName={`${lenderName} 전자서명`}
+            summary={`${loanWon(amountValue)} 대출 신청`}
+            onSuccess={() => {
+              // 신청 금액은 이 탭 메모리 장부에만(G138 — 콜백은 무인자).
+              recordLoanApplication(ledgerKey, amount);
+              setStage("done");
+              onSubmit?.();
+            }}
+            onCancel={() => setStage("terms")}
+          />
+        )}
+      </>
+    );
+  }
+
+  if (stage === "limit") {
+    return (
+      <>
+        {header}
+        <div className="flex flex-col gap-4 px-5 pb-6 pt-5">
+          <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
+            최대 {loanWon(offer.limit)}까지 받을 수 있어요
+          </h1>
+          {rows([
+            ["대출 가능 한도", loanWon(offer.limit)],
+            ["금리", `연 ${offer.ratePercent}%`],
+          ])}
+          <label className="flex flex-col gap-1.5 text-[15px] font-semibold" style={{ color: page.headline }}>
+            신청 금액
+            <input
+              type="text"
+              inputMode="numeric"
+              value={amount}
+              onChange={(e) => {
+                setAmount(e.target.value);
+                setError(undefined);
+              }}
+              placeholder="신청하실 금액을 입력하세요"
+              className="min-h-[48px] rounded-[10px] border px-3 text-base font-normal"
+              style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.inputText }}
+            />
+            {hint && (
+              <span className="text-sm font-normal" style={{ color: page.hintText }}>
+                {hint}
+              </span>
+            )}
+          </label>
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-1.5 text-[15px] font-semibold" style={{ color: page.headline }}>
+              대출 용도
+            </legend>
+            <div className="flex flex-wrap gap-2">
+              {LOAN_PURPOSES.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  aria-pressed={purpose === item}
+                  onClick={() => {
+                    setPurpose(item);
+                    setError(undefined);
+                  }}
+                  className="min-h-[44px] rounded-full border px-4 text-[15px]"
+                  style={{
+                    borderColor: purpose === item ? page.submitBg : page.inputBorder,
+                    backgroundColor: purpose === item ? page.submitBg : page.inputBg,
+                    color: purpose === item ? page.submitText : page.headline,
+                  }}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          {rows([["입금 계좌", accountLabel(depositAccount)]])}
+          {error && (
+            <p role="alert" className="text-sm" style={{ color: page.errorText }}>
+              {error}
+            </p>
+          )}
+          {primary("다음", () => {
+            const next = loanApplyError({ raw: amount, formatError: amountError(amount), limit: offer.limit, purpose });
+            if (next) {
+              setError(next);
+              return;
+            }
+            setAgreed(false);
+            setStage("terms");
+          })}
+        </div>
+      </>
+    );
+  }
+
+  // intro · verify(시트가 intro 위로 올라온다)
+  return (
+    <>
+      {header}
+      <div inert={stage === "verify" ? true : undefined}>
+        <div className="flex flex-col gap-4 px-5 pb-6 pt-5">
+          <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
+            비대면 신용대출
+          </h1>
+          <p className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
+            본인 확인 후 대출 한도를 조회하고 바로 신청할 수 있습니다. 신청 내용은 실행 전 확인 절차를 거칩니다.
+          </p>
+          {rows([
+            ["금리", "연 9.9% ~ 15.9%"],
+            ["최대 한도", "3,000만 원"],
+            ["대출 기간", "12 ~ 60개월"],
+          ])}
+          {primary("본인 확인하고 한도 조회", () => setStage("verify"))}
+          {secondary(returnLabel, onClose)}
+        </div>
+      </div>
+      {stage === "verify" && (
+        <BankAuthSheet
+          method={authMethodForSkin(skin)}
+          appName={`${lenderName} 본인 확인`}
+          summary="대출 한도 조회를 위한 본인 확인"
+          onSuccess={() => setStage("limit")}
+          onCancel={() => setStage("intro")}
+        />
+      )}
+    </>
+  );
+}
+
 
 function CredentialFormMockup({
   landingId,

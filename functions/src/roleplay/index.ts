@@ -17,7 +17,9 @@ import { completeWithFallback, getLlmClient, LLM_FIRST_TURN_TIMEOUT_MS } from ".
 import { triggerReportGeneration } from "../report";
 import { findFlowVariant, resolveSessionScenarioPrompt, routeEndsWithoutAccount, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
 import {
+  buildLegLoanReviewContext,
   buildLegRejoinContext,
+  currentLegHoldsScreens,
   currentLegIndex,
   legHangupAdjustments,
   legStartUserTurns,
@@ -69,7 +71,7 @@ import {
 } from "../inCallSms/smsGate";
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms, readMockScreenRecords } from "../inCallSms/smsDelivery";
-import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, readMockScreenCompletion } from "../scammerHangup/goalAction";
+import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, isLegScreenHoldPending, readMockScreenCompletion } from "../scammerHangup/goalAction";
 import { FALLBACK_GOAL_WRAP_UP_INSTRUCTION } from "../scammerHangup/guidance";
 import type { SmsDeliveryInput } from "../inCallSms/smsDelivery";
 import { findVerifyInterceptItem } from "../scenarios/verifyIntercept";
@@ -359,7 +361,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const { declared: smsDeclared, reason: smsDeclaredReason } = resolveDeclaredSms(
       session.scenarioId,
       session.flowVariantId,
-      { relay: session.relay },
+      { relay: session.relay, loanReview: session.loanReview?.outcome },
     );
     const smsStore = firestoreSmsStore(db, sessionRef);
     const smsDeliveryBase: Omit<SmsDeliveryInput, "purpose" | "anchorScammerTurn" | "trigger" | "userTurns"> = {
@@ -510,7 +512,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const legVariant = sessionCallLeg ? findFlowVariant(session.flowVariantId) : undefined;
     const legAdj = legVariant ? legHangupAdjustments(legVariant, session.relay, userTurnsNow) : undefined;
     const legScope = legAdj?.nonLastLeg && legVariant
-      ? { legIndex: currentLegIndex(legVariant, session.relay), turnsSinceLegStart: legAdj.turnsSinceLegStart }
+      ? { legIndex: currentLegIndex(legVariant, session.relay), turnsSinceLegStart: legAdj.turnsSinceLegStart, holdUntilScreens: currentLegHoldsScreens(legVariant, session.relay) }
       : undefined;
     const hangupFacts: FallbackHangupFacts = {
       status: session.status,
@@ -540,7 +542,10 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         ? {
             // 실기기 신고 F2 — 다음 번호가 문자에만 있는 레그는 그 문자가 도착하기 전 끊기를 막는다(4-b · 실시간과 같은 판정).
             followUpPending: isLegDialSmsPending(legVariant, session.relay, smsDelivered.map((d) => d.smsId)),
-            decisionScreenPending: false,
+            // ⭐ PR-B — 화면 보류 레그는 그 레그 화면을 마치기 전 goal 끊기를 막는다(실시간과 같은 판정 · 도착 기록을 못 읽었으면 대기).
+            decisionScreenPending: legScope.holdUntilScreens
+              ? isLegScreenHoldPending({ scenarioId: session.scenarioId, declared: smsDeclared, delivered: smsDeliveredLoaded ? smsDelivered : [] })
+              : false,
             alreadyAccepted: session.relay?.legEnded === legScope.legIndex,
             turnsSinceCallEntry: legScope.turnsSinceLegStart,
           }
@@ -777,10 +782,17 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // §142(PR-3)의 앞 통화 인계 블록은 2026-11-07에 없앴다(위 `legHistory` 주석).
     // 2026-11-07(메인 승인 계약) — 참가자가 끊은 같은 레그를 다시 이은 뒤 첫 턴에만 상황 문장(이 레그 대화는 모델 이력에 이미 있다).
     const rejoin = session.relay?.rejoin;
-    const legRejoinNotice =
-      sessionCallLeg && rejoin && session.relay?.legIndex === sessionCallLeg.legIndex && turnCount === rejoin.atUserTurns + 1
-        ? buildLegRejoinContext(rejoin.kind, sessionCallLeg.legIndex)
+    // ⭐ PR-B — 정당한 제3자 통화 뒤 같은 인물이 다시 건 레그의 첫 턴에만 확인 결과 1줄(실시간 `realtime/index.ts`와 같은 문면 · 판정표 K).
+    // 재연결 상황 문장과 같은 자리(재연결이면 그쪽이 앞선다 — 재연결은 같은 레그 안이라 이 1줄이 이미 실린 뒤다).
+    const loanReviewVariant = sessionCallLeg ? findFlowVariant(session.flowVariantId) : undefined;
+    const legLoanReviewNotice =
+      sessionCallLeg && loanReviewVariant && !rejoin && turnCount === legStartUserTurns(session.relay, sessionCallLeg.legIndex) + 1
+        ? buildLegLoanReviewContext(loanReviewVariant, sessionCallLeg.legIndex, session.loanReview?.outcome)
         : undefined;
+    const legRejoinNotice =
+      (sessionCallLeg && rejoin && session.relay?.legIndex === sessionCallLeg.legIndex && turnCount === rejoin.atUserTurns + 1
+        ? buildLegRejoinContext(rejoin.kind, sessionCallLeg.legIndex)
+        : undefined) ?? legLoanReviewNotice;
     const turnInstructionWithSms =
       [legRejoinNotice, promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction, otpFollowUpInstruction, otpHoldInstruction]
         .filter(Boolean)

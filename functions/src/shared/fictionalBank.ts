@@ -177,6 +177,8 @@ export const ACCOUNT_HOLDER_BANKS: Readonly<Record<string, string>> = {
   신예린: "다온은행",
   // §142 카드사 고급 재구성 안전계좌(`card-safe-account`)
   한도윤: "해담은행",
+  // ⭐ PR-B 기관 사칭 고급 대출금 보관 계좌(`institution-loan-safe-account`) — 같은 세션의 안전계좌(강태윤)와 같은 은행(세션 은행 하나 · 본문 "OO은행" 치환과 맞다).
+  노은채: "가온은행",
   // 메신저 변형 가상 예금주(`scenarios/flowVariants.ts` `accountHolder`)
   김도현: "새솔은행",
   이서준: "해담은행",

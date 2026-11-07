@@ -540,7 +540,8 @@ test("[§142 레그 합성] 다통화 변형 — 레그마다 그 레그 페르�
     v.legs.forEach((leg, i) => {
       const resolved = resolveVariantPrompt(base, v, i);
       assert.equal(resolved.guardrailPreamble, base.guardrailPreamble, `${v.variantId}#${i}: 가드레일 변형 금지`);
-      assert.ok(leg.personaPrompt && resolved.personaPrompt.startsWith(leg.personaPrompt), `${v.variantId}#${i}: 레그 페르소나`);
+      // PR-B — 레그 페르소나 부재 = 시나리오 페르소나 재사용(기관 고급 검사 통화 1 · 3).
+      assert.ok(resolved.personaPrompt.startsWith(leg.personaPrompt ?? base.personaPrompt), `${v.variantId}#${i}: 레그 페르소나`);
       for (const stage of leg.stages ?? []) assert.ok(resolved.personaPrompt.includes(stage), `${v.variantId}#${i}: 레그 단계`);
       // 다른 레그 고유 단계는 싣지 않는다.
       for (const other of v.legs) {
@@ -548,10 +549,13 @@ test("[§142 레그 합성] 다통화 변형 — 레그마다 그 레그 페르�
         for (const stage of other.stages ?? []) assert.equal(resolved.personaPrompt.includes(stage), false, `${v.variantId}#${i}: 다른 레그 단계 누출`);
       }
       assert.equal(resolved.personaPrompt.includes("처음부터 끝까지 너 혼자 맡는다"), false);
-      const endRule = leg.exit === "dial" ? "짧게 인사하고 통화를 끝낸다" : leg.exit === "transfer" ? "통화를 넘긴다" : "마지막 통화다";
+      const endRule =
+        leg.exit === "dial" ? "짧게 인사하고 통화를 끝낸다" : leg.exit === "transfer" ? "통화를 넘긴다" : leg.exit === "incoming" ? "다른 사람이 따로 걸어 오는 것" : "마지막 통화다";
       assert.ok(resolved.personaPrompt.includes(endRule), `${v.variantId}#${i}: 레그 끝 규칙`);
       assert.deepEqual(resolved.weakenedTactics.map(extractTacticLabel), [...(leg.tacticLabels ?? [])].filter((l) => v.tactics.some((t) => extractTacticLabel(t) === l)));
-      assert.ok(resolved.weakenedTactics.length >= 1, `${v.variantId}#${i}: 레그 수법 0`);
+      // PR-B — 정당한 제3자 레그(대출 실행 확인 상담원)는 수법 0이 정답(사기 대사 아님 · 프롬프트도 `genuineLegPrompt.ts`).
+      if (leg.genuine) assert.equal(resolved.weakenedTactics.length, 0, `${v.variantId}#${i}: 정당한 제3자 수법 0`);
+      else assert.ok(resolved.weakenedTactics.length >= 1, `${v.variantId}#${i}: 레그 수법 0`);
       for (const level of DIFFICULTY_LEVELS as readonly DifficultyLevel[]) {
         const assembled = buildSystemPrompt(resolved, { difficultyLevel: level });
         assert.ok(assembled.lastIndexOf(base.guardrailPreamble) > assembled.lastIndexOf("[이번 통화의 흐름]"), `${v.variantId}#${i}/${level}: 가드레일 최후미`);

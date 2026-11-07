@@ -199,6 +199,9 @@ export type SessionDoc = {
     hungUpBy?: "participant";
     rejoin?: { kind: "redial" | "callback"; atUserTurns: number };
   };
+  // ⭐ PR-B(2026-11-07 · 기관 사칭 고급 앱 안 대출 체험) — 대출 실행 확인 상담원 통화(정당한 제3자 레그)의 결과. 서버만 쓴다(`recordLoanReview` —
+  // 첫 기록만 · 상담원 레그가 연결 중일 때만). 부재 = 결과 보고 없음(통화 3은 보류로 진행 — 대출금 문자 선언 0). 값 = 고정 enum + 시각(대사 0).
+  loanReview?: { outcome: "approved" | "held"; at: FirebaseFirestore.Timestamp };
   // 개발 단계 루트 강제 지정(`session/devRouteOverride.ts` F4) — 요청 `forceVariantId`로 변형을 정했을 때만 `"forced"`. 부재 = 회전 덱 배정.
   routeOverride?: "forced";
   // §142 PR-4 — 다통화 R2(`openerSmsId` 변형): 세션이 수신 통화가 아니라 시작 문자가 도착한 화면에서 시작한다(첫 통화는 참가자 발신). 서버만 쓴다 · 부재 = 수신 통화(종전).

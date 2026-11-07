@@ -734,6 +734,9 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
     "in-call-sms",
     "in-call-sms",
     "in-call-sms",
+    // PR-B — 기관 고급 3통화 대출 신청 · 대출금 보관 이체 화면(통화 중 문자 표면) 2건.
+    "in-call-sms",
+    "in-call-sms",
     "messenger-link",
     "messenger-link",
     // T194-a — parcel-install(메신저 링크 표면).
@@ -990,7 +993,7 @@ test("[AC-078 (a)] 콘텐츠 카탈로그 ↔ 도달 가능 랜딩 집합이 **�
     false,
     "어떤 프롬프트도 내지 않는 라벨이 도달 가능 집합에 들어왔다",
   );
-  assert.equal(reachableLandingKeysAllUnits().length, 27, "도달 가능 랜딩은 27종이다(§142 — 카드사 고급 재구성 원격 지원 설치 · 안전계좌 이체 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(reachableLandingKeysAllUnits().length, 29, "도달 가능 랜딩은 29종이다(PR-B — 기관 사칭 고급 앱 안 대출 신청 · 대출금 보관 이체 2종 추가 · §142 — 카드사 고급 재구성 원격 지원 설치 · 안전계좌 이체 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
 });
 
 test("[AC-078 (a) 역검증] 한쪽에서 1건을 빼면 실제로 실패한다", () => {
@@ -1081,6 +1084,8 @@ const T129B_MULTI_LANDING_UNITS: readonly string[] = [
   // P2-d — 환급 중급 · 고급은 환급 신청 화면 뒤 수수료 이체 화면을 함께 선언한다(초급은 수수료 화면 하나).
   "tax-refund-scam#fv-aqx2",
   "tax-refund-scam#fv-uk7m",
+  // ⭐ PR-B — 기관 사칭 고급 3통화: 통화 1의 안전계좌 이체 · 앱 안 대출 신청 + 통화 3의 대출금 보관 이체(다른 문자 · 다른 사기범 메시지).
+  "institutional-impersonation#fv-c5fj",
 ];
 
 /** 등재 단위를 뺀 단위 키 — 역검증들의 기준 입력(등재 단위 때문에 기대 배열이 흔들리지 않게). */
@@ -1350,7 +1355,7 @@ function findFieldConvergence(
 
 test("[AC-079] bodyLines·fields·successHeadline·issuerLabel이 **각각 단독으로** 수렴하지 않는다", (t) => {
   const items = Object.values(MOCK_SCREENS).flat();
-  assert.equal(items.length, 27, "현행 비교 대상은 도달 가능 랜딩 27종이다(§142 — 카드사 고급 재구성 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(items.length, 29, "현행 비교 대상은 도달 가능 랜딩 29종이다(PR-B — 기관 사칭 고급 앱 안 대출 신청 · 대출금 보관 이체 2종 추가 · §142 — 카드사 고급 재구성 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
   const stats = fieldDivergenceStats(items);
   for (const { field, compared, excluded, converged } of stats) {
     t.diagnostic(
@@ -1691,6 +1696,21 @@ const BAIT_TO_LANDING: {
     baitSource: "scenarios/inCallSms.ts:CARD_COMPANY_IMPERSONATION card-safe-account (문자 본문·칩)",
     baitExcerpt: "아래에서 자산 보호 이체를 진행해 주세요.",
     headlineAnchors: ["자산 보호"],
+    ctaAnchors: ["이체"],
+  },
+  // ⭐ PR-B — 기관 사칭 고급 3통화.
+  {
+    landingId: "loan-apply",
+    baitSource: "scenarios/inCallSms.ts:INSTITUTIONAL_IMPERSONATION institution-loan-guide (문자 본문·칩)",
+    baitExcerpt: "[명의도용 입증 절차] 비대면 대출 신청 안내",
+    headlineAnchors: ["대출"],
+    ctaAnchors: ["신청"],
+  },
+  {
+    landingId: "loan-safe-transfer",
+    baitSource: "scenarios/inCallSms.ts:INSTITUTIONAL_IMPERSONATION institution-loan-safe-account (문자 본문·칩)",
+    baitExcerpt: "입금된 대출금 전액을 아래에서 이체해 주세요.",
+    headlineAnchors: ["대출금", "이체"],
     ctaAnchors: ["이체"],
   },
   {
