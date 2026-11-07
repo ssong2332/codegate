@@ -802,7 +802,9 @@ const ID_PHOTO_SEND_REQUEST = new RegExp(
   `신분증[^.?!\\n]{0,25}?(?:보내|올려|첨부해)\\s*${SHORT_REQUEST_ENDING}`,
 );
 // §129.8 D4(재측정 프로브 2026-10-24b — 택배 통관 초급 "관세 **오만 원**을 오늘 안으로 입금하셔야 합니다" → "네, 보냈어요." 안 속음) — 한글 숫자 금액("오만 원 · 천만 원 · 삼십만 원").
-const MONEY_CONTEXT = /\d[\d,]*\s*(?:만|천|백)?\s*원|[일이삼사오육칠팔구십백천]+\s*(?:억|만|천)\s*원|계좌|은행|금액|돈|\d{2,6}-\d{2,6}-\d{2,}/;
+// 2026-11-08 Edge 재시험(국세청 환급 고급 "처리 수수료를 먼저 납부하셔야 합니다" → "네, 말씀하신 대로 할게요." 라벨이 최종 폴백 '본인확인 빙자 정보 수집') —
+// | M1 | 같은 문장에 "수수료" + 요구 어형 | 돈 문맥(송금 범주 라벨 — 예 '환급 수수료 요구') |
+const MONEY_CONTEXT = /\d[\d,]*\s*(?:만|천|백)?\s*원|[일이삼사오육칠팔구십백천]+\s*(?:억|만|천)\s*원|계좌|은행|금액|돈|수수료|\d{2,6}-\d{2,6}-\d{2,}/;
 // §129 D4(프로브 2026-10-24 — 납치 초급 "불러주는 계좌로 돈을 바로 보내세요" → "네, 보냈어요"가 안 속음) — 시키는 어형
 // "보내세요 · 입금하세요 · 입금하셔야 · 입금하실 수 · 납부해 주셔야"를 더한다. 같은 문장에 돈 · 계좌 문맥(MONEY_CONTEXT)이 있어야 하는 조건은 그대로다.
 const TRANSFER_REQUEST = new RegExp(
@@ -921,6 +923,24 @@ export function analyzeConversation(
 
   const isGenuineLegMessage = (message: AnalysisMessage): boolean =>
     genuineLegs !== undefined && message.legIndex !== undefined && genuineLegs.legIndexes.includes(message.legIndex);
+  // ⭐ 2026-11-08 Edge 재시험(국세청 환급 고급 — "본인 확인을 위해 성함이랑 생년월일 말씀해 주시겠어요?" → 사기범 "네, 반갑습니다." →
+  // 참가자 "제 이름은 김영희고요." · "생년 68년 3월 2일이 …" 에 속은 순간 0) — 요구 대사 바로 뒤에 사기범 줄이 하나 더 끼면 답 묶음이
+  // 요구 없는 그 줄과만 짝지어졌다. 답 묶음을 **판정할 기준 대사**(짝 대사)를 고른다.
+  // | # | If | Then |
+  // |---|---|---|
+  // | P1 | 대사 S'에 요구 어형(`scammerHasDemand`)이 없고, 바로 앞이 참가자 줄 없이 이어진 **같은 통화**의 사기범 대사이며 그중 가장 가까운 요구 대사 S가 있다 | 짝 대사 = S(판정 · 위험 신호 · 라벨 모두 S 기준) |
+  // | P2 | S'에 요구 어형이 있다 · 이어진 대사 중 요구가 없다 · 통화가 다르다 · 정당한 제3자 통화다 | 짝 대사 = S'(종전) |
+  // ⚠️ S 자신의 차례에는 답이 없으니(바로 뒤가 사기범 줄) 속은 순간은 여전히 답 묶음 하나에 최대 1개다. 수법 목록은 대사마다 종전대로 올린다.
+  const pairSourceOf = (index: number): AnalysisMessage => {
+    const msg = sorted[index];
+    if (scammerHasDemand(msg.textMasked)) return msg;
+    for (let k = index - 1; k >= 0 && sorted[k].role === "scammer"; k -= 1) {
+      const prev = sorted[k];
+      if (isGenuineLegMessage(prev) || prev.legIndex !== msg.legIndex) break;
+      if (scammerHasDemand(prev.textMasked)) return prev;
+    }
+    return msg;
+  };
   for (let i = 0; i < sorted.length; i += 1) {
     const msg = sorted[i];
     if (msg.role !== "scammer") continue;
@@ -945,6 +965,8 @@ export function analyzeConversation(
     }
     // 2026-11-07 Edge 시험 — 확인 차단 · 인증번호 · 비밀번호 · 명의 도용을 바꿔 말한 대사도 목록에 올린다(`attemptedTactics.ts` 표 A1~A5 · 목록 전용).
     for (const label of resolveAttemptedTacticLabels(msg.textMasked, msgScope.tactics)) tacticLabelsUsed.add(label);
+    // P1 · P2 — 답 묶음의 짝 대사(위 표). 이 아래 판정 · 위험 신호 · 라벨은 짝 대사 기준이다.
+    const pair = pairSourceOf(i);
 
     // 판정 검수(2026-10-21) — 사기범 대사 뒤 참가자 줄이 **연달아** 올 수 있다(실시간 통화에서 사기범 전사가 빈
     // `turnComplete` · 끊긴 조각). 종전엔 첫 줄만 봐서 "잠깐만요" → "048231이요"의 둘째 줄이 판정되지 않았다.
@@ -957,7 +979,7 @@ export function analyzeConversation(
       const fake = FAKE_INFO_MARKER.test(reply.textMasked);
       const resisted = isResistanceForReport(reply.textMasked);
       // 사용자 결정 2026-10-21 — 인증번호 오답(위 W4)은 숫자 응답에서 오는 순응 판정을 끈다(실제 제공 H1 · H2는 그대로).
-      const wrongOtp = isWrongOtpReply(msg.textMasked, reply.textMasked, otpCodes);
+      const wrongOtp = isWrongOtpReply(pair.textMasked, reply.textMasked, otpCodes);
       // 2026-11-07 판 31 · 32 — C6a(부정된 행동 구절 제거) · C6b(따지는 질문) — 위 표.
       const affirmText = reply.textMasked.replace(NEGATED_ACTION, " ");
       // C6c — 요구 뒤 일반 방법 질문만은 속음이 아니다(위험 신호는 아래 `resolveRiskSignalKind`).
@@ -968,9 +990,9 @@ export function analyzeConversation(
         (!questionedNotComplied &&
           COMPLIANCE_PATTERN.test(affirmText) &&
           !isNounOnlyDenial(affirmText) &&
-          !isHowToOrFollowOnlyWithoutDemand(msg.textMasked, affirmText)) ||
-        isHandoffPromiseReply(msg.textMasked, reply.textMasked) ||
-        isContextualCompliance(msg.textMasked, reply.textMasked);
+          !isHowToOrFollowOnlyWithoutDemand(pair.textMasked, affirmText)) ||
+        isHandoffPromiseReply(pair.textMasked, reply.textMasked) ||
+        isContextualCompliance(pair.textMasked, reply.textMasked);
       if (isPhotoAfterDemand(reply, photoDemand !== undefined)) {
         userReply = reply;
         break;
@@ -979,7 +1001,7 @@ export function analyzeConversation(
         userReply = reply;
         break;
       }
-      if (!fake && (isHardDisclosure(msg.textMasked, reply.textMasked) || (!resisted && complied && !wrongOtp))) {
+      if (!fake && (isHardDisclosure(pair.textMasked, reply.textMasked) || (!resisted && complied && !wrongOtp))) {
         userReply = reply;
         break;
       }
@@ -987,7 +1009,7 @@ export function analyzeConversation(
     for (let j = i + 1; j < sorted.length && sorted[j].role === "user"; j += 1) {
       const reply = sorted[j];
       if (reply === userReply) continue;
-      const kind = resolveRiskSignalKind(msg.textMasked, reply.textMasked, otpCodes);
+      const kind = resolveRiskSignalKind(pair.textMasked, reply.textMasked, otpCodes);
       // 2026-11-07 Edge 재시험(기관 사칭 고급 "거래 은행은 새솔은행이고요, 잔액은 천이백만 원쯤 있어요." → 위험 신호 "거래 은행을 알려 줬어요"
       // + 속은 순간 "거래 은행·자산 정보 수집"이 둘 다) — 같은 대사에 대한 답 묶음에서 이미 속은 순간이 잡혔으면 은행명 신호(RS3)는 달지 않는다
       // (같은 답 하나를 두 번 표기 · RS5). 가짜 정보 · 비밀 약속 · 방법 질문 신호는 그대로다.
@@ -1003,9 +1025,9 @@ export function analyzeConversation(
     const labelSource =
       userReply.photo === true && photoDemand
         ? photoDemand
-        : transferDemand && msg !== transferDemand && isTransferDoneAfterDemand(userReply, true) && !isTransferDemand(msg.textMasked)
+        : transferDemand && pair !== transferDemand && isTransferDoneAfterDemand(userReply, true) && !isTransferDemand(pair.textMasked)
           ? transferDemand
-          : msg;
+          : pair;
     // §129 L1 — 속은 순간 라벨에서는 부인 대응 · 암시 라벨을 빼고 다음 일치를 쓴다(시도된 수법 목록은 위에서 이미 올렸다 · 무변경).
     // §142 N3 — 라벨 후보는 라벨을 고른 대사가 오간 통화의 목록에서만.
     const labelScope = scopeOf(labelSource);
