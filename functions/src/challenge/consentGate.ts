@@ -57,3 +57,14 @@ export function decideConsentGate(input: ConsentGateInput): ConsentGateResult {
   // completed | expired | reported | deleted — 더 이상 진행 불가.
   return { action: "reject", message: "더 이상 진행할 수 없는 챌린지입니다." };
 }
+
+/**
+ * D6(2026-11-07 Edge 실사용 시험 판 33) — 목록(`listMyChallenges`)에 내보낼 상태. 서버는 `status`를 `"expired"`로 **쓰지 않는다**
+ * (만료는 `linkExpiresAt`을 읽는 쪽이 그때그때 판정한다 — 위 `decideConsentGate`의 `linkExpired`). 목록 콜러블만 저장된 `status`를
+ * 그대로 내보내 3일이 지난 미사용 링크가 "대기"로 보였다. ⇒ 같은 규칙(최초 진입 창은 `pending`에만 적용)으로 `pending` ∧ 만료 경과 →
+ * `"expired"`. 이미 동의한 챌린지(`consented` · `in_progress`)는 링크가 소모됐고 재개는 보존기간을 따르므로 그대로 둔다.
+ */
+export function listedChallengeStatus(status: ChallengeStatus, linkExpiresAtMs: number, nowMs: number): ChallengeStatus {
+  if (status === "pending" && linkExpiresAtMs <= nowMs) return "expired";
+  return status;
+}

@@ -10,7 +10,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { buildSystemPrompt, REAL_COMPANY_PROMPT_SENTENCE } from "../promptAssembly";
 import { R3C2_LENGTH_DELTA, revertR3C2 } from "./r3NoStallDelta";
-import { FULL_AUDIT_LENGTH_DELTA, revertFullAudit } from "./fullAuditDelta";
+import { BEGINNER_D4_LENGTH_DELTA_NONE, FULL_AUDIT_LENGTH_DELTA, revertFullAudit } from "./fullAuditDelta";
 
 /** §85 — 조립 결과에 들어간 형태(앞 공백 포함). */
 const COMPANY_SENTENCE_WITH_SPACE = ` ${REAL_COMPANY_PROMPT_SENTENCE}`;
@@ -80,7 +80,8 @@ const AFTER_ASSEMBLY_SHA256: Readonly<Record<"beginner" | "intermediate", { sha2
   // P2 실측 결함 수정(2026-11-01 · D-e · D-a) — 공통 금지 문장을 "이 대화(통화 · 메시지)" · "다른 번호로 전화해 확인하라" 예시로(`OUT_OF_SERVICE_SENTENCE`) · `CLAIM_CONSISTENCY_RULE`에
   // "앞 단계를 이체 완료로 바꿔 말하지 않는다" 1문장(+125자)으로 갱신. 직전 값: 초급 99314edcda71(7220자) · 중급 694a68b5ec48(6486자). 두 상수는 `revertFullAudit`가 되돌린다.
   // P2 확인 실측 결함 수정(2026-11-01 · D-e2) — 공통 금지 문장에 "간편결제나 다른 카드로 더 보내라, " 예시(+20자 · `OUT_OF_SERVICE_SENTENCE` — `revertFullAudit`가 되돌린다)로 갱신. 직전 값: 초급 e49622b3aaf2(7345자) · 중급 3029a095e391(6611자).
-  beginner: { sha256: "b469e25b910a1337f3c928d71d2d625a05a4da2232993619e61299d72c62d034", length: 7365 },
+  // D4(2026-11-07 Edge 실사용 시험 판 29 · 32) — 초급 블록 물러섬 보강(+520자 · `fullAuditDelta.ts` BEGINNER_D4_TEXT_CHANGES — `revertFullAudit`가 되돌린다). 초급만 · 중급 무변경. 직전 값: 초급 b469e25b910a(7365자).
+  beginner: { sha256: "849387ce434e454d0ba5d5f7474d1069f2c3f726199c0510cb4cb4512ba9484a", length: 7885 },
   intermediate: { sha256: "01f48911d946c28adc4bc63bfc679c06c900c3623913c8c6ce02becccd34c0ea", length: 6631 },
 };
 
@@ -91,7 +92,7 @@ test("[T194-a G586 · §84.13.3 ④] parcel 초급 · 중급 조립 = 갱신 기
     assert.equal(assembled.length, AFTER_ASSEMBLY_SHA256[level].length, `${level}: 길이`);
     assert.equal(sha256(assembled), AFTER_ASSEMBLY_SHA256[level].sha256, `${level}: 바이트`);
     // §85 — 차이 = (5)항 + 실존 회사명 금지 1문장(앞 공백 포함).
-    assert.equal(assembled.length - BASE_ASSEMBLY_SHA256[level].length, PARCEL_CONTROL_TOKEN_GUARD_ITEM.length + COMPANY_SENTENCE_WITH_SPACE.length + R3C2_LENGTH_DELTA + FULL_AUDIT_LENGTH_DELTA, `${level}: 차이 = (5)항 + §85 1문장 + R3-C ②-a 교체분 + 전수 검수 교체분 길이`);
+    assert.equal(assembled.length - BASE_ASSEMBLY_SHA256[level].length, PARCEL_CONTROL_TOKEN_GUARD_ITEM.length + COMPANY_SENTENCE_WITH_SPACE.length + R3C2_LENGTH_DELTA + FULL_AUDIT_LENGTH_DELTA + (level === "beginner" ? BEGINNER_D4_LENGTH_DELTA_NONE : 0), `${level}: 차이 = (5)항 + §85 1문장 + R3-C ②-a 교체분 + 전수 검수 교체분 + D4 초급 교체분 길이`);
     const guard = SCENARIO_PROMPTS[PARCEL].guardrailPreamble;
     assert.ok(assembled.trimEnd().endsWith(guard.trimEnd()), `${level}: 가드레일 최후미`);
   }
