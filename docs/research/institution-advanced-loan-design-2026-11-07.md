@@ -267,3 +267,15 @@
 |---|---|---|---|
 | D-L8 | 범위표 AC-096 (b) "고급 문자 0~3" — `fv-c5fj`가 4통을 선언(통화 1 세 통 · 통화 3 한 통) | (a) 인증번호 문자를 뺀다(2026-10-21 사용자 신고로 넣은 것과 충돌) · (b) 다통화 변형은 **통화별**로 0~3을 센다(이 변형 최대 3/통화) | (b) |
 | D-L9 | P0 서비스 밖 행동 유도 장부 — 키워드 탐지기가 "앱 안 대출 화면"과 "밖에서 대출 받기"를 못 가른다: 루트 장부 J1_LOAN flowVariants 16→32 · inCallSms 0→9 · mockScreens 1→12 · MessengerFakeLanding 1→10 · J11 8→6 · 공통 표면 `inCallSms/confirmResult.ts` 대출 신청 맥락 지시 1건 | (a) 장부 수치 갱신 + 맥락 지시 상수를 루트 표면 파일로 옮김 · (b) 판정표에 "서비스 안 대출 화면 · 그 화면을 가리키는 문면 = 유도 아님" 행 추가(`docs/research/in-service-experience-plan-2026-10-31.md` §0.1 갱신) | (b) — 사용자 결정 "훈련은 서비스 안에서"와 같은 방향 |
+
+### 13.3 사용자 결정 반영 (2026-11-07 · 메인 전달 — D-L8 *"통화별로 세기 (권장)"* · D-L9 *"앱 안 대출은 예외 (권장)"*)
+| 항목 | 결과 | 이전/기준값 | 근거 |
+|---|---|---|---|
+| D-L8 범위표 | 다통화 변형 문자 = 통화(레그)별 최대값(레그 지정 없는 문자는 모든 통화에 셈) · fv-c5fj 세션 4 · 통화별 3 · 카드사 R1 fv-k3dn 세션 3 · 통화별 1 · fv-r8vb 세션 2 · 통화별 1 · 한 통화 4통 샘플은 걸림 | 세션 합 4 → 위반 | `functions/src/scenarios/__tests__/flowVariants.test.ts` `smsPerCall` · 테스트 진단 출력 `[D-L8]` |
+| D-L9 판정표 | J15 "서비스 안 대출 화면 안내 = O4" — 이름으로 등록한 영역만(접두사 0) · 영역 안이어도 창구 · 지점 · 방문 · 다른 앱/금융/은행/캐피탈 · 은행/금융회사에서 대출 받기·신청은 셈 · 은퇴 fv-pgqt 밖 대출 원문은 셈 | 공통 1 · 장부 +36 | `functions/src/roleplay/__tests__/outOfServiceActions.test.ts` `IN_APP_LOAN_SURFACES` · `IN_APP_LOAN_OUTSIDE` |
+| 장부 | flowVariants J1 16 → 14 · J11 8 → 6(밖 대출 유도 · 은행 직원 둘러대기 2문장이 빠짐) · 그 밖 행 무변경 | 16 · 8 | 같은 파일 `ROUTE_LEDGER` |
+| 문서 | PRD AC-096 갱신 고지 5 · DECISIONS #254 · `in-service-experience-plan-2026-10-31.md` §0.1 행 추가 | — | 세 문서 diff |
+| functions 테스트 | **2164 pass / 0 fail** | 2159 / 3 | `npm --prefix functions test` |
+| root 테스트 | **1316 pass / 0 fail / 1 skip** | 같음 | `npm test` |
+| lint | functions 통과 · root 오류 0 · 경고 1(변경 밖) | 같음 | 두 lint 명령 |
+- ⚠️ DECISIONS #254는 이 브랜치 기준 다음 번호다 — 다른 브랜치가 같은 번호를 쓰면 통합 때 번호를 고친다.

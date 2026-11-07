@@ -107,12 +107,21 @@ function peopleCount(v: FlowVariant): number {
   return v.multiCall ? new Set(v.legs.map((leg, i) => leg.speakerId ?? `#${i}`)).size : v.legs.length;
 }
 
+/**
+ * ⭐ D-L8(2026-11-07 사용자 결정 "통화별로 세기 (권장)" — PRD AC-096 (b) · DECISIONS) — 다통화(`multiCall`) 변형의 문자 수 = **통화(레그)별**
+ * 선언 수의 최대값. `leg` 부재 문자는 모든 통화에 센다(게이트가 레그 구분 없이 허용하는 문자). 단일 통화 변형 = 종전(세션 전체 선언 수).
+ */
+function smsPerCall(v: FlowVariant): number {
+  if (!v.multiCall) return v.sms.length;
+  return Math.max(0, ...v.legs.map((_, legIndex) => v.sms.filter((item) => item.leg === undefined || item.leg === legIndex).length));
+}
+
 /** PRD AC-096 (b) 자동 검증표(78.2.3). 위반 목록을 돌려준다(빈 배열 = 범위 안). */
 function rangeViolations(v: FlowVariant): string[] {
   const out: string[] = [];
   const d = effectiveExitBlock(v).filter((x) => x !== "D0_none");
-  // §142 — 다통화 변형의 문자 수 = 레그별 선언 합(레그마다 다른 문자). 범위표는 세션 전체 문자 수 기준이라 그대로 센다.
-  const sms = v.sms.length;
+  // §142 · D-L8 — 다통화 변형은 통화(레그)별로 센다(`smsPerCall`).
+  const sms = smsPerCall(v);
   const legs = ADVANCED_MULTI_CALL_PEOPLE_EXEMPT[v.variantId] === peopleCount(v) ? 3 : peopleCount(v);
   if (v.level === "beginner") {
     if (sms > 1) out.push(`초급 문자 ${sms}통(0~1)`);
@@ -216,6 +225,18 @@ test("[T191 S5 범위표 대조 · AC-096 (b) — 명시 예외 3종 제외 · �
   t.diagnostic(`정상 초급 ${beginner.variantId}: 위반 ${JSON.stringify(ok)} / D3 샘플: 위반 ${JSON.stringify(bad)}`);
   assert.deepEqual(ok, []);
   assert.ok(bad.some((m) => m.startsWith("초급 축 D")), "D3를 넣은 초급 샘플이 범위 검사에 걸려야 한다");
+
+  // ⭐ D-L8 — 다통화 문자는 통화별로 센다: fv-c5fj = 세션 4통 · 통화별 최대 3통(통과). 역방향 — 한 통화에 4통을 몰면 걸린다.
+  const c5fj = FLOW_VARIANTS.find((x) => x.variantId === "fv-c5fj")!;
+  assert.equal(c5fj.sms.length, 4, "세션 전체 선언 4통");
+  assert.equal(smsPerCall(c5fj), 3, "통화별 최대 3통");
+  const crowded: FlowVariant = { ...c5fj, sms: c5fj.sms.map((item) => ({ ...item, leg: 0 })) };
+  assert.ok(rangeViolations(crowded).some((m) => m.startsWith("고급 문자 4통")), "한 통화 4통 샘플은 범위 검사에 걸려야 한다");
+  // 카드사 고급 R1(다통화)도 같은 규칙으로 범위 안이다(위 전수 대조와 같은 판정 — 값만 드러낸다).
+  for (const v of FLOW_VARIANTS.filter((x) => x.multiCall && x.level === "advanced")) {
+    t.diagnostic(`[D-L8] ${v.variantId}: 세션 ${v.sms.length}통 · 통화별 최대 ${smsPerCall(v)}통`);
+    assert.ok(smsPerCall(v) <= 3, v.variantId);
+  }
 });
 
 test("[T191 S5 초급 이탈 차단 0 · AC-096 (d)] 초급 변형 수법에 D2~D6 라벨 0건(D1은 1개까지)", () => {

@@ -1088,6 +1088,8 @@ const INSTITUTION_LOAN_LEG_RECALL: FlowVariantLeg = {
   tacticLabels: ["권위 암시", "불이익 암시", "비밀 유지 요구", "대출금 이체 요구", "확인 결과 무력화"],
 };
 /** PR-B — 이 루트 리포트의 교육 포인트(설계 §4 · 근거 금감원 소비자경보 2024-35호 · 금융소비자보호법 제46조 청약철회 — 리포트는 세션 밖 화면이라 실제 대응 안내다). */
+/** PR-B — 결정 순간(리포트 · 앱 안 화면 두 곳 · 확인 전화). D-L9 서비스 안 대출 문면 등록부(`outOfServiceActions.test.ts`)가 이름으로 찾는다. */
+const INSTITUTION_LOAN_DECISION_MOMENT = "문자 링크의 이체 화면에서 안전계좌 · 대출금을 보내거나, 대출 실행 확인 전화에서 시킨 대로 용도를 둘러대는 순간";
 export const INSTITUTION_LOAN_REPORT_LESSONS: readonly string[] = [
   "검찰 · 경찰 · 금융감독원은 대출을 받으라고 하지 않습니다. '명의 도용을 입증하려면 대출을 받아 보라'는 말은 사기입니다.",
   "금융회사의 확인 전화 · 창구 질문은 나를 지키는 절차입니다. 누가 시킨 대로 용도를 둘러대라는 말 자체가 사기 신호이니 사실대로 말하세요.",
@@ -1169,7 +1171,7 @@ const SPECS: VariantSpec[] = [
     ...ADVANCED,
     channels: ["voice", "sms"],
     demandStages: 4,
-    decisionMoment: "문자 링크의 이체 화면에서 안전계좌 · 대출금을 보내거나, 대출 실행 확인 전화에서 시킨 대로 용도를 둘러대는 순간",
+    decisionMoment: INSTITUTION_LOAN_DECISION_MOMENT,
     sources: ["C10", "C11", "C01", "S16", "S11", "S42", "S40"],
     multiCall: true,
     reportLessons: INSTITUTION_LOAN_REPORT_LESSONS,

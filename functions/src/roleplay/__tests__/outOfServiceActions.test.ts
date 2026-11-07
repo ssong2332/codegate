@@ -10,6 +10,7 @@
 // | J12 (D9 i) | 통화 · 대화 안에서 말로 불러 달라는 요구 | O4(서비스 안) — 세지 않는다 |
 // | J13 (D9 ii) | 확인 차단 · 통화 유지 요구 | O5 — 세지 않는다 |
 // | J14 (D9 iii) | 기기 실제 사진첩 · 신분증 사진 | O1-device — J9 패턴으로 센다 |
+// | J15 (D-L9) | 서비스 안 대출 화면 문면(`IN_APP_LOAN_SURFACES` 등록 영역 — 앱 안 대출 신청 · 대출금 보관 이체 화면 · 그 화면을 여는 문자 · 그 흐름의 수법 · 상담원 통화 · 리포트 교육점) | O4 — J1 대출 행으로 세지 않음. ⚠️ 그 안에서도 밖 행동 표현(`IN_APP_LOAN_OUTSIDE`)이 있으면 센다 |
 //
 // 두 겹:
 //  ① 공통 표면(`COMMON_FILES` — 모든 시나리오 프롬프트 · 클라 주입 문면) = **0건**(장부 없음). 새 문면이 서비스 밖 행동을 예시로 들면 실패한다.
@@ -45,7 +46,7 @@ type RowId =
   | "J11_COVER_STORY";
 
 interface JudgementRow {
-  id: RowId | "J0_RULE" | "J0_LABEL" | "J12_VERBAL" | "J13_BLOCK";
+  id: RowId | "J0_RULE" | "J0_LABEL" | "J12_VERBAL" | "J13_BLOCK" | "J15_IN_APP_LOAN";
   type: string;
   pattern?: RegExp;
 }
@@ -68,7 +69,59 @@ export const JUDGEMENT_TABLE: readonly JudgementRow[] = [
   { id: "J11_COVER_STORY", type: "O1-physical", pattern: /(직원|창구).{0,15}(물으면|묻거든)/ },
   { id: "J12_VERBAL", type: "O4 (D9 i) — 통화 안 말 요구, 세지 않음" },
   { id: "J13_BLOCK", type: "O5 (D9 ii) — 확인 차단 · 통화 유지, 세지 않음" },
+  // ⭐ D-L9(2026-11-07 사용자 결정 "앱 안 대출은 예외 (권장)") — 영역으로 판정한다(아래 `IN_APP_LOAN_SURFACES`). 패턴 없음 = 제외 행.
+  { id: "J15_IN_APP_LOAN", type: "O4 (D-L9) — 서비스 안 대출 화면 안내, J1로 세지 않음(밖 행동 표현은 셈)" },
 ];
+
+/**
+ * ⭐ D-L9 — 서비스 안 대출 문면 등록부. 문자열 리터럴의 조상이 아래 중 하나면 그 문장은 J1_LOAN으로 세지 않는다.
+ * ⛔ 접두사로 넓히지 않는다 — 은퇴 `fv-pgqt`의 `INSTITUTION_LOAN_DEMAND`("금융회사에서 대출을 받아" = 밖 대출)는 계속 센다(아래 역검증).
+ * | 종류 | 무엇 |
+ * |---|---|
+ * | 변수 | 기관 고급 3통화(fv-c5fj) 수법 · 단계 · 레그 · 상담원 페르소나 · 결정 순간 · 교육점 · 대출 신청 제출 맥락 지시 |
+ * | 문자 | `smsId` = 대출 안내(앱 안 신청 화면 링크) · 입금 안내(가상 캐피탈) · 대출금 보관 계좌(앱 안 이체 화면 링크) |
+ * | 화면 | `landingId` · 화면 문구 표 키 = `loan-apply` · `loan-safe-transfer` · 클라 서브 컴포넌트 `LoanApplyMockup` |
+ */
+const IN_APP_LOAN_SURFACES = {
+  variables: [
+    "INSTITUTION_LOAN_APPLY_STAGE",
+    "INSTITUTION_LOAN_COACH_STAGE",
+    "INSTITUTION_LOAN_APPLY_DEMAND",
+    "INSTITUTION_LOAN_COACH_DEMAND",
+    "INSTITUTION_LOAN_TRANSFER_DEMAND",
+    "INSTITUTION_LOAN_RECALL_DEMAND",
+    "INSTITUTION_LOAN_LEG_PROSECUTOR",
+    "INSTITUTION_LOAN_OFFICER_PERSONA",
+    "INSTITUTION_LOAN_LEG_OFFICER",
+    "INSTITUTION_LOAN_LEG_RECALL",
+    "INSTITUTION_LOAN_DECISION_MOMENT",
+    "INSTITUTION_LOAN_REPORT_LESSONS",
+    "LOAN_APPLY_SUBMITTED_INSTRUCTION",
+  ],
+  smsIds: ["institution-loan-guide", "institution-loan-disbursed", "institution-loan-safe-account"],
+  landingIds: ["loan-apply", "loan-safe-transfer"],
+  functions: ["LoanApplyMockup"],
+} as const;
+/** 등록 영역 안에서도 세는 밖 행동 표현(창구 · 지점 방문 · 다른 앱 · 다른 금융회사 · 은행 · 금융회사에서 대출). "금융회사에서 확인 전화가 간다"(앱 안 통화)는 밖 행동이 아니다. */
+const IN_APP_LOAN_OUTSIDE = /창구|지점|영업점|방문|다른\s?(앱|금융|은행|캐피탈)|(은행|금융회사)에서\s?(직접\s?)?대출을?\s?(받|신청)/;
+
+function inAppLoanRegion(node: ts.Node): boolean {
+  const stringValue = (e: ts.Expression | undefined) => (e && (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e)) ? e.text : undefined);
+  for (let n: ts.Node | undefined = node.parent; n; n = n.parent) {
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && (IN_APP_LOAN_SURFACES.variables as readonly string[]).includes(n.name.text)) return true;
+    if (ts.isFunctionDeclaration(n) && n.name && (IN_APP_LOAN_SURFACES.functions as readonly string[]).includes(n.name.text)) return true;
+    if (ts.isPropertyAssignment(n) && ts.isStringLiteral(n.name) && (IN_APP_LOAN_SURFACES.landingIds as readonly string[]).includes(n.name.text)) return true;
+    if (ts.isObjectLiteralExpression(n)) {
+      for (const prop of n.properties) {
+        if (!ts.isPropertyAssignment(prop) || !ts.isIdentifier(prop.name)) continue;
+        const value = stringValue(prop.initializer);
+        if (prop.name.text === "smsId" && value && (IN_APP_LOAN_SURFACES.smsIds as readonly string[]).includes(value)) return true;
+        if (prop.name.text === "landingId" && value && (IN_APP_LOAN_SURFACES.landingIds as readonly string[]).includes(value)) return true;
+      }
+    }
+  }
+  return false;
+}
 
 /** 장부 행 → 앱 안으로 옮길 단계(문서 §5). J8은 D7로 0건이어야 한다. */
 const ROW_PLAN: Readonly<Record<RowId, string>> = {
@@ -91,15 +144,15 @@ const COUNTED = JUDGEMENT_TABLE.filter((r): r is JudgementRow & { id: RowId; pat
 const RULE = JUDGEMENT_TABLE.find((r) => r.id === "J0_RULE")!.pattern!;
 const LABEL = JUDGEMENT_TABLE.find((r) => r.id === "J0_LABEL")!.pattern!;
 
-/** 문자열 리터럴 · 템플릿 조각만 모은다(주석 · 식별자 제외). */
-function literalTexts(absPath: string): string[] {
-  const source = readFileSync(absPath, "utf8");
+/** 문자열 리터럴 · 템플릿 조각만 모은다(주석 · 식별자 제외). `inAppLoan` = D-L9 등록 영역 안. */
+function literalTexts(absPath: string, source = readFileSync(absPath, "utf8")): { text: string; inAppLoan: boolean }[] {
   const file = ts.createSourceFile(absPath, source, ts.ScriptTarget.ES2020, true, absPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
-  const out: string[] = [];
+  const out: { text: string; inAppLoan: boolean }[] = [];
+  const push = (node: ts.Node, text: string) => out.push({ text, inAppLoan: inAppLoanRegion(node) });
   const visit = (node: ts.Node) => {
-    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) out.push(node.text);
-    else if (ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) out.push(node.text);
-    else if (ts.isJsxText(node)) out.push(node.text);
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) push(node, node.text);
+    else if (ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) push(node, node.text);
+    else if (ts.isJsxText(node)) push(node, node.text);
     // import 경로 · 정규식은 문면이 아니다.
     if (ts.isImportDeclaration(node)) return;
     ts.forEachChild(node, visit);
@@ -112,12 +165,14 @@ function sentences(text: string): string[] {
   return text.split(/(?<=[.!?])\s+|\n/).map((s) => s.trim()).filter(Boolean);
 }
 
-function countRows(absPath: string): Partial<Record<RowId, number>> {
+function countRows(absPath: string, source?: string): Partial<Record<RowId, number>> {
   const counts: Partial<Record<RowId, number>> = {};
-  for (const text of literalTexts(absPath)) {
+  for (const { text, inAppLoan } of literalTexts(absPath, source)) {
     for (const sentence of sentences(text)) {
       if (RULE.test(sentence) || LABEL.test(sentence)) continue; // J0 · J0_LABEL
       for (const row of COUNTED) {
+        // J15(D-L9) — 서비스 안 대출 문면은 J1로 세지 않는다 · 밖 행동 표현이 섞이면 센다.
+        if (row.id === "J1_LOAN" && inAppLoan && !IN_APP_LOAN_OUTSIDE.test(sentence)) continue;
         if (row.pattern.test(sentence)) counts[row.id] = (counts[row.id] ?? 0) + 1;
       }
     }
@@ -155,8 +210,10 @@ const rel = (abs: string) => path.relative(path.resolve(FN_SRC, "../.."), abs).r
  * 줄이면(앱 안으로 옮기면) 이 표도 같이 줄인다.
  */
 const ROUTE_LEDGER: Readonly<Record<string, number>> = {
-  "functions/src/scenarios/flowVariants.ts#J1_LOAN": 16, // P4
-  "functions/src/scenarios/flowVariants.ts#J11_COVER_STORY": 8, // P5
+  // PR-B(2026-11-07) — 기관 고급 fv-c5fj가 3통화 앱 안 대출 체험으로 바뀌어 밖 대출 유도 2문장(통화 중 "금융회사에서 대출을 받아" · 은행 직원 둘러대기)이
+  // 빠졌다(16 → 14 · J11 8 → 6). 새 대출 문면은 J15 등록 영역이라 세지 않는다. 은퇴 fv-pgqt 원문은 그대로 센다.
+  "functions/src/scenarios/flowVariants.ts#J1_LOAN": 14, // P4
+  "functions/src/scenarios/flowVariants.ts#J11_COVER_STORY": 6, // P5
   "functions/src/scenarios/flowVariants.ts#J2_CASH": 9, // P5
   "functions/src/scenarios/flowVariants.ts#J3_GOLD": 5, // P5
   "functions/src/scenarios/flowVariants.ts#J4_VOUCHER": 5, // P5
@@ -217,11 +274,11 @@ const VERBAL_ACCOUNT_WITHOUT_SCREEN_LEDGER: readonly string[] = [
 const ACCOUNT_READOUT = /계좌\s*불러\s*(?:줄게|드릴게)|계좌는\s*'[^']+'\s*(?:같은|처럼)[^.]*(?:부르|부른)|불러주는 계좌/;
 
 describe("P0 서비스 밖 행동 유도 — 판정표 고정", () => {
-  it("판정표: 세는 행 11개 · 제외 행 4개(J0 규칙 · J0 이름표 · D9 i · D9 ii) · D9 iii은 세는 행", () => {
+  it("판정표: 세는 행 11개 · 제외 행 5개(J0 규칙 · J0 이름표 · D9 i · D9 ii · D-L9 서비스 안 대출) · D9 iii은 세는 행", () => {
     assert.equal(COUNTED.length, 11);
     assert.deepEqual(
       JUDGEMENT_TABLE.filter((r) => r.pattern === undefined).map((r) => r.id),
-      ["J12_VERBAL", "J13_BLOCK"],
+      ["J12_VERBAL", "J13_BLOCK", "J15_IN_APP_LOAN"],
     );
     assert.equal(JUDGEMENT_TABLE.find((r) => r.id === "J9_PHOTO")?.type.startsWith("O1-device"), true);
     for (const row of COUNTED) assert.ok(ROW_PLAN[row.id], `${row.id}: 담당 단계`);
@@ -242,6 +299,35 @@ describe("P0 서비스 밖 행동 유도 — 판정표 고정", () => {
     assert.equal(hit(OUT_OF_SERVICE_SENTENCE.trim()), false, "공통 금지 문장 자체는 규칙 문장");
     assert.equal(hit("은행 앱·창구·ATM에서 따로 보내라고 하지 않는다"), false);
     assert.equal(hit("배송 확인 앱 설치하기"), false, "앱 안 설치 화면 링크 칩");
+  });
+});
+
+describe("P0 서비스 밖 행동 유도 — J15 서비스 안 대출 예외(D-L9)", () => {
+  const fvPath = path.join(FN_SRC, "scenarios", "flowVariants.ts");
+  it("등록부의 이름 · id가 실제로 있다(조용한 공회전 방지)", () => {
+    const fv = readFileSync(fvPath, "utf8");
+    const confirm = readFileSync(path.join(FN_SRC, "inCallSms", "confirmResult.ts"), "utf8");
+    for (const name of IN_APP_LOAN_SURFACES.variables) assert.ok(new RegExp(`const ${name}\\b`).test(fv + confirm), name);
+    for (const smsId of IN_APP_LOAN_SURFACES.smsIds) assert.ok(findInCallSmsItem("institutional-impersonation", smsId), smsId);
+    const landing = readFileSync(path.join(ROOT_SRC, "components", "MessengerFakeLanding.tsx"), "utf8");
+    assert.ok(landing.includes("function LoanApplyMockup("));
+  });
+
+  it("'실제 대출 받아 오라' 류는 계속 잡힌다 — 등록 영역 밖 · 영역 안 밖 행동 표현 · 은퇴 fv-pgqt 원문", () => {
+    const j1 = (source: string) => countRows("sample.ts", source).J1_LOAN ?? 0;
+    assert.equal(j1(`const OTHER = "금융회사에서 대출을 받아 그 돈도 안전계좌로 옮기세요.";`), 1, "등록 영역 밖");
+    assert.equal(j1(`const INSTITUTION_LOAN_APPLY_STAGE = "가까운 은행 창구에 가서 대출을 받아 오세요.";`), 1, "영역 안이어도 창구");
+    assert.equal(j1(`const INSTITUTION_LOAN_APPLY_STAGE = "다른 앱에서 대출을 받아 오세요.";`), 1, "영역 안이어도 다른 앱");
+    assert.equal(j1(`const INSTITUTION_LOAN_APPLY_STAGE = "은행에서 대출을 받아 오세요.";`), 1, "영역 안이어도 은행에서 대출");
+    assert.equal(j1(`const INSTITUTION_LOAN_COACH_STAGE = "대출 신청을 마쳤다고 하면 곧 금융회사에서 대출 실행 확인 전화가 갈 거라고 알린다.";`), 0, "앱 안 확인 전화 안내 = 예외");
+    assert.equal(j1(`const INSTITUTION_LOAN_APPLY_STAGE = "문자 속 링크의 대출 신청 화면에서 대출을 신청하게 한다.";`), 0, "앱 안 화면 안내 = 예외");
+    assert.equal(j1(`const INSTITUTION_LOAN_DEMAND = "그다음 금융회사에서 대출을 받아 오게 한다.";`), 1, "접두사가 같아도 등록 안 된 이름은 센다");
+    // 은퇴 fv-pgqt가 쓰는 원문(바이트 고정)은 그대로 센다.
+    const fv = readFileSync(fvPath, "utf8");
+    const at = fv.indexOf("const INSTITUTION_LOAN_DEMAND =");
+    assert.ok(at > 0);
+    const declaration = fv.slice(at, fv.indexOf(";\n", at) + 1);
+    assert.ok(j1(declaration) >= 1, "fv-pgqt 대출 유도 원문");
   });
 });
 
