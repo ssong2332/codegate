@@ -6,7 +6,8 @@
 // | 화면 | 구성(실제 휴대폰 전화 앱 근사 — 배치는 기본 전화 앱 구성 기준 추정) |
 // |---|---|
 // | 다이얼 | 위 = 입력 번호(크게) · 탭 = 키패드 / 연락처 · 아래 = 초록 통화 버튼 · 지우기 |
-// | 연결 중 | 상대 라벨 · "연결 중" / "통화 연결음" · 빨간 종료(누르면 훈련 종료) |
+// | 연결 중 | 상대 라벨 · "발신 중…" · 빨간 종료(누르면 훈련 종료) — 참가자가 건 통화(`dial`)만 |
+// | 넘김 대기(`holding`) | **그리지 않는다** — 통화 화면이 그대로 보이고 대기음만 들린다(2026-11-07 실기기 "검은 화면은 몰입감을 깬다") |
 // | 다시 걸려 온 전화 | 상대 번호 · 받기 · 거절(거절 = 훈련 종료) |
 // | 자동 안내 | 진짜 기관 자동 안내 문장(서버 번호부 값 그대로) · 통화 종료 |
 // ⛔ 세션 중 화면이라 '모의' · '훈련용' 표식 문구 0(G437). ⛔ 실제 전화 발신 0(`tel:` 링크 0).
@@ -77,7 +78,7 @@ function RoundButton({
 export default function CallLegScreens(props: CallLegScreensProps) {
   const { screen } = props;
   const [tab, setTab] = useState<"keypad" | "contacts">("keypad");
-  if (screen.kind === "none") return null;
+  if (screen.kind === "none" || screen.kind === "holding") return null;
 
   if (screen.kind === "connecting" || screen.kind === "incoming") {
     const incoming = screen.kind === "incoming";

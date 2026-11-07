@@ -59,3 +59,14 @@ export const PRE_CALL_NOTICE = {
   stopHint: "언제든 '훈련 종료'로 멈출 수 있습니다.",
   confirmLabel: "준비됐어요",
 } as const;
+
+/**
+ * 2026-11-07 실기기 신고("첫 화면에 문자 화면이 뜨니 당황스럽다, 문자로 시작하는 경우는 처음에 다른 설명이 들어가야 한다") —
+ * 시작 문자 세션(세션 문서 `startSurface === "sms"` — §142 PR-4 R2)의 벨 직전 고지만 제목을 바꾸고 한 줄을 더한다.
+ * 고지 ①(`PREROLL_NOTICE`) · 고지 ②(`PRE_CALL_NOTICE.stopHint`)는 그대로다(전화는 뒤에 이어진다).
+ * ⛔ 세션 전 화면 전용(G437 — 세션 중 화면에 이 문구 0). 무엇을 하라(번호로 걸어라 등)는 행동 지시는 넣지 않는다(판단을 미리 알려 주는 셈).
+ */
+export const PRE_CALL_SMS_START_NOTICE = {
+  title: "이번 훈련은 문자로 시작합니다",
+  hint: "휴대폰에 문자가 도착한 상황에서 시작해요. 평소처럼 문자를 확인해 보세요.",
+} as const;

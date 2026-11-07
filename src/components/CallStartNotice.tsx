@@ -22,7 +22,7 @@ import WebDarkModeNotice from "./WebDarkModeNotice";
 import EndTrainingButton from "./EndTrainingButton";
 import PhoneIcon from "./PhoneIcon";
 import { Button } from "./ui";
-import { PRE_CALL_NOTICE, PREROLL_NOTICE } from "@/lib/sessionboundary/preSessionCopy";
+import { PRE_CALL_NOTICE, PRE_CALL_SMS_START_NOTICE, PREROLL_NOTICE } from "@/lib/sessionboundary/preSessionCopy";
 import { SCREEN_OFF_COPY } from "@/lib/realtime/backgroundCall";
 import type { DeviceSkin, DeviceSkinSource } from "@/lib/phone/deviceSkin";
 import {
@@ -48,9 +48,14 @@ type CallStartNoticeProps = {
    * §88 — 챌린지를 보낸 사람이 넣은 카드는 `readSessionPersonaCard`가 `null`로 돌려 받는 사람에게 그리지 않는다.
    */
   personaCard: PersonaCardView | null;
+  /**
+   * 2026-11-07 — 시작 문자 세션(서버 세션 문서 `startSurface === "sms"`)이면 제목을 바꾸고 안내 한 줄을 더한다(`PRE_CALL_SMS_START_NOTICE`).
+   * 부재 · false = 종전 문면 그대로.
+   */
+  smsStart?: boolean;
 };
 
-export default function CallStartNotice({ onConfirm, onEndTraining, skinPicker, personaCard }: CallStartNoticeProps) {
+export default function CallStartNotice({ onConfirm, onEndTraining, skinPicker, personaCard, smsStart = false }: CallStartNoticeProps) {
   const headingRef = useRef<HTMLHeadingElement | null>(null);
 
   useEffect(() => {
@@ -77,9 +82,11 @@ export default function CallStartNotice({ onConfirm, onEndTraining, skinPicker, 
           tabIndex={-1}
           className="text-[22px] font-bold leading-[1.35] text-ink outline-none"
         >
-          {PRE_CALL_NOTICE.title}
+          {smsStart ? PRE_CALL_SMS_START_NOTICE.title : PRE_CALL_NOTICE.title}
         </h1>
         <div className="flex flex-col gap-1.5">
+          {/* 2026-11-07 — 시작 문자 세션만: 첫 화면이 받은 문자임을 먼저 알린다(고지 ① 위 · 같은 크기). */}
+          {smsStart && <p className="text-[17px] leading-[1.55] text-ink">{PRE_CALL_SMS_START_NOTICE.hint}</p>}
           <p className="text-[17px] leading-[1.55] text-ink-sub">{PREROLL_NOTICE}</p>
           <p className="text-[17px] leading-[1.55] text-ink-sub">{PRE_CALL_NOTICE.stopHint}</p>
           {/* §99(UX D-142) — 화면 꺼짐 · 귀에 대기 안내(세션 전 화면 · 경고 표현 0). 화면이 꺼지면 말이 전달되지 않는다. */}
