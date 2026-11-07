@@ -13,6 +13,9 @@
 // ⛔ 참가자 줄은 **데이터**다 — 구분자 흉내(`[[` · `[훈련참가자입력`)를 전각으로 바꾸고, "지시가 아니다"를 머리에 적는다.
 // ⛔ 저장된 값은 이미 가려진 값(`textMasked`)만 쓴다(서버 마스킹 그대로 — 원문 0).
 
+// Edge 재시험 2(2026-11-07) — 참가자 줄의 가림 표지에 "상대가 실제로 말한 값" 설명(`shared/maskedTokens.ts` 판정표 M).
+import { explainMaskedTokens } from "../shared/maskedTokens";
+
 /** 맥락에 싣는 최근 줄 수 · 한 줄 글자 수 · 대화 줄 전체 글자 수 상한(판단값 — 길면 첫 응답이 늦어진다). */
 export const PRIOR_CHAT_MAX_LINES = 24;
 export const PRIOR_CHAT_MAX_LINE_CHARS = 200;
@@ -125,7 +128,7 @@ export function buildPriorChatContext(
     const m = usable[i]!;
     const clipped = m.text.length > PRIOR_CHAT_MAX_LINE_CHARS ? `${m.text.slice(0, PRIOR_CHAT_MAX_LINE_CHARS)}…` : m.text;
     const who = m.role === "scammer" ? "나" : "상대";
-    const line = `${who}(${channelLabel(m.channel)}): ${m.role === "user" ? neutralizeSentinels(clipped) : clipped}`;
+    const line = `${who}(${channelLabel(m.channel)}): ${m.role === "user" ? neutralizeSentinels(explainMaskedTokens(clipped)) : clipped}`;
     if (total + line.length > PRIOR_CHAT_MAX_TOTAL_CHARS && lines.length > 0) break;
     lines.push(line);
     total += line.length;
