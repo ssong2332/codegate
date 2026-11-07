@@ -41,7 +41,16 @@ import { withModelToolNoRepeat } from "./toolGuidance";
 import { findFlowVariant } from "../scenarios/flowVariants";
 import { LEG_LATER_SMS_DECLINE, LEG_TRANSFER_HANDOFF_INSTRUCTION, isLaterLegSmsPurpose, planLegHandoff } from "../callLegs/legHandoff";
 import { landingSubmittedInstructionFor, LOAN_APPLY_LANDING_ID, LOAN_APPLY_SUBMITTED_INSTRUCTION } from "./confirmResult";
-import { VOUCHER_PURCHASED_INSTRUCTION, isVoucherLanding } from "../scenarios/mockScreens";
+import {
+  CASH_HELD_INSTRUCTION,
+  CASH_RESERVED_INSTRUCTION,
+  GOLD_HELD_INSTRUCTION,
+  GOLD_PURCHASED_INSTRUCTION,
+  VOUCHER_PURCHASED_INSTRUCTION,
+  isCashLanding,
+  isGoldLanding,
+  isVoucherLanding,
+} from "../scenarios/mockScreens";
 import type {
   DeliverInCallSmsRequest,
   DeliverInCallSmsResponse,
@@ -331,6 +340,7 @@ const EVENT_FIELD: Record<InCallSmsEvent, string> = {
   landing_identity: "landingIdentityAt",
   landing_converted: "landingConvertedAt",
   landing_amount: "landingAmountAt",
+  landing_held: "landingHeldAt",
 };
 
 /** 자기 키만 본다(`in`은 `"constructor"` 같은 상속 키도 통과시킨다). */
@@ -395,6 +405,25 @@ export const recordInCallSmsEvent = onCall<
   if (event === "landing_submitted" && !snap.get(field) && isVoucherLanding(snap.get("fakeLandingId") as string | undefined)) {
     await smsRef.update({ [field]: Timestamp.now() });
     return { recorded: true, contextInstruction: VOUCHER_PURCHASED_INSTRUCTION };
+  }
+  // ⭐ 2026-11-07(Edge 재시험 2 S7 · 사용자 결정 D-G1 ~ D-G6) — 금 거래소 구매 화면. 보류(고액 구매 확인 질문에 수사기관 요구를 받았다고 답함)는 금 화면 문서에서만
+  // 받는다(다른 화면 = 거절 — 고정 값이라도 엉뚱한 문서에 쌓이지 않게). 처음 기록한 순간에만 실시간 지시 1줄: 보류 = 압박 1회 · 재요구 1회 · 포기(판정표 A4),
+  // 결제 = 구매 확인 · 담당 직원 연락 · 끊기(A3). 금액 비교 대상 아님(사기범이 금액을 정하지 않는다).
+  // ⭐ 2026-11-07(사용자 결정 D-G2 E1-b) — 출금 예약 화면(`CASH_LANDINGS`)도 같은 길: 문진표 보류 = `landing_held` · 예약 = `landing_submitted`(판정표 A3 · A4).
+  const heldLandingId = snap.get("fakeLandingId") as string | undefined;
+  const goldLanding = isGoldLanding(heldLandingId);
+  const cashLanding = isCashLanding(heldLandingId);
+  if (event === "landing_held" && !goldLanding && !cashLanding) {
+    throw new HttpsError("failed-precondition", "이 문자의 화면에는 보류 단계가 없습니다.");
+  }
+  if ((goldLanding || cashLanding) && (event === "landing_held" || event === "landing_submitted")) {
+    if (snap.get(field)) return { recorded: true };
+    await smsRef.update({ [field]: Timestamp.now() });
+    const held = event === "landing_held";
+    return {
+      recorded: true,
+      contextInstruction: goldLanding ? (held ? GOLD_HELD_INSTRUCTION : GOLD_PURCHASED_INSTRUCTION) : held ? CASH_HELD_INSTRUCTION : CASH_RESERVED_INSTRUCTION,
+    };
   }
   // 최초 1회만 세팅한다(§API.md) — 다시 열어봐도 "처음 열어본 시각"이 밀리지 않는다.
   if (!snap.get(field)) {

@@ -152,8 +152,8 @@ export async function readMockScreenCompletion(
  * (`in-service-experience-plan-2026-10-31.md` §5). `decisionScreenHangup.test.ts`가 목록과 대상 장부를 함께 고정한다.
  */
 export const VERBAL_DECISION_VARIANTS: readonly string[] = [
-  "fv-k9ra", // 자산 보호 고급 — 보관 접수 신청 화면 뒤 인출 · 전달 약속(P5 현금)
-  "fv-t8ga", // 자산 보호 고급 — 보관 접수 신청 화면 뒤 금 제출 약속(P5 금)
+  // 2026-11-07 — fv-k9ra(자산 보호 고급 현금형)는 앱 안 출금 예약 화면이 생겨 이 목록에서 빼고 4-c 대상으로 옮겼다(사용자 결정 D-G1 · D-G2 E1-b · 위 ⚠️ 주석대로).
+  // 2026-11-07 — fv-t8ga(자산 보호 고급 금형)는 앱 안 금 거래소 화면이 생겨 이 목록에서 빼고 4-c 대상으로 옮겼다(사용자 결정 D-G1 · 위 ⚠️ 주석대로).
   // 2026-11-07 — fv-v2mk(검찰 고급 상품권형)는 앱 안 상품권 구매 화면이 생겨 이 목록에서 빼고 4-c 대상으로 옮겼다(위 ⚠️ 주석대로 · 사용자 결정 "앱 안 화면 추가").
   "fv-a6lq", // 검찰 고급 — 사건 조회 화면 뒤 대출 약속(P4 대출)
 ];

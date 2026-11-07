@@ -45,6 +45,10 @@ import {
   PARTICIPANT_HANGUP_TITLE,
   participantHangupText,
   readParticipantHangup,
+  readScreenHeld,
+  SCREEN_HELD_TITLE,
+  screenHeldText,
+  type ScreenHeldView,
   type ParticipantHangupView,
   pickFirstDeceivedIndex,
   readOfficialCheck,
@@ -182,6 +186,8 @@ type ReportData = {
   officialCheck: OfficialCheckView | null;
   // 사용자 결정 2026-11-07 "방어로 집계" — 먼저 끊었고 그 전에 속은 순간 없음(부재 = 블록 0).
   participantHangup: ParticipantHangupView | null;
+  // 사용자 결정 2026-11-07 "잘 대처함 칸 추가" — 거래 화면 확인 질문에 사실대로 답해 보류됨(부재 = 칸 0).
+  screenHeld: ScreenHeldView | null;
 };
 
 type PageState = "no-session" | "loading" | "error" | "loaded";
@@ -242,6 +248,7 @@ export default function ReportPage() {
       routeSummary: readRouteSummary(data.routeSummary),
       officialCheck: readOfficialCheck(data.officialCheck),
       participantHangup: readParticipantHangup(data.participantHangup),
+      screenHeld: readScreenHeld(data.screenHeld),
     };
   }, []);
 
@@ -612,6 +619,22 @@ export default function ReportPage() {
                 <p className="mt-0.5 text-lg leading-relaxed text-ink-sub">
                   {participantHangupText(report.participantHangup.timeLabel ? formatMomentLabel(report.participantHangup.timeLabel) : null)}
                 </p>
+              </div>
+            </div>
+            <div className="h-px bg-neutral-tint" />
+          </>
+        )}
+
+        {/* 사용자 결정 2026-11-07 "잘 대처함 칸 추가" — 거래 화면 확인 질문에 사실대로 답해 보류됨(서버 `screenHeld` · `reportAccuracy.ts` Q1). */}
+        {report.screenHeld && (
+          <>
+            <div className="flex items-start gap-2.5">
+              <svg width="20" height="20" viewBox="0 0 16 16" className="mt-0.5 shrink-0" aria-hidden="true">
+                <circle cx="8" cy="8" r="7" fill="var(--success)" />
+              </svg>
+              <div>
+                <p className="text-lg font-bold text-ink">{SCREEN_HELD_TITLE}</p>
+                <p className="mt-0.5 text-lg leading-relaxed text-ink-sub">{screenHeldText(formatMomentLabel(report.screenHeld.timeLabel))}</p>
               </div>
             </div>
             <div className="h-px bg-neutral-tint" />
