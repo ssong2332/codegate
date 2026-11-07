@@ -5,7 +5,7 @@
 // | G2 | 단계 · 수법 · 페르소나 — 문자 속 거래소 화면에서 산다 · 은행 창구 · 금은방 · 다른 거래소 금지 · 장소 · 시간 0 · 말로 끝나는 꼬리 0 · 종전 "예금을 찾아 직원에게 제출 약속" 0 |
 // | G3 | 끊기 4-c — 결제 전 · 보류 뒤 = 대기(goal 금지) · 결제 뒤 = 완료. C-5(`goalFollowUpUserTurns`) 제거 · fv-t8ga 말 결말 목록에서 뺌 |
 // | G4 | 화면 카탈로그(가상 거래소 · 실존 이름 0) · 화면 행동(샀다 · 주문했다 = 완료 주장) · 결제 · 보류 실시간 지시 · 보류 이벤트는 금 화면 문서에서만 |
-// | G5 | 리포트 — 결제 제출 = 속은 순간 승격(라벨 = 화면 momentTactic) · 보류만 = 속은 순간 0(사용자 결정 대기 (a) — 막은 순간 표기 없음) |
+// | G5 | 리포트 — 결제 제출 = 속은 순간 승격(라벨 = 화면 momentTactic) · 보류만 = 속은 순간 0(사용자 결정 "잘 대처함 칸 추가" — 속은 순간 0 + 리포트 잘 대처함 한 줄 `report/screenHeld.ts` · 막은 순간 목록 없음) |
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

@@ -55,6 +55,7 @@ import { findDialEntry } from "../scenarios/dialDirectory";
 import { buildTacticPremiseText } from "./tacticPremise";
 import { isAmountComparison } from "../roleplay/screenAction";
 import { resolveParticipantHangup } from "./participantHangup";
+import { resolveScreenHeld } from "./screenHeld";
 
 /**
  * 2026-11-07 Edge 시험 판 27 — 공식 번호 확인 기록.
@@ -218,6 +219,18 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     };
   });
   const smsTimeline = buildSmsTimeline(smsSources, messages, reportTimeBaseMs);
+  // 사용자 결정 2026-11-07 "잘 대처함 칸 추가" — 거래 화면 확인 질문에 사실대로 답해 보류됨(`screenHeld.ts` Q1 ~ Q5 · 판정 무변경).
+  // 문자 문서의 시각 두 개만 읽는다(`smsSources`에는 싣지 않는다 — 문자 타임라인 · 승격 입력 무변경).
+  const screenHeld = resolveScreenHeld(
+    smsSnap.docs.map((doc) => {
+      const data = doc.data() as InCallSmsDoc;
+      return {
+        ...(data.landingHeldAt ? { landingHeldAtMs: data.landingHeldAt.toMillis() } : {}),
+        ...(data.landingSubmittedAt ? { landingSubmittedAtMs: data.landingSubmittedAt.toMillis() } : {}),
+      };
+    }),
+    reportTimeBaseMs,
+  );
 
   // ②-c 확인 시도 무력화 스냅샷 + **기존 순간 주석**(T83, §16.3, ADR-0009, AC-071) —
   // `sessions/{sid}/verifyIntercept`를 **1회 추가 read**한다(위 문자 수집과 같은 지점).
@@ -412,6 +425,7 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     // 2026-11-07 Edge 시험 판 27 — 진짜 기관 번호로 직접 걸어 확인한 사실(서버 `relay.genuineNumberId` · 부재 = 필드 0).
     ...(officialCheck ? { officialCheck } : {}),
     ...(participantHangup ? { participantHangup } : {}),
+    ...(screenHeld ? { screenHeld } : {}),
     createdAt: Timestamp.now(),
     scenarioId: session.scenarioId,
     channel: session.channel ?? "voice",
