@@ -52,6 +52,8 @@ import { stripLeakedThought } from "../realtime/thoughtLeak";
 import { resolveReportTimeBaseMs } from "../session/answeredAt";
 import { personaCardKind } from "../scenarios/personaCardCatalog";
 import { findDialEntry } from "../scenarios/dialDirectory";
+import { buildTacticPremiseText } from "./tacticPremise";
+import { isAmountComparison } from "../roleplay/screenAction";
 
 /**
  * 2026-11-07 Edge 시험 판 27 — 공식 번호 확인 기록.
@@ -164,6 +166,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     listOtpItems(session.scenarioId).map((item) => withSessionOtp(item, sessionId).otpCode!),
     // §142 N3 — 다통화 변형은 대사의 수법을 그 통화 목록에서만 고른다(통화 번호 = 메시지 `legIndex`).
     multiCallLegTactics(multiCallVariant),
+    // 2026-11-07 Edge 재시험 — 요구 수법 문구 키를 시나리오 설정 문구(기본 사연 · 문자 제목)와 구별한다(하지 않은 수법이 목록에 오르던 것).
+    buildTacticPremiseText(session.scenarioId),
   );
 
   // ②-b 통화 중 문자 이벤트 스냅샷(T89, §15.1.5, AC-059) — `sessions/{sid}/inCallSms`를 **1회 추가
@@ -200,6 +204,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       ...(data.landingIdentityAt ? { landingIdentityAtMs: data.landingIdentityAt.toMillis() } : {}),
       ...(data.landingConvertedAt ? { landingConvertedAtMs: data.landingConvertedAt.toMillis() } : {}),
       ...(data.landingAmountAt ? { landingAmountAtMs: data.landingAmountAt.toMillis() } : {}),
+      // 2026-11-07 Edge 재시험 — 문자 링크 이체 화면의 요구액 대비 비교(승격 순간 문장 전용 · 스냅샷에 싣지 않는다).
+      ...(isAmountComparison(data.landingAmountComparison) ? { landingAmountComparison: data.landingAmountComparison } : {}),
       ...(data.fakeLandingId ? { fakeLandingId: data.fakeLandingId } : {}),
     };
   });
