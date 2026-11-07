@@ -199,11 +199,15 @@ const EXPECTED_GUARDED = [
   // ⭐ 2026-11-07(Edge 재시험 2 S7 · 사용자 결정 D-G1 ~ D-G6) — 금 구매형 결말이 앱 안 금 거래소 화면으로 바뀐 2루트.
   "fv-g2ld", // 기관 고급 — 인증번호 → 지정 거래소 금 구매 화면(gold-buy) · C-5에서 옮겼다
   "fv-t8ga", // 자산 보호 고급 — 보관 신청서 → 금 실물 주문 화면(asset-gold-buy) · D-2b에서 옮겼다
+  // ⭐ 2026-11-07(사용자 결정 D-G1 · D-G2 E1-b) — 현금 전달형 결말이 앱 안 출금 예약 화면으로 바뀐 2루트.
+  "fv-q7cn", // 기관 고급 — 인증번호 → 내 은행 출금 예약 화면(cash-withdraw) · C-5에서 옮겼다
+  "fv-k9ra", // 자산 보호 고급 — 보관 신청서 → 출금 예약 화면(asset-cash-withdraw) · D-2b에서 옮겼다
 ];
 
 // 2026-11-07 — 상품권형 fv-v2mk는 앱 안 구매 화면이 생겨 4-c 대상으로 옮겼다(4 → 3). 같은 날 금형 fv-t8ga도 금 거래소 화면이 생겨 옮겼다(3 → 2).
-test("[P1 M1 · D-2b] 결정 순간이 말인 2변형은 화면을 선언했어도 4-c 대상이 아니다 — P4 · P5에서 화면으로 바뀌면 옮긴다", () => {
-  assert.deepEqual([...VERBAL_DECISION_VARIANTS].sort(), ["fv-a6lq", "fv-k9ra"]);
+// 같은 날(사용자 결정 D-G2 E1-b) 현금형 fv-k9ra도 출금 예약 화면이 생겨 옮겼다(2 → 1).
+test("[P1 M1 · D-2b] 결정 순간이 말인 1변형은 화면을 선언했어도 4-c 대상이 아니다 — P4 · P5에서 화면으로 바뀌면 옮긴다", () => {
+  assert.deepEqual([...VERBAL_DECISION_VARIANTS].sort(), ["fv-a6lq"]);
   for (const variantId of VERBAL_DECISION_VARIANTS) {
     const v = FLOW_VARIANTS.find((x) => x.variantId === variantId);
     assert.ok(v && v.retired !== true, `${variantId}: 현행 변형이어야 한다`);

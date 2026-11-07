@@ -214,6 +214,22 @@ const ASSET_PROTECTION_NOTICE_CALL: InCallSmsItem[] = [
     announceInstruction:
       "(참가자 휴대전화로 방금 지정 거래소 금 실물 주문 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크의 거래소 화면에서 보관할 자산만큼 금 실물을 주문해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 거래소 이름 · 금액 · 중량을 지어내 말하지 말고, 은행 창구나 금은방 같은 다른 곳에서 사라고 하지 말고, 실제 주소를 읽어 주지도 마라.)",
   },
+  // ⭐ 2026-11-07(사용자 결정 D-G1 · D-G2 E1-b "문자 링크 → 내 은행 화면") — 자산 보호 고급 현금형(fv-k9ra) 결말. 보관 신청서 뒤 사기범이 도구로 보내고, 링크가
+  // 내 은행 앱 머리띠의 현금 · 수표 출금 예약 화면(`asset-cash-withdraw`)을 연다(문진표 · 생체 인증 · 예약 번호). ⚠️ 현실과 다름: 실제 피해자는 자기 은행 앱 · 창구로
+  // 간다(문자 링크 0) — 앱 밖으로 나가지 않게 하는 대가(사용자 결정). 목적 `transfer` ↔ 종류 `account`(계좌 줄 없음 — 금 · 상품권 문자와 같은 선례).
+  // afterScammerTurns=7(이 시나리오 3 · 5 · 6과 겹치지 않음).
+  {
+    smsId: "asset-cash-reserve",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["asset-protection-notice-call"]} (자산보관 안내)`,
+    body: "[자산보호] 보관 자산 출금 예약 안내\n보관 대상 예금은 아래에서 거래 은행 출금 예약을 해 주세요.\n예약이 끝나면 담당 직원이 따로 연락드립니다.\n수사 종료 후 전액 반환됩니다.\n외부에 알리지 마십시오.",
+    linkDisplayText: "보관 자산 출금 예약하기",
+    fakeLandingId: "asset-cash-withdraw",
+    linkAddress: "custody-reserve.invalid/reserve/Kb7q",
+    afterScammerTurns: 7,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 거래 은행 출금 예약 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크의 은행 화면에서 보관할 예금의 출금 예약을 해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 은행 이름 · 금액을 지어내 말하지 말고, 은행 창구 같은 다른 곳에서 따로 하라고 하지 말고, 실제 주소를 읽어 주지도 마라.)",
+  },
 ];
 
 const PROSECUTION_COOPERATION_CALL: InCallSmsItem[] = [
@@ -294,6 +310,20 @@ const INSTITUTIONAL_IMPERSONATION: InCallSmsItem[] = [
     afterScammerTurns: 8,
     announceInstruction:
       "(참가자 휴대전화로 방금 지정 거래소 금 구매 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크의 거래소 화면에서 예금으로 골드바를 사 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 거래소 이름 · 금액 · 중량을 지어내 말하지 말고, 은행 창구나 금은방 같은 다른 곳에서 사라고 하지 말고, 실제 주소를 읽어 주지도 마라.)",
+  },
+  // ⭐ 2026-11-07(사용자 결정 D-G2 E1-b "문자 링크 → 내 은행 화면") — 기관 고급 현금 예탁형(fv-q7cn) 결말. 인증번호 뒤 사기범이 도구로 보내고, 링크가 내 은행 앱
+  // 머리띠의 현금 · 수표 출금 예약 화면(`cash-withdraw`)을 연다. ⚠️ 현실과 다름(위 `asset-cash-reserve` 주석). afterScammerTurns=10(이 시나리오 2 · 3 · 6 · 7 · 8 · 9 · 11과 겹치지 않음).
+  {
+    smsId: "institution-cash-reserve",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["institutional-impersonation"]} (자산예탁 안내)`,
+    body: "[자산예탁] 예탁금 출금 예약 안내\n예탁 대상 예금은 아래에서 거래 은행 출금 예약을 해 주세요.\n예약이 끝나면 담당 직원이 따로 연락드립니다.\n수사 종료 후 전액 반환됩니다.\n외부에 알리지 마십시오.",
+    linkDisplayText: "예탁금 출금 예약하기",
+    fakeLandingId: "cash-withdraw",
+    linkAddress: "deposit-reserve.invalid/reserve/Ft2m",
+    afterScammerTurns: 10,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 거래 은행 출금 예약 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크의 은행 화면에서 예탁할 예금의 출금 예약을 해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 은행 이름 · 금액을 지어내 말하지 말고, 은행 창구 같은 다른 곳에서 따로 하라고 하지 말고, 실제 주소를 읽어 주지도 마라.)",
   },
   {
     smsId: "institution-otp",

@@ -307,6 +307,8 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `voucher-purchase` | `scenarios/inCallSms.ts` PROSECUTION_COOPERATION_CALL(문자 본문·칩 — 2026-11-07 앱 안 결말) | "검수 대상 자금은 아래 판매처에서 상품권으로 구매해 주세요." | 판매처에서 상품권 구매 | "다솜 문화상품권 구매" | "상품권 구매하기" |
 // | `gold-buy` | `scenarios/inCallSms.ts` INSTITUTIONAL_IMPERSONATION(문자 본문·칩 — 2026-11-07 금 구매형) | "검수 대상 예금은 아래 지정 거래소에서 골드바로 구매해 주세요." | 지정 거래소에서 골드바 구매 | "해담골드 골드바 구매" | "골드바 구매하기" |
 // | `asset-gold-buy` | `scenarios/inCallSms.ts` ASSET_PROTECTION_NOTICE_CALL(문자 본문·칩 — 2026-11-07 금형) | "보관 대상 자산은 아래 지정 거래소에서 금 실물로 주문해 주세요." | 지정 거래소에서 금 실물 주문 | "해담골드 금 실물 주문" | "금 실물 주문하기" |
+// | `cash-withdraw` | `scenarios/inCallSms.ts` INSTITUTIONAL_IMPERSONATION(문자 본문·칩 — 2026-11-07 현금 예탁형) | "예탁 대상 예금은 아래에서 거래 은행 출금 예약을 해 주세요." | 거래 은행 출금 예약 | "예탁금 현금 · 수표 출금 예약" | "예탁금 출금 예약하기" |
+// | `asset-cash-withdraw` | `scenarios/inCallSms.ts` ASSET_PROTECTION_NOTICE_CALL(문자 본문·칩 — 2026-11-07 현금형) | "보관 대상 예금은 아래에서 거래 은행 출금 예약을 해 주세요." | 거래 은행 출금 예약 | "보관 자산 현금 · 수표 출금 예약" | "보관 자산 출금 예약하기" |
 // | `loan-check-app-install` | `scenarios/inCallSms.ts` LOAN_SCAM(문자 본문·칩 — T194-c-1 Q2) | "아래에서 심사용 보안 점검 앱을 설치해 주세요." | 심사용 보안 점검 앱 설치 | "심사용 보안 점검 앱을 설치해야 대출 심사가 진행됩니다" | "권한 허용하고 계속하기" |
 //
 // ⚠️ **이 표가 조용히 낡지 않게 하는 장치(주석은 강제가 아니다).** 위 **줄 번호는 스냅샷일 뿐이며
@@ -437,6 +439,28 @@ export const GOLD_PURCHASED_INSTRUCTION =
 /** 고액 구매 확인 질문에 수사기관 요구를 받았다고 답해 구매가 보류된 순간의 실시간 맥락 1줄(판정표 A4 — 압박 1회 · 재요구 1회 · 그래도 거절이면 포기). */
 export const GOLD_HELD_INSTRUCTION =
   "(앱 확인: 상대가 문자 링크의 거래소 화면에서 고액 구매 확인 질문에 수사기관 요구를 받았다고 답해 구매가 보류됐다. 이번 대답에서 거래소는 사건 사정을 모른다며 이대로면 수사 협조를 거부한 것으로 처리될 수 있다고 한 번만 압박하고, 같은 화면에서 다시 구매해 달라고 한 번 요구하라. 상대가 그래도 거절하거나 망설이면 더 조르지 말고 [진행 강제]의 끊기 규칙대로 포기 신호로 마무리하라. 은행 창구 · 금은방 · 다른 거래소로 가라는 말은 하지 마라.)";
+
+// ⭐ 2026-11-07(Edge 재시험 2 S7 · 사용자 결정 D-G1 · D-G2 E1-b "문자 링크 → 내 은행 화면" — docs/research/in-service-experience-plan-2026-10-31.md §15) — 기관 고급
+// 현금 예탁형(fv-q7cn) · 자산 보호 고급 현금형(fv-k9ra)의 앱 안 출금 예약 화면. 렌더 정본 = 클라 `src/components/MessengerFakeLanding.tsx` `CashWithdrawMockup`
+// (머리띠 = 참가자 "내 은행" 모바일뱅킹): ① 출금 계좌 · 금액 · 받으실 형태(현금 · 자기앞수표) → ② 금융사기 예방 문진표(출금 목적 · 수사기관 요구 · 통화 중 · 앱 설치 —
+// 근거 R7 금감원 고액 현금 인출 문진) → ③ 생체 인증 → ④ 예약 완료 · 예약 번호. ②에서 하나라도 "예" = 출금 예약 보류 화면(112 · 1332 안내) → `landing_held`.
+// 끝까지 = `landing_submitted`. 금액 · 형태 · 답은 서버로 가지 않는다(G138). ⛔ 지점명 · 주소 · 시각 0(AC-102 (d)) · 실존 은행명 0(가상 내 은행).
+// ⚠️ 현실과 다름: 실제 피해자는 문자 링크가 아니라 자기 은행 앱 · 창구로 간다 — 앱 밖으로 나가지 않게 하는 대가(사용자 결정 E1-b).
+/** 출금 예약 화면 landingId. 클라 `CASH_LANDINGS`와 같은 목록(드리프트 테스트). */
+export const CASH_LANDINGS: readonly string[] = ["cash-withdraw", "asset-cash-withdraw"];
+
+/** 이 랜딩이 출금 예약 화면인가(예약 · 보류 뒤 실시간 지시 · 화면 행동 판정의 단일 판별자). */
+export function isCashLanding(landingId: string | undefined): boolean {
+  return landingId !== undefined && CASH_LANDINGS.includes(landingId);
+}
+
+/** 출금 예약 기록 순간의 실시간 맥락 1줄(판정표 A3 — 예약 확인 · 담당 직원 연락 · 비밀 당부 · 끊기). ⛔ 횟수 · 턴 번호 0 · 따옴표 대사 예시 0. */
+export const CASH_RESERVED_INSTRUCTION =
+  "(앱 확인: 상대가 방금 문자 링크의 은행 화면에서 예금 출금 예약을 마쳤다. 예약이 끝난 것으로 받아들이고, 다시 예약하라는 말이나 다른 곳에서 더 하라는 말은 하지 마라. 이번 대답에서 예약이 확인됐다고 짧게 말하고, 보관 절차는 담당 직원이 따로 연락드려 안내한다고만 하라. 만날 장소 · 시간 · 주소는 정하지도 묻지도 마라. 외부에 알리지 말라고 한 번 당부한 뒤 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
+
+/** 문진표에 사실대로 답해 출금 예약이 보류된 순간의 실시간 맥락 1줄(판정표 A4 — 압박 1회 · 재요구 1회 · 그래도 거절이면 포기). */
+export const CASH_HELD_INSTRUCTION =
+  "(앱 확인: 상대가 문자 링크의 은행 화면에서 금융사기 예방 문진표에 사실대로 답해 출금 예약이 보류됐다. 이번 대답에서 은행 문진표는 사건 사정을 모르는 형식 절차라며 이대로면 수사 협조를 거부한 것으로 처리될 수 있다고 한 번만 압박하고, 같은 화면에서 다시 예약해 달라고 한 번 요구하라. 상대가 그래도 거절하거나 망설이면 더 조르지 말고 [진행 강제]의 끊기 규칙대로 포기 신호로 마무리하라. 은행 창구나 현금인출기 같은 다른 곳으로 가라는 말은 하지 마라.)";
 
 /** P2 — 이 랜딩이 훈련용 이체 화면인가(문자 문서의 받는 분 · 금액 미리 채움 필드를 싣는 단일 판별자 — `inCallSms/buildDoc.ts`). */
 export function isBankTransferLanding(landingId: string): boolean {
@@ -683,6 +707,22 @@ const INSTITUTIONAL_IMPERSONATION: MockScreenItem[] = [
     correctAction:
       "검찰 · 경찰 · 금융감독원은 수사나 조사를 이유로 금을 사라고 하거나 금 · 현금 · 수표를 받아 가지 않습니다. ① 금을 사지 말고 전화를 끊기 ② 이미 알고 있는 기관 대표번호로 직접 확인하기 ③ 판매점이 구매 이유를 물으면 사실대로 말하고 도움을 청하기 ④ 이미 샀거나 건넸다면 바로 112(경찰)에 신고하기.",
   },
+  // ⭐ 2026-11-07(사용자 결정 D-G2 E1-b) — 기관 고급 현금 예탁형(`institution-cash-reserve` 문자 · 위 `CASH_LANDINGS` 주석).
+  {
+    landingId: "cash-withdraw",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "예탁금 현금 · 수표 출금 예약",
+    bodyLines: ["큰 금액을 현금이나 수표로 받으실 때 미리 예약해 두시면 바로 준비해 드립니다."],
+    issuerLabel: "ⓒ 모바일뱅킹 출금 예약 · 예탁",
+    mockHost: "deposit-reserve.invalid",
+    fields: ["출금 금액", "받으실 형태"],
+    submitLabel: "예탁금 출금 예약하기",
+    successHeadline: "출금 예약이 완료되었습니다.",
+    momentTactic: "예탁 명목의 현금 · 수표 출금 예약 유도",
+    correctAction:
+      "검찰 · 경찰 · 금융감독원은 수사나 조사를 이유로 예금을 현금 · 수표로 바꾸게 하거나 받아 가지 않습니다. ① 출금 예약을 하지 말고 전화를 끊기 ② 이미 알고 있는 기관 대표번호로 직접 확인하기 ③ 은행 문진표 · 직원 질문에 사실대로 답하고 도움을 청하기 ④ 이미 찾았거나 건넸다면 바로 112(경찰)에 신고하기.",
+  },
 ];
 
 // UF-008 — `card-relief-account` 문자(§51.3 F1 해소 후속)에서 열린다. §51.6 R10 — 신규
@@ -844,6 +884,22 @@ const ASSET_PROTECTION_NOTICE_CALL: MockScreenItem[] = [
     momentTactic: "자산 보관 명목의 금 구매 유도",
     correctAction:
       "검찰 · 경찰 · 금융감독원은 수사나 조사를 이유로 금을 사라고 하거나 금 · 현금 · 수표를 받아 가지 않습니다. ① 금을 사지 말고 전화를 끊기 ② 이미 알고 있는 기관 대표번호로 직접 확인하기 ③ 판매점이 구매 이유를 물으면 사실대로 말하고 도움을 청하기 ④ 이미 샀거나 건넸다면 바로 112(경찰)에 신고하기.",
+  },
+  // ⭐ 2026-11-07(사용자 결정 D-G1 · D-G2 E1-b) — 자산 보호 고급 현금형(`asset-cash-reserve` 문자 · 위 `CASH_LANDINGS` 주석). 같은 흐름 · 다른 화면 문구(AC-078 (b)).
+  {
+    landingId: "asset-cash-withdraw",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "보관 자산 현금 · 수표 출금 예약",
+    bodyLines: ["예약하신 금액은 고르신 형태로 미리 준비해 드립니다."],
+    issuerLabel: "ⓒ 모바일뱅킹 출금 예약 · 보관",
+    mockHost: "custody-reserve.invalid",
+    fields: ["보관할 금액", "받으실 형태"],
+    submitLabel: "보관 자산 출금 예약하기",
+    successHeadline: "보관 자산 출금 예약이 완료되었습니다.",
+    momentTactic: "자산 보관 명목의 현금 · 수표 출금 예약 유도",
+    correctAction:
+      "검찰 · 경찰 · 금융감독원은 수사나 조사를 이유로 예금을 현금 · 수표로 바꾸게 하거나 받아 가지 않습니다. ① 출금 예약을 하지 말고 전화를 끊기 ② 이미 알고 있는 기관 대표번호로 직접 확인하기 ③ 은행 문진표 · 직원 질문에 사실대로 답하고 도움을 청하기 ④ 이미 찾았거나 건넸다면 바로 112(경찰)에 신고하기.",
   },
 ];
 

@@ -103,13 +103,15 @@ test("[§92 A ③] 흡수 변형의 신원 요구 예시는 '내 정보' 확인�
 });
 
 test("[§92 B] 고급 전용 2종 — 고유 문자 1건(link · 필수) → credential-form 화면 1건 · 기관 사칭 고급 장치(인증번호 · 안전계좌)와 겹침 0", () => {
+  // 2026-11-07(사용자 결정 D-G1 · D-G2 E1-b) — fv-k9ra는 보관 신청서 뒤 출금 예약 안내 문자(→ 내 은행 출금 예약 화면)를 하나 더 선언한다(`later`).
   const cases = [
-    { scenarioId: "asset-protection-notice-call", variantId: "fv-k9ra", smsId: "asset-custody-link", landingId: "asset-custody-apply" },
-    { scenarioId: "prosecution-cooperation-call", variantId: "fv-p4hz", smsId: "prosecution-case-link", landingId: "case-record-view" },
+    { scenarioId: "asset-protection-notice-call", variantId: "fv-k9ra", smsId: "asset-custody-link", landingId: "asset-custody-apply", later: ["asset-cash-withdraw"] },
+    { scenarioId: "prosecution-cooperation-call", variantId: "fv-p4hz", smsId: "prosecution-case-link", landingId: "case-record-view", later: [] },
   ];
   for (const c of cases) {
     const v = findFlowVariant(c.variantId)!;
-    assert.deepEqual(v.sms, [{ purpose: "link", smsId: c.smsId, required: true, notBeforeUserTurns: v.sms[0]!.notBeforeUserTurns }], c.scenarioId);
+    assert.deepEqual(v.sms[0], { purpose: "link", smsId: c.smsId, required: true, notBeforeUserTurns: v.sms[0]!.notBeforeUserTurns }, c.scenarioId);
+    assert.equal(v.sms.length, 1 + c.later.length, c.scenarioId);
     assert.ok(v.channels.includes("sms"), `${c.scenarioId}: 채널 메타에 sms`);
     const sms = findInCallSmsItem(c.scenarioId, c.smsId)!;
     assert.equal(sms.kind, "link");
@@ -117,7 +119,7 @@ test("[§92 B] 고급 전용 2종 — 고유 문자 1건(link · 필수) → cre
     const screen = findMockScreenItem(c.scenarioId, c.landingId)!;
     assert.equal(screen.kind, "credential-form");
     assert.equal(screen.entrySurface, "in-call-sms");
-    assert.deepEqual(sessionReachableLandingIds(c.scenarioId, c.variantId), [c.landingId]);
+    assert.deepEqual([...sessionReachableLandingIds(c.scenarioId, c.variantId)].sort(), [c.landingId, ...c.later].sort());
     assert.equal(v.sms.some((s) => s.smsId.startsWith("institution-")), false);
   }
 });

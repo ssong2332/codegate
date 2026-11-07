@@ -244,7 +244,9 @@ const ROUTE_LEDGER: Readonly<Record<string, number>> = {
   "functions/src/scenarios/flowVariants.ts#J1_LOAN": 14, // P4
   // ⭐ 2026-11-07(Edge 재시험 2 S7 · 사용자 결정 D-G1 ~ D-G6) — 금 구매형 결말(기관 고급 fv-g2ld · 자산 보호 고급 fv-t8ga)이 앱 안 금 거래소 화면 구매로 바뀌었다.
   // 금 문면은 J16 등록 영역이라 세지 않고(J3 5 → 0), 종전 "예금 · 적금을 찾아" 2문장(J2 9 → 7) · "판매점 직원이 용도를 물으면" 코칭 1문장(J11 6 → 5)이 빠졌다.
-  "functions/src/scenarios/flowVariants.ts#J11_COVER_STORY": 5, // P5
+  // 같은 날(사용자 결정 D-G2 E1-b) — 현금 예탁형 fv-q7cn이 앱 안 출금 예약 화면으로 바뀌어 "은행 직원이 이유를 물으면 개인 용도" 코칭 1문장이 빠졌다(J11 5 → 4 —
+  // 문진표 코칭으로 대체). 새 출금 예약 문면은 J2 패턴(현금으로 찾 · 인출)에 걸리지 않아 J2는 그대로(7).
+  "functions/src/scenarios/flowVariants.ts#J11_COVER_STORY": 4, // P5
   "functions/src/scenarios/flowVariants.ts#J2_CASH": 7, // P5
   // 2026-11-07(Edge 시험 판 12 · 사용자 결정 "앱 안 화면 추가") — 검찰 상품권형 fv-v2mk의 상품권 문면은 이제 앱 안 구매 화면(`voucher-purchase`)을 가리킨다
   // (문자 속 구매 화면에서 사고 화면에 뜬 핀을 불러 달라 — J12 통화 안 말 요구 · O4). 패턴은 표기만 봐서 계속 센다(5 → 6 · 문자 · 화면 · 화면 문구 · 결제 뒤 지시 새 항목).

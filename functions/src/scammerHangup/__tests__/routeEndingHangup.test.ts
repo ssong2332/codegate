@@ -88,10 +88,14 @@ test("[§127] 새 루트 13벌 — 결말을 마치면 끊기 통과(확인 무�
 });
 
 test("[§127 로그 재현] 243a51df — 할 일을 마친 뒤 6행에 막히면 '다시 end_call' 문면 · 할 일 전 6행 · 다른 status는 종전 문면", () => {
+  // ⚠️ 2026-11-07(사용자 결정 D-G2 E1-b) — fv-q7cn은 앱 안 출금 예약 화면 결말이 되어 후속 단계 값이 없어졌다. 이 재현은 세션 243a51df 당시의 선언
+  // (인증번호 문자 하나 · 후속 값 4)을 픽스처로 고정해 6행 문면 자체를 본다.
   const v = findFlowVariant("fv-q7cn")!;
+  assert.equal(goalFollowUpFor(v.scenarioId, v.variantId), undefined, "현행 fv-q7cn = 후속 단계 없음");
+  const declaredAtLog = v.sms.filter((s) => s.smsId === "institution-otp");
   const delivered: DeliveredSmsRecord[] = [{ smsId: "institution-otp", userTurnsAtArrival: 4 }];
   const at = (userTurns: number) =>
-    hasCompletedGoalAction({ delivered, mockScreens: [], declared: v.sms, declaredKnown: true, userTurns, followUpUserTurns: goalFollowUpFor(v.scenarioId, v.variantId) });
+    hasCompletedGoalAction({ delivered, mockScreens: [], declared: declaredAtLog, declaredKnown: true, userTurns, followUpUserTurns: 4 });
   // 발화 7 — 후속 몫 전(4행) · 발화 8 — 할 일 완료 참 · 지시 대기면 6행.
   assert.equal(at(7), false);
   assert.equal(decideScammerHangup(input({ verifyEnabled: true, goalActionDone: at(7), userTurns: 7 })).row, "4");
@@ -112,12 +116,13 @@ test("[§127 로그 재현] 243a51df — 할 일을 마친 뒤 6행에 막히면
 });
 
 // 2026-11-07 — 상품권형 fv-v2mk는 앱 안 구매 화면 결말이 되어 뺐다(8 → 7 · `multiRoute1b.test.ts` 같은 날 주석). 같은 날 금형 fv-g2ld · fv-t8ga도
-// 앱 안 금 거래소 화면 결말이 되어 뺐다(7 → 5 — 약속만으로 끝나지 않는다 · 결정 화면 4-c).
-test("[§127] 말로 끝나는 결말 5벌(1a 3 + 1b 2) — 약속하면 되풀이 없이 마무리 · 통화를 끝낸다 줄을 갖는다", () => {
-  for (const id of ["fv-g2ld", "fv-t8ga"]) {
+// 앱 안 금 거래소 화면 결말이 되어 뺐다(7 → 5 — 약속만으로 끝나지 않는다 · 결정 화면 4-c). 같은 날(사용자 결정 D-G2 E1-b) 현금 예탁형 fv-q7cn도
+// 앱 안 출금 예약 화면 결말이 되어 뺐다(5 → 4).
+test("[§127] 말로 끝나는 결말 4벌(1a 2 + 1b 2) — 약속하면 되풀이 없이 마무리 · 통화를 끝낸다 줄을 갖는다", () => {
+  for (const id of ["fv-g2ld", "fv-t8ga", "fv-q7cn"]) {
     assert.equal(findFlowVariant(id)!.stages.some((s) => /같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary)), false, `${id}: 앱 안 화면 결말`);
   }
-  for (const id of ["fv-q7cn", "fv-r4hc", "fv-e5mv", "fv-a6lq", "fv-p3jx"]) {
+  for (const id of ["fv-r4hc", "fv-e5mv", "fv-a6lq", "fv-p3jx"]) {
     const v = findFlowVariant(id)!;
     const hits = v.stages.filter((s) => /같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary));
     assert.equal(hits.length, 1, `${id}: 마무리 줄 1번`);

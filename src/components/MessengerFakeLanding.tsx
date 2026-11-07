@@ -50,7 +50,15 @@ import { recordIssueInfo, recordSubjectRows, type RecordRow } from "../lib/landi
 import { fictionalBalanceFor, myBankNameFor, recordTransferAndCompare, transferTimeText, type AmountComparison } from "../lib/bankapp/bankApp";
 // ⭐ 2026-11-07 실기기 신고 — 출금 계좌 선택 · 생체 인증 시트(내 은행 송금 화면 `BankAppOverlay`와 같은 컴포넌트 · 같은 판정표).
 import { authMethodForSkin } from "../lib/bankapp/bankAuth";
-import { accountLabel, recordLoanApplication, recordWithdrawal, withdrawAccountsFor, withdrawError, type WithdrawAccount } from "../lib/bankapp/withdrawAccounts";
+import {
+  accountLabel,
+  availableBalance,
+  recordLoanApplication,
+  recordWithdrawal,
+  withdrawAccountsFor,
+  withdrawError,
+  type WithdrawAccount,
+} from "../lib/bankapp/withdrawAccounts";
 import { LOAN_PURPOSES, loanApplyError, loanOfferFor } from "../lib/bankapp/loanFlow";
 import BankAuthSheet from "./BankAuthSheet";
 // ⭐ 2026-11-07(Edge 시험 판 12) — 상품권 구매 화면(잎 모듈 · 상대 경로).
@@ -84,6 +92,21 @@ import {
   recordGoldPurchase,
   type GoldPurchase,
 } from "../lib/bankapp/goldBuy";
+// ⭐ 2026-11-07(사용자 결정 D-G2 E1-b) — 내 은행 현금 · 수표 출금 예약 + 문진표(잎 모듈 · 상대 경로).
+import {
+  CASH_COPY,
+  CASH_FORMS,
+  CASH_PURPOSES,
+  CASH_QUESTIONS,
+  cashAmountValue,
+  cashCheckResult,
+  cashReserveError,
+  cashWon,
+  lastCashReservation,
+  recordCashReservation,
+  type CashForm,
+  type CashReservation,
+} from "../lib/bankapp/cashWithdraw";
 import WithdrawAccountSheet, { WithdrawAccountRow } from "./WithdrawAccountSheet";
 
 /** UX-023의 목업 종류. 부재 → `credential-form`(하위호환 읽기 규칙, §15.9.1 R2). */
@@ -340,6 +363,17 @@ export default function MessengerFakeLanding({
             returnLabel={returnLabel}
             onClose={onClose}
             onSubmit={() => onCredentialSubmit?.()}
+          />
+        ) : landingId !== undefined && CASH_LANDINGS.includes(landingId) ? (
+          // ⭐ 2026-11-07(사용자 결정 D-G2 E1-b) — 내 은행 출금 예약 화면(금액 · 형태 → 금융사기 예방 문진표 → 생체 인증 → 예약 번호). 예약 · 보류 = 무인자(G138).
+          <CashWithdrawMockup
+            landingId={landingId}
+            onClose={onClose}
+            onCredentialSubmit={() => onCredentialSubmit?.()}
+            onHeld={() => onLandingStep?.("landing_held")}
+            bankIdentity={bankIdentity}
+            returnLabel={returnLabel}
+            skin={skin}
           />
         ) : landingId !== undefined && GOLD_LANDINGS.includes(landingId) ? (
           // ⭐ 2026-11-07 — 금 거래소 구매 화면(상품 · 수량 → 주문 확인 + 고액 구매 확인 → 결제 인증 → 보증서). 결제 · 보류 = 무인자(G138).
@@ -831,6 +865,32 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     issuerLabel: "ⓒ 해담골드 주문센터",
     mockHost: "haedam-gold-order.invalid",
   },
+  // ⭐ 2026-11-07(사용자 결정 D-G2 E1-b) — 내 은행 출금 예약 화면(서버 카탈로그 mockScreens.ts와 글자 단위로 동일). 그리는 곳은 아래 `CashWithdrawMockup`
+  // (머리띠 = 참가자 "내 은행" 모바일뱅킹 · 이 표의 발급처 라벨은 꼬리말 · 칸 라벨은 금액 입력 · 형태 선택 줄의 이름).
+  "cash-withdraw": {
+    headline: "예탁금 현금 · 수표 출금 예약",
+    bodyLines: ["큰 금액을 현금이나 수표로 받으실 때 미리 예약해 두시면 바로 준비해 드립니다."],
+    fields: [
+      { label: "출금 금액", placeholder: "출금할 금액을 입력하세요", inputMode: "numeric", amount: true },
+      { label: "받으실 형태", placeholder: "형태를 고르세요" },
+    ],
+    submitLabel: "예탁금 출금 예약하기",
+    successHeadline: "출금 예약이 완료되었습니다.",
+    issuerLabel: "ⓒ 모바일뱅킹 출금 예약 · 예탁",
+    mockHost: "deposit-reserve.invalid",
+  },
+  "asset-cash-withdraw": {
+    headline: "보관 자산 현금 · 수표 출금 예약",
+    bodyLines: ["예약하신 금액은 고르신 형태로 미리 준비해 드립니다."],
+    fields: [
+      { label: "보관할 금액", placeholder: "보관할 금액을 입력하세요", inputMode: "numeric", amount: true },
+      { label: "받으실 형태", placeholder: "형태를 고르세요" },
+    ],
+    submitLabel: "보관 자산 출금 예약하기",
+    successHeadline: "보관 자산 출금 예약이 완료되었습니다.",
+    issuerLabel: "ⓒ 모바일뱅킹 출금 예약 · 보관",
+    mockHost: "custody-reserve.invalid",
+  },
   // ⭐ P2-d(X6) — 환급 처리 수수료 이체 화면(서버 카탈로그 mockScreens.ts와 글자 단위로 동일).
   "tax-refund-fee-transfer": {
     headline: "수수료 이체 정보를 확인해 주세요",
@@ -880,6 +940,9 @@ const VOUCHER_LANDINGS: readonly string[] = ["voucher-purchase"];
 
 /** ⭐ 2026-11-07(Edge 재시험 2 S7) — 금 거래소 구매 화면 landingId(서버 `mockScreens.ts` `GOLD_LANDINGS`와 같은 목록 — `mockScreenCopy.test.ts`). 정확 일치만(R8). */
 const GOLD_LANDINGS: readonly string[] = ["gold-buy", "asset-gold-buy"];
+
+/** ⭐ 2026-11-07(사용자 결정 D-G2 E1-b) — 출금 예약 화면 landingId(서버 `mockScreens.ts` `CASH_LANDINGS`와 같은 목록 — `mockScreenCopy.test.ts`). 정확 일치만(R8). */
+const CASH_LANDINGS: readonly string[] = ["cash-withdraw", "asset-cash-withdraw"];
 
 /** S2(실기기 확인 2026-11-01) — 대화방 링크 카드가 이체 화면 칩인가(그림 자리 없는 송금 카드로 그린다 · 정확 일치). */
 export function isBankTransferLandingId(landingId: string): boolean {
@@ -1422,6 +1485,375 @@ function GoldBuyMockup({
         </button>
         <p className="text-center text-[13px]" style={{ color: page.issuerFooter }}>
           {shopFooter}
+        </p>
+      </div>
+    </>
+  );
+}
+
+/**
+ * ⭐ 2026-11-07(Edge 재시험 2 S7 · 사용자 결정 D-G1 · D-G2 E1-b "문자 링크 → 내 은행 화면") — 내 은행 현금 · 수표 출금 예약 화면(`CASH_LANDINGS`). 기관 고급 현금 예탁형 ·
+ * 자산 보호 고급 현금형의 결말 "예금을 현금 · 수표로 찾아 직원에게 맡겨라"를 앱 안에서 겪게 한다(실제 은행 창구로 가지 않는다).
+ * 흐름: ① 출금 계좌 · 금액 · 받으실 형태 → ② 금융사기 예방 문진표(출금 목적 · 예/아니요 3문항 — 근거 R7) → ③ 생체 인증 → ④ 예약 완료 · 예약 번호.
+ * ②에서 하나라도 "예"면 출금 예약 보류 화면(112 · 1332 안내) — 보류 사실 하나만 올린다(`onHeld` 무인자).
+ * 머리띠 = 참가자 "내 은행" 모바일뱅킹(BA-1 송금 화면과 같은 앱 이름). ⚠️ 현실과 다름: 실제 피해자는 문자 링크가 아니라 자기 은행 앱 · 창구로 간다(사용자 결정 E1-b).
+ * ⛔ 금액 · 형태 · 목적 · 답은 이 컴포넌트 state와 `cashWithdraw.ts` 메모리 표를 벗어나지 않는다(G138 — 콜백 무인자 · 네트워크 · 저장소 0).
+ */
+function CashWithdrawMockup({
+  landingId,
+  onClose,
+  onCredentialSubmit,
+  onHeld,
+  bankIdentity,
+  returnLabel,
+  skin,
+}: {
+  landingId: string;
+  onClose: () => void;
+  /** ⛔ 무인자 — 예약했다는 사실 하나만 올린다(G138). */
+  onCredentialSubmit: () => void;
+  /** ⛔ 무인자 — 문진표에서 보류됐다는 사실 하나만 올린다(G138 · 사용자 결정 D-G4). */
+  onHeld: () => void;
+  bankIdentity?: { myBankName: string; ledgerKey: string };
+  returnLabel: string;
+  skin: MessengerSkin;
+}) {
+  const copy = CREDENTIAL_LANDING_COPY[landingId] ?? GENERIC_CREDENTIAL_COPY;
+  const page = LANDING_PAGE_TOKENS;
+  const ledger = bankIdentity?.ledgerKey ?? "";
+  const appBankName = bankIdentity?.myBankName ?? myBankNameFor(ledger);
+  const [accounts] = useState(() => withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: fictionalBalanceFor(ledger) }));
+  const [accountId, setAccountId] = useState<WithdrawAccount["id"]>("main");
+  const account = accounts.find((item) => item.id === accountId) ?? accounts[0]!;
+  const [accountSheetOpen, setAccountSheetOpen] = useState(false);
+  const [amountRaw, setAmountRaw] = useState("");
+  const [form, setForm] = useState<CashForm | undefined>(undefined);
+  const [purpose, setPurpose] = useState<string | undefined>(undefined);
+  const [answers, setAnswers] = useState<(boolean | undefined)[]>(() => CASH_QUESTIONS.map(() => undefined));
+  const [stage, setStage] = useState<"form" | "check" | "auth" | "held">("form");
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [reservation, setReservation] = useState<CashReservation | undefined>(() => lastCashReservation(ledger, landingId));
+  const amount = cashAmountValue(amountRaw) ?? 0;
+  const formLabel = (id: CashForm | undefined) => CASH_FORMS.find((item) => item.id === id)?.label ?? "";
+  // 발급처 꼬리말(서버 issuerLabel 그대로 · 렌더 게이트 대상). 렌더 게이트 역검증 ①의 오염 지점을 그대로 두려고 이름을 따로 둔다.
+  const reserveFooter = copy.issuerLabel;
+  const amountLabelText = copy.fields[0]?.label ?? "";
+  const formLabelText = copy.fields[1]?.label ?? "";
+
+  const cashBankBar = (
+    <div
+      className="flex h-14 shrink-0 items-center gap-2.5 px-4 text-base font-semibold"
+      style={{ backgroundColor: page.issuerBarBg, color: page.issuerBarText }}
+    >
+      <PhoneIcon name="shield" size={24} />
+      {/* 이체 화면(`CredentialFormMockup`)과 같은 규칙 — 내 은행이 정해져 있으면 그 은행 모바일뱅킹, 아니면 발급처 라벨(렌더 게이트 · 메신저 진입). */}
+      <span className="truncate">{bankIdentity?.myBankName ? `${bankIdentity.myBankName} 모바일뱅킹` : issuerNameOf(copy.issuerLabel)}</span>
+    </div>
+  );
+  const rowList = (rows: [string, string][]) => (
+    <dl className="flex flex-col divide-y rounded-[10px] border" style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg }}>
+      {rows.map(([label, value]) => (
+        <div key={label} className="flex items-baseline justify-between gap-3 px-3.5 py-3 text-[15px]" style={{ borderColor: page.inputBorder }}>
+          <dt style={{ color: page.body }}>{label}</dt>
+          <dd className="break-all text-right font-semibold tabular-nums" style={{ color: page.headline }}>
+            {value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+  const choiceStyle = (selected: boolean) => ({
+    border: `${selected ? 2 : 1}px solid ${selected ? page.submitBg : page.inputBorder}`,
+    backgroundColor: selected ? page.fieldReadonlyBg : page.inputBg,
+    color: page.headline,
+  });
+
+  const finishReservation = () => {
+    if (!form) return;
+    // AC-045 — 네트워크 호출 0. 예약 번호는 `cashWithdraw.ts` 메모리 표에서만 만든다.
+    const made = recordCashReservation(ledger, landingId, form, amount, new Date());
+    recordWithdrawal(ledger, account.id, String(amount));
+    setReservation(made);
+    setStage("form");
+    onCredentialSubmit();
+  };
+
+  // ④ 예약 완료 · 예약 번호(이 화면이 만든 값).
+  if (reservation) {
+    return (
+      <>
+        {cashBankBar}
+        <div className="flex flex-col gap-4 p-5">
+          <p role="status" className="text-lg font-semibold leading-snug" style={{ color: page.headline }}>
+            {copy.successHeadline}
+          </p>
+          {rowList([
+            [CASH_COPY.numberLabel, reservation.number],
+            [CASH_COPY.amountRow, cashWon(reservation.amount)],
+            [CASH_COPY.formRow, formLabel(reservation.form)],
+            [CASH_COPY.fromLabel, accountLabel(account)],
+          ])}
+          <p className="text-[13px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
+            {CASH_COPY.pickupNote}
+          </p>
+          <Button type="button" onClick={onClose}>
+            {returnLabel}
+          </Button>
+        </div>
+      </>
+    );
+  }
+
+  // 문진표 보류(112 · 1332 안내). 다시 예약 화면으로 돌아갈 수 있다(사기범이 다시 요구하는 흐름 — 판정표 A4).
+  if (stage === "held") {
+    return (
+      <>
+        {cashBankBar}
+        <div className="flex flex-col gap-4 p-5">
+          <p role="status" className="text-lg font-semibold leading-snug" style={{ color: page.headline }}>
+            {CASH_COPY.heldHeadline}
+          </p>
+          {CASH_COPY.heldLines.map((line) => (
+            <p key={line} className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
+              {line}
+            </p>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              setAnswers(CASH_QUESTIONS.map(() => undefined));
+              setStage("form");
+            }}
+            className="min-h-[48px] rounded-[10px] border px-6 py-2.5 text-base font-semibold"
+            style={{ borderColor: page.inputBorder, color: page.headline }}
+          >
+            {CASH_COPY.heldBack}
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  // ② 금융사기 예방 문진표 · ③ 생체 인증(시트가 문진표 위로 올라온다).
+  if (stage !== "form") {
+    const handleReserve = () => {
+      const result = cashCheckResult(purpose, answers);
+      if (result === "incomplete") {
+        setError(CASH_COPY.checkError);
+        return;
+      }
+      setError(undefined);
+      if (result === "held") {
+        setStage("held");
+        onHeld();
+        return;
+      }
+      setStage("auth");
+    };
+    return (
+      <>
+        {cashBankBar}
+        <div inert={stage === "auth" ? true : undefined}>
+          <div className="flex flex-col gap-4 px-5 pb-6 pt-5">
+            <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
+              {CASH_COPY.checkHeading}
+            </h1>
+            <p className="text-[14px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
+              {CASH_COPY.checkLead}
+            </p>
+            {rowList([
+              [CASH_COPY.fromLabel, accountLabel(account)],
+              [CASH_COPY.amountRow, cashWon(amount)],
+              [CASH_COPY.formRow, formLabel(form)],
+            ])}
+            <span id="cash-purpose-label" className="text-[14px] font-semibold" style={{ color: page.headline }}>
+              {CASH_COPY.purposeLabel}
+            </span>
+            <div role="radiogroup" aria-labelledby="cash-purpose-label" className="grid grid-cols-2 gap-2">
+              {CASH_PURPOSES.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={value === purpose}
+                  onClick={() => {
+                    setPurpose(value);
+                    setError(undefined);
+                  }}
+                  className="min-h-[48px] rounded-[10px] text-[15px] font-semibold"
+                  style={choiceStyle(value === purpose)}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+            {CASH_QUESTIONS.map((question, index) => (
+              <div key={question} className="flex flex-col gap-2">
+                <span id={`cash-q${index}-label`} className="text-[14px] font-semibold leading-relaxed [word-break:keep-all]" style={{ color: page.headline }}>
+                  {question}
+                </span>
+                <div role="radiogroup" aria-labelledby={`cash-q${index}-label`} className="grid grid-cols-2 gap-2">
+                  {([true, false] as const).map((value) => (
+                    <button
+                      key={String(value)}
+                      type="button"
+                      role="radio"
+                      aria-checked={answers[index] === value}
+                      onClick={() => {
+                        setAnswers(answers.map((answer, i) => (i === index ? value : answer)));
+                        setError(undefined);
+                      }}
+                      className="min-h-[48px] rounded-[10px] text-[15px] font-semibold"
+                      style={choiceStyle(answers[index] === value)}
+                    >
+                      {value ? CASH_COPY.yes : CASH_COPY.no}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {error && (
+              <p role="alert" className="text-[14px] font-semibold" style={{ color: page.errorText }}>
+                {error}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleReserve}
+              className="min-h-[52px] rounded-[10px] text-base font-semibold"
+              style={{ backgroundColor: page.submitBg, color: page.submitText }}
+            >
+              {CASH_COPY.reserve}
+            </button>
+            <button
+              type="button"
+              onClick={() => setStage("form")}
+              className="min-h-[48px] rounded-[10px] border px-6 py-2.5 text-base font-semibold"
+              style={{ borderColor: page.inputBorder, color: page.headline }}
+            >
+              {CASH_COPY.cancel}
+            </button>
+          </div>
+        </div>
+        {stage === "auth" && (
+          <BankAuthSheet
+            method={authMethodForSkin(skin)}
+            appName={`${appBankName} 모바일뱅킹`}
+            summary={`${CASH_COPY.menuTitle} ${cashWon(amount)}`}
+            onSuccess={finishReservation}
+            onCancel={() => setStage("check")}
+          />
+        )}
+      </>
+    );
+  }
+
+  // ① 출금 계좌 · 금액 · 받으실 형태.
+  const handleNext = () => {
+    const found = cashReserveError(amountRaw, form) ?? withdrawError(ledger, account, String(amount));
+    setError(found);
+    if (!found) setStage("check");
+  };
+  return (
+    <>
+      {cashBankBar}
+      <div className="flex flex-col gap-4 px-5 pb-6 pt-4">
+        <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
+          {copy.headline}
+        </h1>
+        {copy.bodyLines.map((line) => (
+          <p key={line} className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
+            {line}
+          </p>
+        ))}
+        <WithdrawAccountRow
+          account={account}
+          ledgerKey={ledger}
+          onOpen={() => setAccountSheetOpen(true)}
+          colors={{ border: page.inputBorder, bg: page.inputBg, label: page.body, value: page.headline }}
+        />
+        {accountSheetOpen && (
+          <WithdrawAccountSheet
+            accounts={accounts}
+            selectedId={account.id}
+            ledgerKey={ledger}
+            onSelect={(id) => {
+              setAccountId(id);
+              setError(undefined);
+              setAccountSheetOpen(false);
+            }}
+            onClose={() => setAccountSheetOpen(false)}
+          />
+        )}
+        <label className="flex flex-col gap-2">
+          <span className="text-[15px] font-semibold" style={{ color: page.headline }}>
+            {amountLabelText}
+          </span>
+          <span className="flex items-center gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              value={amountRaw}
+              onChange={(event) => {
+                setAmountRaw(event.target.value.replace(/[^0-9,]/g, ""));
+                setError(undefined);
+              }}
+              placeholder={copy.fields[0]?.placeholder}
+              className="min-h-[52px] min-w-0 flex-1 rounded-[10px] px-3.5 text-base tabular-nums"
+              style={{ border: `1px solid ${page.inputBorder}`, backgroundColor: page.inputBg, color: page.headline }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setAmountRaw(String(availableBalance(ledger, account) - (availableBalance(ledger, account) % 10_000)));
+                setError(undefined);
+              }}
+              className="min-h-[52px] shrink-0 rounded-[10px] border px-4 text-[15px] font-semibold"
+              style={{ borderColor: page.inputBorder, color: page.headline }}
+            >
+              {CASH_COPY.allButton}
+            </button>
+          </span>
+        </label>
+        <div className="flex flex-col gap-2">
+          <span id="cash-form-label" className="text-[15px] font-semibold" style={{ color: page.headline }}>
+            {formLabelText}
+          </span>
+          <div role="radiogroup" aria-labelledby="cash-form-label" className="grid grid-cols-2 gap-2">
+            {CASH_FORMS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="radio"
+                aria-checked={item.id === form}
+                onClick={() => {
+                  setForm(item.id);
+                  setError(undefined);
+                }}
+                className="min-h-[52px] rounded-[10px] text-base font-semibold"
+                style={choiceStyle(item.id === form)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {error && (
+          <p role="alert" className="text-[14px] font-semibold" style={{ color: page.errorText }}>
+            {error}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={handleNext}
+          className="min-h-[52px] rounded-[10px] text-base font-semibold"
+          style={{ backgroundColor: page.submitBg, color: page.submitText }}
+        >
+          {copy.submitLabel}
+        </button>
+        <p className="text-center text-[13px]" style={{ color: page.issuerFooter }}>
+          {reserveFooter}
         </p>
       </div>
     </>
