@@ -29,19 +29,11 @@ function listSourceFiles(dir: string): string[] {
   return out;
 }
 
-/**
- * 사용자 결정 2026-11-07(답 원문 "단일 통화도 집계 (권장)" — 메인 전달) — G511을 좁혔다. 종료 사유(`endReason`)를 읽어도 되는 곳은
- * **"잘 대처함 · 먼저 전화를 끊음" 블록 모듈 1곳**뿐이고(`participantHangup.ts`), 그 값은 판정에 들어가지 않는다(아래 "판정 동일" 단언).
- * `scammerHangup` · 세션 통째 전개는 그 모듈에서도 계속 금지다.
- */
-const END_REASON_EXCEPTION = "participantHangup.ts";
-
 /** 위반 목록(빈 배열 = 통과) — 오염 사본에 같은 판정을 적용해 역검증한다. 주석 속 언급도 센다(더 엄격). */
 function findReasonReads(files: ReadonlyArray<readonly [string, string]>): string[] {
   const hits: string[] = [];
   for (const [name, source] of files) {
     for (const pattern of FORBIDDEN) {
-      if (name === END_REASON_EXCEPTION && pattern === FORBIDDEN[0]) continue;
       if (pattern.test(source)) hits.push(`${name}: ${pattern}`);
     }
   }
@@ -55,13 +47,7 @@ test("[G511] report/**에 endReason · scammerHangup · ...session 0", () => {
   assert.deepEqual(findReasonReads(sources), [], "리포트가 종료 사유를 읽을 수 있게 됐다(AC-103 (e))");
 });
 
-test("[G511 좁힘 · 2026-11-07] 예외는 블록 모듈 1곳의 endReason뿐 — 그 모듈의 scammerHangup · 세션 전개 · 다른 파일의 endReason은 걸린다", () => {
-  assert.equal(findReasonReads([[END_REASON_EXCEPTION, "if (session.endReason === \"user_ended\") return 0;"]]).length, 0);
-  assert.equal(findReasonReads([[END_REASON_EXCEPTION, "if (session.scammerHangup) return 0;"]]).length, 1);
-  assert.equal(findReasonReads([[END_REASON_EXCEPTION, "const v = { ...session };"]]).length, 1);
-  assert.equal(findReasonReads([["generateReportCore.ts", "const r = session.endReason;"]]).length, 1);
-});
-
+// 2026-11-07(메인 지시) — "먼저 전화를 끊음" 블록은 종료 사유가 아니라 서버 표식 `participantHangupButton`을 읽는다 ⇒ 위 스캔에 예외 0(G511 원래대로).
 test("[G511 판정 동일] 블록 값은 판정에 들어가지 않는다 — wasDeceived = 최종 속은 순간 수 · participantHangup은 리포트 필드로만", () => {
   const core = readFileSync(path.join(REPORT_SRC, "generateReportCore.ts"), "utf8");
   assert.ok(core.includes("const wasDeceived = mock.deceivedMoments.length > 0;"));

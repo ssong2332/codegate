@@ -129,6 +129,8 @@ export type SessionDoc = {
   scenarioId: string;
   status: SessionStatus;
   endReason?: SessionEndReason;
+  /** 2026-11-07 — 통화 종료 버튼으로 끝낸 세션(서버 `endSession`이 `session/endReason.ts` H1일 때만 씀). 부재 = 그 밖 · 옛 세션. 리포트 "먼저 전화를 끊음" 단일 통화 근거. */
+  participantHangupButton?: true;
   voiceId?: string; // 폐기 시 클리어(AC-021)
   voiceProvider?: VoiceProviderName; // T19 추가 — voiceId를 만든 VoiceProvider 식별(옵셔널)
   cloneStatus: CloneStatus;
