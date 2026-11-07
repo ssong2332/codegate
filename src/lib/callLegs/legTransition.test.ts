@@ -50,6 +50,17 @@ test("[§142 표기] 02 지역번호 · 휴대전화 하이픈 표기(표시 전
   assert.equal(formatDialDigits("*#"), "*#");
 });
 
+test("[11-07 판 27] 전국 대표번호(15xx · 16xx · 18xx) = 4-4 표기 · 입력 중에도 같은 꼴 · 02 · 010은 종전 그대로", () => {
+  assert.equal(formatDialDigits("15887742"), "1588-7742", "종전 158-8-7742");
+  assert.equal(formatDialDigits("16663390"), "1666-3390");
+  assert.equal(formatDialDigits("18001234"), "1800-1234");
+  assert.equal(formatDialDigits("15887"), "1588-7");
+  assert.equal(formatDialDigits("1588"), "1588");
+  assert.equal(formatDialDigits("112"), "112");
+  assert.equal(formatDialDigits("0207158800"), "02-0715-8800");
+  assert.equal(formatDialDigits("01007942261"), "010-0794-2261");
+});
+
 test("[§142 라벨] 다통화 통화 라벨이 있으면 이긴다 · 부재 = 종전 라벨", () => {
   assert.equal(legCallerLabelOr("02-0762-5513", "010-0794-2261"), "02-0762-5513");
   assert.equal(legCallerLabelOr(null, "010-0794-2261"), "010-0794-2261");

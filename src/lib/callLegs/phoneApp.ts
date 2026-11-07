@@ -7,6 +7,7 @@
 // | 최근 기록 | 이번 세션에서 받은 · 건 · 거절한 전화 + 문자 온 번호 | 화면이 기록한 통화(`PhoneCallLog`) + 받은 문자(`arrivedAtMs`) |
 // | 키패드 | 번호 입력 | 참가자 입력 · 문자 속 번호 누름 |
 // | 인터넷 검색(홈 화면) | 기관 이름으로 검색 → 공식 번호 | `OFFICIAL_LISTINGS`(서버 번호부 `dialDirectory.ts`의 진짜 안내 항목 미러) |
+// | 지갑(홈 화면) | 내 카드 뒷면 → 고객센터 번호 | `MY_CARD_BACK`(카드사 고객센터 = `OFFICIAL_LISTINGS`와 같은 번호) |
 // ⛔ 검색 결과에 문자로 받은 가짜 번호(02-0762-5513)는 없다 — 공식 번호만. ⛔ 실제 기관 번호 · 실제 주소(도메인) 0.
 // ⛔ 세션 중 화면 문구에 '모의' · '훈련용' 0(G437).
 // 잎(leaf) 모듈 — import 0(테스트가 node로 직접 부른다).
@@ -74,6 +75,52 @@ export function searchSuggestions(scenarioId: string, typed: string): readonly s
 /** 공식 번호 검색 결과 제목 → 번호(서버 레그 라벨 "금융감독기관 대표번호" 등을 번호로 — `callDisplayNumber` 3행). 없으면 null. */
 export function officialNumberForTitle(scenarioId: string, title: string): string | null {
   return (OFFICIAL_LISTINGS[scenarioId] ?? []).find((item) => item.title === title)?.number ?? null;
+}
+
+/**
+ * 2026-11-07 사용자 결정("내 카드 뒷면 화면") — 홈 화면 **지갑** 앱의 내 카드 뒷면. 실제로 카드사 공식 번호를 찾는 가장 흔한 길(카드 뒷면 고객센터 번호)을 앱 안에 둔다.
+ * | 항목 | 값 | 원천 |
+ * |---|---|---|
+ * | 고객센터 번호 | `OFFICIAL_LISTINGS`의 카드사 고객센터와 같은 번호 | 서버 번호부 `dialDirectory.ts` 진짜 안내 항목(드리프트 = `phoneApp.test.ts`) |
+ * | 카드 번호 | 끝 4자리만(앞 12자리 가림) | 가상 |
+ * ⛔ CVC · 유효성 검사 번호 · 전체 카드 번호 0 — 훈련 중 습관적으로 실제 카드 정보를 따라 적는 일을 만들지 않는다(BA3와 같은 취지).
+ * ⛔ 문자로 받은 가짜 번호(02-0762-5513) 0.
+ */
+export type MyCardBack = {
+  /** 카드사(가상). */
+  issuer: string;
+  /** 카드 이름. */
+  cardName: string;
+  /** 카드 번호 끝 4자리. */
+  last4: string;
+  /** 유효기간(MM/YY · 가상). */
+  validThru: string;
+  /** 뒷면 고객센터 줄 이름. */
+  centerLabel: string;
+  /** 뒷면 고객센터 번호 = 진짜 카드사 고객센터. */
+  centerNumber: string;
+  /** 뒷면 안내 문구(작은 글씨). */
+  notes: readonly string[];
+};
+
+export const MY_CARD_BACK: Readonly<Record<string, MyCardBack>> = {
+  "card-company-impersonation": {
+    issuer: "윤슬카드",
+    cardName: "윤슬카드 체크",
+    last4: "4821",
+    validThru: "08/29",
+    centerLabel: "고객센터 · 분실 신고(24시간)",
+    centerNumber: "02-0715-8800",
+    notes: [
+      "이 카드는 서명한 본인만 사용할 수 있습니다.",
+      "분실 · 도난 · 발급 · 배송 문의는 위 고객센터로 연락 바랍니다.",
+    ],
+  },
+};
+
+/** 이 시나리오의 내 카드(지갑 앱). 부재 = 지갑 앱 0. */
+export function myCardBack(scenarioId: string): MyCardBack | null {
+  return MY_CARD_BACK[scenarioId] ?? null;
 }
 
 /** 화면이 기록하는 통화 한 건(이번 세션 · 메모리에만). */
