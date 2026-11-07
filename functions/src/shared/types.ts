@@ -359,6 +359,9 @@ export type InCallSmsDoc = {
   // ⛔ 저장되는 것은 **시각 하나뿐**이다: 참가자가 입력한 계좌번호·예금주명에 해당하는 필드는
   // 이 스키마에 **존재하지 않는다**(AC-045 구조적 금지 — `MockScreenDoc`과 같은 형태).
   landingSubmittedAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("landing_submitted")
+  // 2026-11-07(사용자 결정 D-G4) — 금 거래소 화면의 고액 구매 확인에 사실대로 답해 구매가 보류된 시각(최초 1회 · 금 화면 문자만).
+  // 값은 시각뿐 — 답 · 목적 · 금액 0(G138). 리포트 "잘 대처함 · 확인 질문에 사실대로 답함"(`report/screenHeld.ts`)의 입력.
+  landingHeldAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("landing_held")
   // §101 — 여러 화면 사이트(`MockScreenItem.stepScreens`)의 이체 전 단계 버튼(최초 1회). 값은 시각뿐 — 입력값 0(AC-045).
   landingIdentityAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("landing_identity")
   landingConvertedAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("landing_converted")
@@ -649,6 +652,11 @@ export type ReportDoc = {
    * 잘 대처함 표시 전용 — `wasDeceived` · 방어 등급 입력 무변경. `timeLabel` = 끊은 통화의 마지막 대사 시각(끊은 시각 근사). 부재 = 해당 없음 · 옛 리포트.
    */
   participantHangup?: { legIndex: number; timeLabel?: string };
+  /**
+   * 사용자 결정 2026-11-07("잘 대처함 칸 추가") — 앱 안 거래 화면의 확인 질문에 사실대로 답해 거래가 보류됐다(`report/screenHeld.ts` Q1 ~ Q5).
+   * 잘 대처함 표시 전용 — `wasDeceived` · 속은 순간 · 방어 등급 입력 무변경. `timeLabel` = 가장 이른 보류 시각. 부재 = 해당 없음 · 옛 리포트.
+   */
+  screenHeld?: { timeLabel: string };
   createdAt: FirebaseFirestore.Timestamp;
   // T74 추가(전부 옵셔널, 하위호환 — §15.4.1 "아카이브 카드가 필요로 하는 세션 메타를 리포트에
   // 역정규화"). 없으면 아카이브가 카드 1장마다 세션 문서를 추가 read해야 한다(N+1, §15.6 G8).

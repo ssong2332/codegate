@@ -67,6 +67,23 @@ import {
   voucherWon,
   type VoucherPurchase,
 } from "../lib/bankapp/voucher";
+// ⭐ 2026-11-07(Edge 재시험 2 S7 · 사용자 결정 D-G1 ~ D-G6) — 금 거래소 구매 화면(잎 모듈 · 상대 경로).
+import {
+  GOLD_COPY,
+  GOLD_MAX_QUANTITY,
+  GOLD_PRICE_PER_GRAM,
+  GOLD_PRODUCTS,
+  GOLD_PURPOSES,
+  GOLD_SHOP_NAME,
+  findGoldProduct,
+  goldCheckResult,
+  goldOrderError,
+  goldProductPrice,
+  goldWon,
+  lastGoldPurchase,
+  recordGoldPurchase,
+  type GoldPurchase,
+} from "../lib/bankapp/goldBuy";
 import WithdrawAccountSheet, { WithdrawAccountRow } from "./WithdrawAccountSheet";
 
 /** UX-023의 목업 종류. 부재 → `credential-form`(하위호환 읽기 규칙, §15.9.1 R2). */
@@ -164,7 +181,8 @@ export type PrefilledTransfer = {
 };
 
 /** §101 — 이체 전 단계 기록 이벤트(서버 `functions/src/inCallSms/types.ts` `InCallSmsEvent`의 같은 3값). */
-export type LandingProgressEvent = "landing_identity" | "landing_converted" | "landing_amount";
+// 2026-11-07(사용자 결정 D-G4) — `landing_held` = 금 거래소 구매 화면의 고액 구매 확인 보류(고정 값 · 답 내용 0).
+export type LandingProgressEvent = "landing_identity" | "landing_converted" | "landing_amount" | "landing_held";
 
 /** 완료 화면 복귀 버튼 문면(UX-023 v1.33 (5) · D-93) — 진입 표면이 정한다. 동작은 둘 다 `onClose`. */
 const RETURN_LABELS: Record<MessengerFakeLandingEntrySurface, string> = {
@@ -322,6 +340,17 @@ export default function MessengerFakeLanding({
             returnLabel={returnLabel}
             onClose={onClose}
             onSubmit={() => onCredentialSubmit?.()}
+          />
+        ) : landingId !== undefined && GOLD_LANDINGS.includes(landingId) ? (
+          // ⭐ 2026-11-07 — 금 거래소 구매 화면(상품 · 수량 → 주문 확인 + 고액 구매 확인 → 결제 인증 → 보증서). 결제 · 보류 = 무인자(G138).
+          <GoldBuyMockup
+            landingId={landingId}
+            onClose={onClose}
+            onCredentialSubmit={() => onCredentialSubmit?.()}
+            onHeld={() => onLandingStep?.("landing_held")}
+            bankIdentity={bankIdentity}
+            returnLabel={returnLabel}
+            skin={skin}
           />
         ) : landingId !== undefined && VOUCHER_LANDINGS.includes(landingId) ? (
           // ⭐ 2026-11-07 — 상품권 구매 화면(권종 · 수량 → 결제 확인 → 결제 인증 → 핀 번호). 제출 = 무인자(G138 — 핀 · 금액은 이 파일 밖으로 나가지 않는다).
@@ -776,6 +805,32 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     issuerLabel: "ⓒ 한올기프트",
     mockHost: "hanol-gift-shop.invalid",
   },
+  // ⭐ 2026-11-07(Edge 재시험 2 S7) — 기관 고급 금 구매형 · 자산 보호 고급 금형의 금 거래소 화면(서버 카탈로그 mockScreens.ts와 글자 단위로 동일). 그리는 곳은
+  // 아래 `GoldBuyMockup`(이 표의 칸 라벨은 상품 · 수량 선택 줄의 이름이고, 입력 칸 대신 버튼으로 고른다).
+  "gold-buy": {
+    headline: "해담골드 골드바 구매",
+    bodyLines: ["구매하신 골드바는 품질 보증서와 함께 구매 매장에서 수령합니다."],
+    fields: [
+      { label: "상품", placeholder: "상품을 고르세요" },
+      { label: "수량", placeholder: "수량을 고르세요" },
+    ],
+    submitLabel: "골드바 구매하기",
+    successHeadline: "골드바 구매가 완료되었습니다.",
+    issuerLabel: "ⓒ 해담골드",
+    mockHost: "haedam-gold.invalid",
+  },
+  "asset-gold-buy": {
+    headline: "해담골드 금 실물 주문",
+    bodyLines: ["주문하신 금 실물은 보증서와 함께 구매 매장에서 받으실 수 있습니다."],
+    fields: [
+      { label: "주문 상품", placeholder: "상품을 고르세요" },
+      { label: "주문 수량", placeholder: "수량을 고르세요" },
+    ],
+    submitLabel: "금 실물 주문하기",
+    successHeadline: "금 실물 주문이 완료되었습니다.",
+    issuerLabel: "ⓒ 해담골드 주문센터",
+    mockHost: "haedam-gold-order.invalid",
+  },
   // ⭐ P2-d(X6) — 환급 처리 수수료 이체 화면(서버 카탈로그 mockScreens.ts와 글자 단위로 동일).
   "tax-refund-fee-transfer": {
     headline: "수수료 이체 정보를 확인해 주세요",
@@ -822,6 +877,9 @@ const BANK_TRANSFER_LANDINGS: readonly string[] = [
 
 /** ⭐ 2026-11-07(Edge 시험 판 12) — 상품권 구매 화면 landingId(서버 `mockScreens.ts` `VOUCHER_LANDINGS`와 같은 목록 — `mockScreenCopy.test.ts`). 정확 일치만(R8). */
 const VOUCHER_LANDINGS: readonly string[] = ["voucher-purchase"];
+
+/** ⭐ 2026-11-07(Edge 재시험 2 S7) — 금 거래소 구매 화면 landingId(서버 `mockScreens.ts` `GOLD_LANDINGS`와 같은 목록 — `mockScreenCopy.test.ts`). 정확 일치만(R8). */
+const GOLD_LANDINGS: readonly string[] = ["gold-buy", "asset-gold-buy"];
 
 /** S2(실기기 확인 2026-11-01) — 대화방 링크 카드가 이체 화면 칩인가(그림 자리 없는 송금 카드로 그린다 · 정확 일치). */
 export function isBankTransferLandingId(landingId: string): boolean {
@@ -974,6 +1032,400 @@ function landingHostFor(kind: MessengerFakeLandingKind, landingId?: string): str
 function issuerNameOf(issuerLabel: string): string {
   const prefix = "ⓒ ";
   return issuerLabel.slice(0, prefix.length) === prefix ? issuerLabel.slice(prefix.length) : issuerLabel;
+}
+
+/**
+ * ⭐ 2026-11-07(Edge 재시험 2 S7 · 사용자 결정 D-G1 ~ D-G6 "앱 안 화면으로 바꾸기") — 금 거래소 구매 화면(`GOLD_LANDINGS`). 기관 고급 금 구매형 · 자산 보호 고급 금형의
+ * 결말 "예금을 찾아 금을 사서 제출"을 앱 안에서 겪게 한다(실제 거래소 · 금은방으로 가지 않는다).
+ * 흐름: ① 상품 · 수량 · 결제 계좌 → ② 주문 확인 + 고액 구매 확인(구매 목적 · 수사기관 안내 여부) → ③ 결제 인증(생체 인증 시트) → ④ 구매 완료 · 품질 보증서 번호.
+ * ②에서 수사기관 안내를 받았다고 고르면 구매 보류 화면(112 · 1332 안내) — 보류 사실 하나만 올린다(`onHeld` 무인자).
+ * ⛔ 상품 · 수량 · 금액 · 답은 이 컴포넌트 state와 `goldBuy.ts` 메모리 표를 벗어나지 않는다(G138 — 콜백 무인자 · 네트워크 · 저장소 0).
+ */
+function GoldBuyMockup({
+  landingId,
+  onClose,
+  onCredentialSubmit,
+  onHeld,
+  bankIdentity,
+  returnLabel,
+  skin,
+}: {
+  landingId: string;
+  onClose: () => void;
+  /** ⛔ 무인자 — 결제했다는 사실 하나만 올린다(G138). */
+  onCredentialSubmit: () => void;
+  /** ⛔ 무인자 — 고액 구매 확인에서 보류됐다는 사실 하나만 올린다(G138 · 사용자 결정 D-G4). */
+  onHeld: () => void;
+  bankIdentity?: { myBankName: string; ledgerKey: string };
+  returnLabel: string;
+  skin: MessengerSkin;
+}) {
+  const copy = CREDENTIAL_LANDING_COPY[landingId] ?? GENERIC_CREDENTIAL_COPY;
+  const page = LANDING_PAGE_TOKENS;
+  const ledger = bankIdentity?.ledgerKey ?? "";
+  const appBankName = bankIdentity?.myBankName ?? myBankNameFor(ledger);
+  const [accounts] = useState(() => withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: fictionalBalanceFor(ledger) }));
+  const [accountId, setAccountId] = useState<WithdrawAccount["id"]>("main");
+  const account = accounts.find((item) => item.id === accountId) ?? accounts[0]!;
+  const [accountSheetOpen, setAccountSheetOpen] = useState(false);
+  const [productId, setProductId] = useState<string | undefined>(undefined);
+  const [quantity, setQuantity] = useState(1);
+  const [purpose, setPurpose] = useState<string | undefined>(undefined);
+  const [agencyRequested, setAgencyRequested] = useState<boolean | undefined>(undefined);
+  const [stage, setStage] = useState<"form" | "confirm" | "auth" | "held">("form");
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [purchase, setPurchase] = useState<GoldPurchase | undefined>(() => lastGoldPurchase(ledger, landingId));
+  const product = findGoldProduct(productId);
+  const total = product ? goldProductPrice(product) * quantity : 0;
+  // 발급처 꼬리말(서버 issuerLabel 그대로 · 렌더 게이트 대상). 렌더 게이트 역검증 ①의 오염 지점(입력 화면의 발급처 꼬리말 한 곳)을 그대로 두려고 이름을 따로 둔다.
+  const shopFooter = copy.issuerLabel;
+  const productLabelText = copy.fields[0]?.label ?? "";
+  const quantityLabelText = copy.fields[1]?.label ?? "";
+
+  const goldIssuerBar = (
+    <div
+      className="flex h-14 shrink-0 items-center gap-2.5 px-4 text-base font-semibold"
+      style={{ backgroundColor: page.issuerBarBg, color: page.issuerBarText }}
+    >
+      <PhoneIcon name="shield" size={24} />
+      <span className="truncate">{issuerNameOf(copy.issuerLabel)}</span>
+    </div>
+  );
+  const rowList = (rows: [string, string][]) => (
+    <dl className="flex flex-col divide-y rounded-[10px] border" style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg }}>
+      {rows.map(([label, value]) => (
+        <div key={label} className="flex items-baseline justify-between gap-3 px-3.5 py-3 text-[15px]" style={{ borderColor: page.inputBorder }}>
+          <dt style={{ color: page.body }}>{label}</dt>
+          <dd className="break-all text-right font-semibold tabular-nums" style={{ color: page.headline }}>
+            {value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+  const choiceStyle = (selected: boolean) => ({
+    border: `${selected ? 2 : 1}px solid ${selected ? page.submitBg : page.inputBorder}`,
+    backgroundColor: selected ? page.fieldReadonlyBg : page.inputBg,
+    color: page.headline,
+  });
+
+  const finishPurchase = () => {
+    if (!productId) return;
+    // AC-045 — 네트워크 호출 0. 보증서 번호는 `goldBuy.ts` 메모리 표에서만 만든다.
+    const made = recordGoldPurchase(ledger, landingId, productId, quantity, new Date());
+    recordWithdrawal(ledger, account.id, String(total));
+    setPurchase(made);
+    setStage("form");
+    onCredentialSubmit();
+  };
+
+  // ④ 구매 완료 · 품질 보증서 번호(이 화면이 만든 값 · 버튼으로 고른 상품 정보만).
+  if (purchase) {
+    const bought = findGoldProduct(purchase.productId);
+    return (
+      <>
+        {goldIssuerBar}
+        <div className="flex flex-col gap-4 p-5">
+          <p role="status" className="text-lg font-semibold leading-snug" style={{ color: page.headline }}>
+            {copy.successHeadline}
+          </p>
+          {rowList([
+            [GOLD_COPY.productRow, `${bought?.label ?? ""} × ${purchase.quantity}${GOLD_COPY.quantityUnit}`],
+            [GOLD_COPY.amountRow, goldWon(purchase.total)],
+            [GOLD_COPY.warrantyLabel, purchase.warranty],
+            [GOLD_COPY.pickupRow, GOLD_COPY.pickupValue],
+            [GOLD_COPY.paidLabel, transferTimeText(purchase.purchasedAt)],
+          ])}
+          <p className="text-[13px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
+            {GOLD_COPY.pickupNote}
+          </p>
+          <Button type="button" onClick={onClose}>
+            {returnLabel}
+          </Button>
+        </div>
+      </>
+    );
+  }
+
+  // 고액 구매 확인 보류(112 · 1332 안내). 다시 주문 화면으로 돌아갈 수 있다(사기범이 다시 요구하는 흐름 — 판정표 A4).
+  if (stage === "held") {
+    return (
+      <>
+        {goldIssuerBar}
+        <div className="flex flex-col gap-4 p-5">
+          <p role="status" className="text-lg font-semibold leading-snug" style={{ color: page.headline }}>
+            {GOLD_COPY.heldHeadline}
+          </p>
+          {GOLD_COPY.heldLines.map((line) => (
+            <p key={line} className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
+              {line}
+            </p>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              setAgencyRequested(undefined);
+              setStage("form");
+            }}
+            className="min-h-[48px] rounded-[10px] border px-6 py-2.5 text-base font-semibold"
+            style={{ borderColor: page.inputBorder, color: page.headline }}
+          >
+            {GOLD_COPY.heldBack}
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  // ② 주문 확인 + 고액 구매 확인 · ③ 결제 인증(시트가 확인 화면 위로 올라온다).
+  if (stage !== "form" && product) {
+    const handlePay = () => {
+      const result = goldCheckResult(purpose, agencyRequested);
+      if (result === "incomplete") {
+        setError(GOLD_COPY.checkError);
+        return;
+      }
+      setError(undefined);
+      if (result === "held") {
+        setStage("held");
+        onHeld();
+        return;
+      }
+      setStage("auth");
+    };
+    return (
+      <>
+        {goldIssuerBar}
+        <div inert={stage === "auth" ? true : undefined}>
+          <div className="flex flex-col gap-4 px-5 pb-6 pt-5">
+            <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
+              {GOLD_COPY.confirmHeadline}
+            </h1>
+            {rowList([
+              [GOLD_COPY.productRow, `${product.label} × ${quantity}${GOLD_COPY.quantityUnit}`],
+              [GOLD_COPY.sellerRow, GOLD_SHOP_NAME],
+              [GOLD_COPY.payFromRow, accountLabel(account)],
+              [GOLD_COPY.amountRow, goldWon(total)],
+              [GOLD_COPY.pickupRow, GOLD_COPY.pickupValue],
+            ])}
+            <section className="flex flex-col gap-3 rounded-[10px] px-3.5 py-3" style={{ backgroundColor: page.fieldReadonlyBg }}>
+              <h2 className="text-[15px] font-bold" style={{ color: page.headline }}>
+                {GOLD_COPY.checkHeading}
+              </h2>
+              <p className="text-[14px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
+                {GOLD_COPY.checkLead}
+              </p>
+              <span id="gold-purpose-label" className="text-[14px] font-semibold" style={{ color: page.headline }}>
+                {GOLD_COPY.purposeLabel}
+              </span>
+              <div role="radiogroup" aria-labelledby="gold-purpose-label" className="grid grid-cols-2 gap-2">
+                {GOLD_PURPOSES.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={value === purpose}
+                    onClick={() => {
+                      setPurpose(value);
+                      setError(undefined);
+                    }}
+                    className="min-h-[48px] rounded-[10px] text-[15px] font-semibold"
+                    style={choiceStyle(value === purpose)}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+              <span id="gold-agency-label" className="text-[14px] font-semibold leading-relaxed [word-break:keep-all]" style={{ color: page.headline }}>
+                {GOLD_COPY.agencyQuestion}
+              </span>
+              <div role="radiogroup" aria-labelledby="gold-agency-label" className="grid grid-cols-2 gap-2">
+                {([true, false] as const).map((value) => (
+                  <button
+                    key={String(value)}
+                    type="button"
+                    role="radio"
+                    aria-checked={agencyRequested === value}
+                    onClick={() => {
+                      setAgencyRequested(value);
+                      setError(undefined);
+                    }}
+                    className="min-h-[48px] rounded-[10px] text-[15px] font-semibold"
+                    style={choiceStyle(agencyRequested === value)}
+                  >
+                    {value ? GOLD_COPY.yes : GOLD_COPY.no}
+                  </button>
+                ))}
+              </div>
+            </section>
+            {error && (
+              <p role="alert" className="text-[14px] font-semibold" style={{ color: page.errorText }}>
+                {error}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handlePay}
+              className="min-h-[52px] rounded-[10px] text-base font-semibold"
+              style={{ backgroundColor: page.submitBg, color: page.submitText }}
+            >
+              {goldWon(total)} {GOLD_COPY.pay}
+            </button>
+            <button
+              type="button"
+              onClick={() => setStage("form")}
+              className="min-h-[48px] rounded-[10px] border px-6 py-2.5 text-base font-semibold"
+              style={{ borderColor: page.inputBorder, color: page.headline }}
+            >
+              {GOLD_COPY.cancel}
+            </button>
+          </div>
+        </div>
+        {stage === "auth" && (
+          <BankAuthSheet
+            method={authMethodForSkin(skin)}
+            appName={`${appBankName} 모바일뱅킹`}
+            summary={`${GOLD_SHOP_NAME} ${goldWon(total)} ${GOLD_COPY.pay}`}
+            onSuccess={finishPurchase}
+            onCancel={() => setStage("confirm")}
+          />
+        )}
+      </>
+    );
+  }
+
+  // ① 상품 · 수량 · 결제 계좌.
+  const handleNext = () => {
+    const found = goldOrderError(productId, quantity) ?? withdrawError(ledger, account, String(total));
+    setError(found);
+    if (!found) setStage("confirm");
+  };
+  return (
+    <>
+      {goldIssuerBar}
+      <div className="flex flex-col gap-4 px-5 pb-6 pt-4">
+        <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
+          {copy.headline}
+        </h1>
+        {copy.bodyLines.map((line) => (
+          <p key={line} className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
+            {line}
+          </p>
+        ))}
+        <p className="text-[14px] tabular-nums" style={{ color: page.body }}>
+          {GOLD_COPY.priceNote} {goldWon(GOLD_PRICE_PER_GRAM)}
+        </p>
+        <div className="flex flex-col gap-2">
+          <span id="gold-product-label" className="text-[15px] font-semibold" style={{ color: page.headline }}>
+            {productLabelText}
+          </span>
+          <div role="radiogroup" aria-labelledby="gold-product-label" className="flex flex-col gap-2">
+            {GOLD_PRODUCTS.map((item) => {
+              const selected = item.id === productId;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => {
+                    setProductId(item.id);
+                    setError(undefined);
+                  }}
+                  className="flex min-h-[52px] items-center justify-between gap-3 rounded-[10px] px-3.5 text-left text-base font-semibold"
+                  style={choiceStyle(selected)}
+                >
+                  <span>{item.label}</span>
+                  <span className="tabular-nums">{goldWon(goldProductPrice(item))}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span id="gold-quantity-label" className="text-[15px] font-semibold" style={{ color: page.headline }}>
+            {quantityLabelText}
+          </span>
+          <div role="group" aria-labelledby="gold-quantity-label" className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label={`${quantityLabelText} 줄이기`}
+              disabled={quantity <= 1}
+              onClick={() => {
+                setQuantity(Math.max(1, quantity - 1));
+                setError(undefined);
+              }}
+              className="h-11 w-11 rounded-full border text-xl font-semibold disabled:opacity-40"
+              style={{ borderColor: page.inputBorder, color: page.headline }}
+            >
+              −
+            </button>
+            <output aria-live="polite" className="min-w-[3ch] text-center text-lg font-bold tabular-nums" style={{ color: page.headline }}>
+              {quantity}
+              {GOLD_COPY.quantityUnit}
+            </output>
+            <button
+              type="button"
+              aria-label={`${quantityLabelText} 늘리기`}
+              disabled={quantity >= GOLD_MAX_QUANTITY}
+              onClick={() => {
+                setQuantity(Math.min(GOLD_MAX_QUANTITY, quantity + 1));
+                setError(undefined);
+              }}
+              className="h-11 w-11 rounded-full border text-xl font-semibold disabled:opacity-40"
+              style={{ borderColor: page.inputBorder, color: page.headline }}
+            >
+              +
+            </button>
+          </div>
+        </div>
+        <WithdrawAccountRow
+          account={account}
+          ledgerKey={ledger}
+          onOpen={() => setAccountSheetOpen(true)}
+          colors={{ border: page.inputBorder, bg: page.inputBg, label: page.body, value: page.headline }}
+        />
+        {accountSheetOpen && (
+          <WithdrawAccountSheet
+            accounts={accounts}
+            selectedId={account.id}
+            ledgerKey={ledger}
+            onSelect={(id) => {
+              setAccountId(id);
+              setError(undefined);
+              setAccountSheetOpen(false);
+            }}
+            onClose={() => setAccountSheetOpen(false)}
+          />
+        )}
+        <p
+          className="flex items-baseline justify-between gap-3 rounded-[10px] border px-3.5 py-3 text-[15px]"
+          style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.body }}
+        >
+          <span>{GOLD_COPY.totalLabel}</span>
+          <span className="text-[18px] font-bold tabular-nums" style={{ color: page.headline }}>
+            {goldWon(total)}
+          </span>
+        </p>
+        {error && (
+          <p role="alert" className="text-[14px] font-semibold" style={{ color: page.errorText }}>
+            {error}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={handleNext}
+          className="min-h-[52px] rounded-[10px] text-base font-semibold"
+          style={{ backgroundColor: page.submitBg, color: page.submitText }}
+        >
+          {copy.submitLabel}
+        </button>
+        <p className="text-center text-[13px]" style={{ color: page.issuerFooter }}>
+          {shopFooter}
+        </p>
+      </div>
+    </>
+  );
 }
 
 /**

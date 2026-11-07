@@ -191,7 +191,8 @@ test("[§108 배선] 실시간 콜러블 · 텍스트 폴백이 같은 함수로
 // §124(#239) — 말로 끝나는 결말(현금 · 금 · 대출금 전달 약속 · 현금 상환)의 새 루트 5벌이 후속 값 4를 갖는다.
 test("[§115 C-5 · §117 · §124] 후속 단계가 있는 변형 = 기관 사칭 고급 대출 유도 2벌(3) + 말로 끝나는 결말 5벌(4) · 나머지 확인 무력화 고급 변형은 종전 판정 그대로", () => {
   const withFollowUp = Object.fromEntries(FLOW_VARIANTS.filter((v) => v.goalFollowUpUserTurns !== undefined).map((v) => [v.variantId, goalFollowUpFor(v.scenarioId, v.variantId)]));
-  assert.deepEqual(withFollowUp, { "fv-pgqt": 3, "fv-q7cn": 4, "fv-g2ld": 4, "fv-r4hc": 6, "fv-e5mv": 4 }); // PR-B — fv-c5fj는 3통화(화면 보류 · 4-c)
+  // 2026-11-07 — 금 구매형 fv-g2ld는 결말이 앱 안 금 거래소 화면이 되어 후속 값 대신 4-c 결정 화면으로 옮겼다.
+  assert.deepEqual(withFollowUp, { "fv-pgqt": 3, "fv-q7cn": 4, "fv-r4hc": 6, "fv-e5mv": 4 }); // PR-B — fv-c5fj는 3통화(화면 보류 · 4-c)
   assert.equal(goalFollowUpFor("card-company-impersonation", "fv-c5fj"), undefined, "시나리오가 다르면 적용 안 함");
   assert.equal(goalFollowUpFor("institutional-impersonation", undefined), undefined, "변형 없음 = 종전");
   // 다른 확인 무력화 고급 6종(기관 사칭 밖) — 후속 값이 없으므로 같은 입력에 같은 판정(넣든 빼든)

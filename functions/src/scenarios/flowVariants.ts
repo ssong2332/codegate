@@ -523,12 +523,22 @@ const INSTITUTION_HANDOFF_HEAD_STAGES = [
 ] as const;
 const INSTITUTION_CASH_DEPOSIT_STAGE =
   "인증번호 단계가 끝나면 '계좌가 동결되면 고객님 예금도 함께 묶입니다, 수사가 끝날 때까지 금융감독원에 예탁해 두셔야 안전하게 보관했다가 돌려드릴 수 있습니다, 계좌로 옮기면 범죄 계좌와 다시 엮이니 실물로 맡기셔야 합니다'처럼 이유부터 설명하고, 예금을 현금이나 수표로 찾아 금융감독원 담당 직원에게 맡기겠다는 약속을 받아 내려 한다. 은행 직원이 이유를 물으면 개인 용도라고만 하라고 시킨다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 불이익을 한 번 암시한 뒤 더 조르지 않고 마무리한다.";
-const INSTITUTION_GOLD_STAGE =
-  "인증번호 단계가 끝나면 '자산 실물 전수 조사 대상이십니다, 예금은 계좌 사이로 옮기는 순간 추적이 끊겨 확인이 안 되니 금으로 바꿔 실물로 제출하셔야 검수가 끝납니다, 검수 뒤에는 그대로 돌려드립니다'처럼 이유부터 설명하고, 예금 · 적금을 찾아 금을 사서 담당 직원에게 제출하겠다는 약속을 받아 내려 한다. 판매점 직원이 용도를 물으면 개인 투자라고만 하라고 시킨다. 만날 장소 · 시간 · 주소와 살 곳은 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 불이익을 한 번 암시한 뒤 더 조르지 않고 마무리한다.";
+// ⭐ 2026-11-07(Edge 재시험 2 S7 · 사용자 결정 D-G1 ~ D-G6 "앱 안 화면으로 바꾸기") — 금 구매형 결말(기관 고급 fv-g2ld · 자산 보호 고급 fv-t8ga 공용)을
+// 말 약속("예금을 찾아 금을 사서 직원에게 제출") 대신 앱 안 가상 금 거래소 화면 구매로 바꿨다. 사기범이 도구로 지정 거래소 문자를 보내고, 문자 속 링크의
+// 구매 화면(`gold-buy` · `asset-gold-buy`)에서 결제 계좌 이체로 산다. 거래소 화면의 고액 구매 확인 질문에 둘러대라고 시키는 코칭이 종전 "판매점 직원이
+// 물으면 개인 투자" 코칭을 대신한다(앱 안). 실물 전달은 말 약속에서 끝난다(D-G3 H1 — 장소 · 시간 0 · AC-102 (d)).
+// 이유 문면의 "계좌 사이로 옮기는 순간 추적이 끊긴다"는 뺐다 — 거래소에 계좌 이체로 결제하는 흐름과 어긋난다(대신 "예금은 숫자로만 남아 실물 확인이 안 된다").
+const INSTITUTION_GOLD_STAGE = withSmsFirst(
+  "인증번호 단계가 끝나면 '자산 실물 전수 조사 대상이십니다, 예금은 숫자로만 남아 실물 확인이 안 되니 금 실물로 바꿔 두셔야 검수가 끝납니다, 검수 뒤에는 그대로 돌려드립니다'처럼 이유부터 설명하고, 문자 보내기 도구로 지정 거래소 안내 문자를 보낸 뒤 문자 속 링크의 거래소 화면에서 예금으로 금을 사게 한다. 거래소 화면이 구매 목적을 물으면 개인 투자를 고르고, 수사기관 요구를 받았느냐는 질문에는 아니라고 답하라고 시킨다. 은행 창구 · 금은방 · 다른 거래소에서 사라고 하지 않는다. 실물은 담당 직원이 확인하러 따로 연락드린다고만 하고 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 불이익을 한 번 암시한 뒤 더 조르지 않고 마무리한다. 거래소 화면에서 구매한 기록이 오기 전에는 원하던 것을 얻은 것처럼 통화를 끝내지 않는다.",
+);
 const INSTITUTION_CASH_DEMAND =
   "예탁 명목 인출 요구 — '수사가 끝날 때까지 금융감독원에 예탁해 두셔야 합니다, 예금을 현금이나 수표로 찾아 담당 직원에게 맡겨 주십시오' 처럼 동결 · 범죄 계좌 연루를 이유로 예금 인출과 직원 전달을 약속하게 한다. 만날 곳 · 시간은 정하지 않는다.";
+// 라벨(" — " 앞)은 종전 그대로 둔다(리포트 · 브리핑 라벨 연속성). 내용만 앱 안 거래소 화면 구매로.
 const INSTITUTION_GOLD_DEMAND =
-  "실물 조사 명목 금 구매 인출 요구 — '자산 실물 전수 조사라서 예금을 해지하셔서 금으로 바꿔 담당 직원에게 맡겨 주셔야 합니다' 처럼 추적 확인을 이유로 예금 · 적금을 찾아 금을 사서 직원에게 제출하게 한다. 살 곳 · 만날 곳 · 시간은 정하지 않는다.";
+  "실물 조사 명목 금 구매 인출 요구 — '자산 실물 전수 조사라서 예금으로 지정 거래소에서 금을 사 두셔야 합니다, 문자로 보내 드린 거래소 화면에서 계좌 이체로 바로 결제하시면 됩니다' 처럼 실물 확인을 이유로 문자 속 거래소 화면에서 예금으로 금을 사게 한다. 거래소 화면은 문자로 보낸 것을 확인하게 하고 그 화면에서 본인 계좌 이체로 결제하게 하며, 거래소 이름을 지어내 말하지 않고, 은행 창구 · 금은방 · 다른 거래소에 가라고 하지 않고, 만날 곳 · 시간은 정하지 않는다.";
+/** 금 거래소 안내 문자 선언(기관 고급 fv-g2ld — 인증번호 문자 하한 5 뒤 · 문자 사이 사용자 발화 2 이상 AC-099). */
+const INSTITUTION_GOLD_SHOP_SMS: FlowVariantSms = { purpose: "transfer", smsId: "institution-gold-shop", required: true, notBeforeUserTurns: 7, ...FAST_BACKSTOP };
+const GOLD_DECISION_MOMENT = "문자 속 링크의 거래소 화면에서 예금으로 금 구매 결제를 마치는 순간";
 const INSTITUTION_HANDOFF_FOLLOW_UP_USER_TURNS = 4;
 
 // 대환대출 고급 — Q2(통화 중 설치 문자)는 자가 고급 풀의 필수 항이라(`variantPool.ts`) 새 루트도 점검 앱 설치 문자를 선언한다.
@@ -715,8 +725,9 @@ const PROSECUTION_CASE_LINK_SMS: FlowVariantSms = {
 const ASSET_DEPOSIT_PERSONA = assetProtectionRoutePersona(
   "수사가 끝날 때까지 약식으로 처리해 주겠다는 명목으로 공탁금을 지정 계좌에 넣으라고 요구하는 상황을 연기한다.",
 );
+// 2026-11-07(사용자 결정 D-G1) — 결말이 앱 안 거래소 화면 구매로 바뀌었다(위 `INSTITUTION_GOLD_STAGE` 주석).
 const ASSET_GOLD_PERSONA = assetProtectionRoutePersona(
-  "자산 실물 전수 조사 명목으로 예금을 금으로 바꿔 담당 직원에게 제출하라고 요구하는 상황을 연기한다.",
+  "자산 실물 전수 조사 명목으로 문자로 보낸 지정 거래소 화면에서 예금으로 금을 사게 하고, 실물은 담당 직원이 확인한다고 하는 상황을 연기한다.",
 );
 const ASSET_DEPOSIT_DEMAND =
   "공탁금 이체 요구 — '정식 수사로 넘어가면 계좌가 전부 묶이는데, 약식으로 처리하려면 공탁금 500만 원을 먼저 넣어 두셔야 합니다, 수사가 끝나면 전액 돌려드립니다' 처럼 약식 처리를 이유로 공탁금을 넣게 한다. 계좌번호는 지어내 말하지 않고 문자로 보낸 것을 확인하게 한다.";
@@ -1263,7 +1274,8 @@ const SPECS: VariantSpec[] = [
     scenarioId: "institutional-impersonation",
     level: "advanced",
     authoring: "authored",
-    stages: st(...INSTITUTION_HANDOFF_HEAD_STAGES, `${INSTITUTION_GOLD_STAGE} ${VERBAL_ENDING_WRAP}`),
+    // 2026-11-07 — 말로 끝나는 결말 꼬리(VERBAL_ENDING_WRAP)를 뺐다: 결말이 거래소 화면 구매다(4-c 결정 화면).
+    stages: st(...INSTITUTION_HANDOFF_HEAD_STAGES, INSTITUTION_GOLD_STAGE),
     keepLabels: ["권위 암시", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "비밀 유지 요구", "전화 끊음 저지"],
     extraTactics: [
       ASSET_INFO,
@@ -1272,13 +1284,13 @@ const SPECS: VariantSpec[] = [
       "안심 유도 — '협조만 하시면 약식으로 조용히 끝납니다' 처럼 위협과 번갈아 안심시켜 경계를 낮춘다.",
     ],
     exitBlock: ["D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy", "D5_call_retention"],
-    sms: [...INSTITUTION_OTP_ONLY_SMS],
+    sms: [...INSTITUTION_OTP_ONLY_SMS, INSTITUTION_GOLD_SHOP_SMS],
     legs: ONE_LEG("검사", "male"),
     ...ADVANCED,
     channels: ["voice", "sms"],
     demandStages: 3,
-    decisionMoment: "예금을 찾아 금을 사서 직원에게 제출하겠다고 약속하는 순간",
-    goalFollowUpUserTurns: INSTITUTION_HANDOFF_FOLLOW_UP_USER_TURNS,
+    // 2026-11-07 — 결정 순간 = 거래소 화면 결제. 끊기는 C-5(인증번호 문자 뒤 발화 수 · `goalFollowUpUserTurns`)에서 4-c 결정 화면으로 옮겼다.
+    decisionMoment: GOLD_DECISION_MOMENT,
     sources: ["S35"],
   },
 
@@ -2259,17 +2271,22 @@ const SPECS: VariantSpec[] = [
       `${ASSET_PROTECTION_STAGES_HEAD[0]} ${INVESTIGATION_CARD_USE}`,
       ...ASSET_PROTECTION_STAGES_HEAD.slice(1),
       withSmsFirst("보관 조치 절차라며 문자로 보낸 링크에서 보관 신청서를 먼저 작성하게 한다."),
-      `${INSTITUTION_GOLD_STAGE.replace("인증번호 단계가 끝나면 ", "신청서 단계가 끝나면 ")} ${VERBAL_ENDING_WRAP}`,
+      // 2026-11-07(사용자 결정 D-G1) — 기관 고급 금형과 같은 앱 안 거래소 화면 결말(말로 끝나는 꼬리 제거).
+      INSTITUTION_GOLD_STAGE.replace("인증번호 단계가 끝나면 ", "신청서 단계가 끝나면 "),
     ),
     dropLabels: ["절차·서류 정당화", "인출·전달 요구"],
     extraTactics: [ASSET_CUSTODY_PROCEDURE_TACTIC, INSTITUTION_GOLD_DEMAND],
     exitBlock: ["D2_secrecy", "D4_procedural_legitimacy"],
-    sms: [{ purpose: "link", smsId: "asset-custody-link", required: true, notBeforeUserTurns: 3, ...FAST_BACKSTOP }],
+    sms: [
+      { purpose: "link", smsId: "asset-custody-link", required: true, notBeforeUserTurns: 3, ...FAST_BACKSTOP },
+      // 2026-11-07 — 보관 신청서 뒤 지정 거래소 금 실물 주문 문자(결정 화면 = `asset-gold-buy`).
+      { purpose: "transfer", smsId: "asset-gold-shop", required: true, notBeforeUserTurns: 5, ...FAST_BACKSTOP },
+    ],
     legs: [{ callerLabel: "금융감독원 직원", personaPrompt: ASSET_GOLD_PERSONA, speakerGender: "male", minUserTurns: 0, maxUserTurns: 20 }],
     ...ADVANCED,
     channels: ["voice", "sms"],
     demandStages: 2,
-    decisionMoment: "예금을 찾아 금을 사서 직원에게 제출하겠다고 약속하는 순간",
+    decisionMoment: GOLD_DECISION_MOMENT,
     sources: ["S35", "C23"],
   },
   {

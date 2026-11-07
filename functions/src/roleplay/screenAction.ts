@@ -24,7 +24,7 @@
 //    참가자는 설치 없이 이관 단계로 넘어가지 않고, 재촉 단계(판정표 SP)가 다른 압박 뒤 포기로 끝낸다(영원히 멈추지 않게 하는 쪽이 보류 시한이 아니라 포기다).
 // ⛔ 순수 함수(Firestore · LLM 0). 문면에 횟수 · 턴 번호 0 · 따옴표 대사 예시 0(턴 지시 스캔 게이트).
 import type { MessengerAttachment } from "../shared/types";
-import { findMockScreenItem, isBankTransferLanding, isVoucherLanding } from "../scenarios/mockScreens";
+import { findMockScreenItem, isBankTransferLanding, isGoldLanding, isVoucherLanding } from "../scenarios/mockScreens";
 import { IN_CALL_SMS } from "../scenarios/inCallSms";
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import { isCompletionClaim } from "../inCallSms/confirmResult";
@@ -59,6 +59,8 @@ export function screenKindOf(scenarioId: string, landingId: string): ScreenKind 
   if (item.kind === "app-install") return "install";
   // 2026-11-07 — 상품권 구매 화면은 이체가 아니라 구매(입력 화면 종류 · 완료 주장 = 아래 `PURCHASE_CLAIM` 포함). 문자 종류(`account`)보다 먼저 본다.
   if (isVoucherLanding(landingId)) return "form";
+  // 2026-11-07 — 금 거래소 구매 · 주문 화면도 구매(같은 행 · "샀어요 · 주문했어요"도 완료 주장).
+  if (isGoldLanding(landingId)) return "form";
   // 훈련용 이체 화면(P2) ∨ 계좌 문자(`kind: "account"`)가 여는 화면(P2 이전 이체 화면 — 예: 카드 피해금 이관 `card-relief-transfer`) = 이체.
   if (isBankTransferLanding(landingId)) return "transfer";
   return (IN_CALL_SMS[scenarioId] ?? []).some((sms) => sms.kind === "account" && sms.fakeLandingId === landingId) ? "transfer" : "form";
@@ -128,7 +130,8 @@ const INSTALL_CLAIM = /(?<!(?:안|못)\s?)(?:설치(?:했|해\s?놨|해\s?뒀|\s
  * 2026-11-07(상품권 구매 화면 · 사용자 결정 "앱 안 화면 추가") — 구매 완료 주장("샀어요" · "구매했어요" · "결제했어요" · "결제 완료"). 앞에 "안 · 못"이 붙거나 물음이면 아니다.
  * 입력 화면(`form`) 주장에 더한다 — 상품권 구매 화면은 입력 화면 종류로 판정한다(`screenKindOf` 기본값).
  */
-const PURCHASE_CLAIM = /(?<!(?:안|못)\s?)(?:샀(?:어|습|다)|사\s?놨|(?:구매|결제)(?:했|해\s?놨|\s?완료|\s?다\s?했|\s?끝났))/;
+// 2026-11-07 — 금 거래소 주문 화면(`asset-gold-buy`)의 "주문했어요 · 주문 완료"도 같은 구매 주장으로 본다.
+const PURCHASE_CLAIM = /(?<!(?:안|못)\s?)(?:샀(?:어|습|다)|사\s?놨|(?:구매|결제|주문)(?:했|해\s?놨|\s?완료|\s?다\s?했|\s?끝났))/;
 
 /** 이 발화가 그 종류 화면의 완료 주장인가. */
 export function isScreenClaim(kind: ScreenKind, text: string): boolean {

@@ -76,7 +76,12 @@ test("[§124 신고 (3)] 수사기관 사칭 루트 첫 단계 — 내 정보 �
 });
 
 test("[§124 말로 끝나는 결말] 현금 · 금 · 대출금 전달 약속 · 현금 상환 루트 — 후속 값(C-5) · 결정 순간 '약속' · 장소 · 시간 0 문면", () => {
-  for (const id of ["fv-q7cn", "fv-g2ld", "fv-r4hc", "fv-e5mv"]) {
+  // 2026-11-07(Edge 재시험 2 S7 · 사용자 결정 D-G1 ~ D-G6) — 금 구매형 fv-g2ld는 결말이 앱 안 금 거래소 화면 결제가 되어 C-5 · '약속' 대상에서 뺐다(장소 · 시간 0은 그대로).
+  const gold = findFlowVariant("fv-g2ld")!;
+  assert.equal(gold.goalFollowUpUserTurns, undefined);
+  assert.doesNotMatch(gold.decisionMoment ?? "", /약속/);
+  assert.match(gold.stages.at(-1)!.summary, /장소 · 시간 · 주소[^.]*정하지도 묻지도 않는다/);
+  for (const id of ["fv-q7cn", "fv-r4hc", "fv-e5mv"]) {
     const v = findFlowVariant(id)!;
     // §124 실측 — 설치 문자가 결말보다 두 단계 앞인 fv-r4hc만 6.
     assert.equal(v.goalFollowUpUserTurns, id === "fv-r4hc" ? 6 : 4, id);
