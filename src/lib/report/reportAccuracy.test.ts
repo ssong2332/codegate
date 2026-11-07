@@ -7,6 +7,7 @@ import {
   mockScreenDeclinedText,
   mockScreenSubmittedText,
   mockScreenWhat,
+  momentAmountText,
   officialCheckText,
   participantHangupText,
   pickFirstDeceivedIndex,
@@ -88,6 +89,14 @@ test("[판 32] M6 · M7 — 이체 화면을 열고 보내지 않은 것은 '권
   assert.equal(mockScreenDeclinedText({ kind: "credential-form" }), "잘 대응한 지점입니다 — 입력 내용을 보내지 않았습니다.");
   assert.equal(mockScreenDeclinedText({ kind: "app-install" }), null);
   assert.match(read("src/app/report/page.tsx"), /mockScreenDeclinedText\(mockScreen\)/);
+});
+
+test("[2026-11-07 재시험] M8 — 문자 링크 이체 화면 제출 순간 카드에 금액 문장 · 값이 없거나 이상하면 문장 0", () => {
+  assert.equal(momentAmountText({ amountComparison: "less" }), "요구받은 금액보다 적게 보냈습니다.");
+  assert.equal(momentAmountText({ amountComparison: "equal" }), "요구받은 금액을 그대로 보냈습니다.");
+  assert.equal(momentAmountText({}), null);
+  assert.equal(momentAmountText({ amountComparison: "3000000" }), null, "금액 값 같은 다른 모양은 싣지 않는다");
+  assert.match(read("src/app/report/page.tsx"), /momentAmountText\(entry\.moment\)/);
 });
 
 test("[사용자 결정 2026-11-07 방어로 집계] H1 — 먼저 끊음 기록 읽기 · 문장 · 화면 배선", () => {

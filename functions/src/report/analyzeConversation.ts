@@ -63,6 +63,12 @@ export type DeceivedMomentResult = {
   tacticCategory: TacticCategory;
   /** T129 (b)(§35.6 · §98) — 모의 화면 승격 순간에만(`buildLandingSubmitMoment`). 대화 추정 순간에는 없다. */
   landingId?: string;
+  /**
+   * 2026-11-07 Edge 재시험(기관 사칭 고급 — 문자 링크 이체 화면에서 980만 원 요구에 300만 원 제출, 리포트에 "적게 보냄" 문장 없음) —
+   * **통화 중 문자** 경로 이체 화면 제출 승격 순간에만(`promoteSmsLandingSubmits` 1행). 문자 문서 `landingAmountComparison` 그대로(금액 값 0 — G138).
+   * 메신저 경로는 화면 항목(`MockScreenTimelineEntry.amountComparison`)이 이미 문장을 낸다 — 여기에는 싣지 않는다(중복 문장 0).
+   */
+  amountComparison?: "less" | "equal" | "more";
 };
 
 export type ConversationAnalysis = {
@@ -577,6 +583,7 @@ function isHardDisclosure(scammerText: string, replyText: string): boolean {
 // | RS3 | 저항 어휘 · 거절이 없고, 사기범이 은행 · 거래를 언급했으며 답에 은행명(○○은행 · 농협 · 우체국 · 새마을금고 · 신협 · 수협 · ○○뱅크) | `bank_disclosed` |
 // | RS4 | 2026-11-07 사용자 결정 — 저항 어휘가 없고, 바로 앞 대사에 요구 어형(`scammerHasDemand`)이 있으며, 답이 일반 방법 질문뿐(C6c) | `how_to_question` |
 // ⚠️ 순서: RS2(비밀 약속) 뒤 · RS3 앞. 한 줄에 하나만(위에서 첫 일치).
+// | RS5 | 2026-11-07 — 같은 사기범 대사에 대한 답 줄 묶음(다음 사기범 대사 전까지)에서 속은 순간이 잡혔으면 그 묶음의 RS3(`bank_disclosed`)는 달지 않는다 | (신호 없음) |
 const FAKE_INFO_MARKER = /가짜로|가짜\s*(?:번호|정보|이름|계좌)|거짓(?:말)?로|아무거나|아무\s*번호|지어서|지어낸|엉터리/;
 const SECRECY_PROMISE =
   /(?:아무|누구)\s*(?:한테|에게)?\s*도[^.?!]{0,8}?(?:말|얘기|이야기|알리)[^.?!]{0,3}?(?:안|않|하지\s*않)|비밀로\s*(?:할게|하겠|해\s*드릴|둘게|두겠)|비밀\s*(?:지킬게|지키겠|유지할게|유지하겠)|(?:가족|은행|남편|아내|아들|딸|자녀)[^.?!]{0,8}?(?:말|얘기|알리)[^.?!]{0,3}?안\s*(?:할|하겠|해)/;
@@ -664,7 +671,7 @@ function isContextualCompliance(scammerText: string, replyText: string): boolean
  * ⚠️ 예외(PR-A3): 요구 3종 한정 보정은 아래 `resolveDemandFallbackTactic` 판정표뿐이다 — 문구 키가 빈 경우만, 이미 속은 순간의
  * **라벨에만**, 세션 목록 안 라벨만 쓴다(같은 중립 대사 × 전 시나리오에서 그 표도 0건 — `demandFallbackLabel.test.ts`).
  */
-type TacticMatcher = { tactic: string; phraseKeys: string[] };
+export type TacticMatcher = { tactic: string; phraseKeys: string[] };
 
 const PHRASE_KEY_LENGTH = 5;
 const PHRASE_MIN_LENGTH = 3;
@@ -694,14 +701,35 @@ function splitFlavorPhrases(tactic: string): string[] {
     });
 }
 
-function buildTacticMatchers(weakenedTactics: readonly string[]): TacticMatcher[] {
+/**
+ * 2026-11-07 Edge 재시험(자녀 사칭 초급 — 사기범은 "폰 고장 · 200만 원만 먼저"뿐인데 수법 목록에 "다른 명의 계좌 요구") — 문구 키 규칙 한 행 추가.
+ * | 규칙 | 내용 |
+ * |---|---|
+ * | 설정 문구 구별 | **송금 · 계좌 요구 범주 수법만**(`resolveTacticCategory` = payment_demand): 키가 그 시나리오의 **설정 문구**(페르소나 · 시나리오 문자 본문 — 호출부가 넘긴다)에서 수법 인용구를 지운 나머지에도 나오면, 거기 없어질 때까지(최대 문구 전체) 키를 늘린다 |
+ * | (범위 이유) | 전 범주에 적용하면 69변형 1131키 중 75키가 바뀌었다 — "검찰 수사관"(권위 암시)처럼 설정 문구 자체가 수법인 범주까지 늘어 실제 쓴 수법을 놓친다. 요구 범주는 요구 어형이 있어야 그 수법이다 |
+ * 원인(확정): 인용구 '폰이 고장 나서 내 계좌 인증이 안 돼 …'의 앞 5자 "폰이고장나"가 자녀 사칭 페르소나의 기본 사연("폰이 고장 나서")과 같았다.
+ * 위 "시나리오 안 구별"(다른 수법 문구와 겹치면 늘림)과 같은 방식이다. 설정 문구 부재(종전 호출부 · 테스트) = 종전 키 그대로.
+ */
+// export 이유: 설정 문구 구별 전수 비교 테스트(`__tests__/tacticPremise.test.ts`).
+export function buildTacticMatchers(weakenedTactics: readonly string[], premiseText?: string): TacticMatcher[] {
   const phrasesByTactic = weakenedTactics.map(splitFlavorPhrases);
+  // 설정 문구 안에 수법 인용구가 그대로 실려 있으면(페르소나의 예시 대사) 그 자리는 설정이 아니라 수법이다 — 지운 나머지와만 비교한다.
+  const premise = premiseText
+    ? phrasesByTactic
+        .flat()
+        .sort((x, y) => y.length - x.length)
+        .reduce((rest, phrase) => rest.split(phrase).join(" "), normalizeForTacticMatch(premiseText))
+    : "";
+  const inPremise = (key: string) => premise.length > 0 && premise.includes(key);
   return weakenedTactics.map((tactic, index) => {
     const otherPhrases = phrasesByTactic.filter((_, other) => other !== index).flat();
+    const premiseApplies = resolveTacticCategory(extractTacticLabel(tactic)) === "payment_demand";
     const phraseKeys = phrasesByTactic[index].flatMap((phrase) => {
       if (otherPhrases.some((other) => other.startsWith(phrase))) return [];
       let length = Math.min(PHRASE_KEY_LENGTH, phrase.length);
       while (otherPhrases.some((other) => other.startsWith(phrase.slice(0, length)))) length += 1;
+      // 설정 문구 구별 — 문구 끝까지만 늘린다(문구 전체가 설정 문구에 있으면 문구 전체가 키: 그대로 말하면 여전히 잡는다).
+      while (premiseApplies && length < phrase.length && inPremise(phrase.slice(0, length))) length += 1;
       return [phrase.slice(0, length)];
     });
     return { tactic, phraseKeys };
@@ -853,6 +881,8 @@ export function analyzeConversation(
    * 겹쳐도 그 통화에서 쓰지 않은 수법은 붙지 않는다). `legIndex`가 없거나 범위 밖인 메시지 · 인자 부재 = `weakenedTactics`(종전).
    */
   legTactics?: readonly (readonly string[])[],
+  /** 2026-11-07 — 시나리오 설정 문구(페르소나 · 시나리오 문자 본문). 문구 키가 여기 나오면 늘린다(`buildTacticMatchers` 표). 부재 = 종전. */
+  premiseText?: string,
 ): ConversationAnalysis {
   // ⭐ §55 D3 — **낭독되지 않은 문서는 분석에 넣지 않는다.** 넣으면 ⓐ 말한 적 없는 대사가
   // `tacticsUsed`("시도된 수법")에 오르고 ⓑ 바로 뒤 참가자 발화와 **짝지어져** 없는 "속은 순간"을
@@ -864,9 +894,9 @@ export function analyzeConversation(
     .sort((a, b) => a.turnIndex - b.turnIndex);
   const deceivedMoments: DeceivedMomentResult[] = [];
   const tacticLabelsUsed = new Set<string>();
-  const tacticMatchers = buildTacticMatchers(weakenedTactics);
+  const tacticMatchers = buildTacticMatchers(weakenedTactics, premiseText);
   // §142 N3 — 통화별 수법 범위(서버가 메시지에 쓴 `legIndex` 기준). 범위가 없으면 세션 전체 목록 · 매처(종전 바이트 동일).
-  const legMatchers = legTactics?.map((tactics) => buildTacticMatchers([...tactics]));
+  const legMatchers = legTactics?.map((tactics) => buildTacticMatchers([...tactics], premiseText));
   const scopeOf = (message: AnalysisMessage): { tactics: string[]; matchers: TacticMatcher[] } => {
     const leg = message.legIndex;
     if (legTactics && legMatchers && leg !== undefined && leg >= 0 && leg < legTactics.length) {
@@ -945,6 +975,10 @@ export function analyzeConversation(
       const reply = sorted[j];
       if (reply === userReply) continue;
       const kind = resolveRiskSignalKind(msg.textMasked, reply.textMasked, otpCodes);
+      // 2026-11-07 Edge 재시험(기관 사칭 고급 "거래 은행은 새솔은행이고요, 잔액은 천이백만 원쯤 있어요." → 위험 신호 "거래 은행을 알려 줬어요"
+      // + 속은 순간 "거래 은행·자산 정보 수집"이 둘 다) — 같은 대사에 대한 답 묶음에서 이미 속은 순간이 잡혔으면 은행명 신호(RS3)는 달지 않는다
+      // (같은 답 하나를 두 번 표기 · RS5). 가짜 정보 · 비밀 약속 · 방법 질문 신호는 그대로다.
+      if (kind === "bank_disclosed" && userReply) continue;
       if (kind) riskSignals.push({ turnIndex: reply.turnIndex, timeLabel: elapsedLabel(reply, sessionCreatedAtMs), kind });
     }
     if (!userReply) continue;

@@ -360,6 +360,8 @@ export type InCallSmsDoc = {
   landingIdentityAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("landing_identity")
   landingConvertedAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("landing_converted")
   landingAmountAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("landing_amount")
+  // N1 — 마지막 이체 화면 제출의 요구액 대비 비교(값 0 · `inCallSms/index.ts`가 씀). 2026-11-07 — 리포트가 승격 순간 문장으로 읽는다.
+  landingAmountComparison?: "less" | "equal" | "more";
   // §15.1.5 증분 — "이 문자가 도착한 시점까지 messages에 존재하는 role==='scammer' 문서 수".
   // 클라 입력이 아니라 **서버가 카탈로그 값에서 계산**해 buildInCallSmsDoc 한 곳에서만 기록한다
   // (실시간·폴백 두 write 경로가 이 헬퍼를 공유하므로 값 산출이 갈라지지 않는다, §15.1.5 (6)).
@@ -584,6 +586,8 @@ export type DeceivedMoment = {
   // **모의 화면 제출 · 응낙의 승격**이면 그 화면의 landingId. `buildLandingSubmitMoment`만 채운다(대화 추정 순간 · 과거 리포트 = 부재).
   // 화면 항목(`MockScreenTimelineEntry.landingId`)과 짝지어 D-61 분기 판정 키로만 쓴다 — 화면 콘텐츠 원문이 아니다(§15.9.5 e-4 무관).
   landingId?: string;
+  /** 2026-11-07 Edge 재시험 — 통화 중 문자 이체 화면 제출 승격 순간의 요구액 대비 비교(금액 값 0 — G138). 부재 = 모름 · 메신저 경로 · 대화 순간. */
+  amountComparison?: "less" | "equal" | "more";
 };
 /**
  * T194-b(§84.3.6 · §84.3.7) — 리포트의 카드 블록. `state`는 `report/personaBlock.ts` `resolvePersonaBlockState`가 정한다.

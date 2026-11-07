@@ -38,6 +38,7 @@ import { buildRouteSummaryLine, readRouteSummary, type RouteSummaryView } from "
 import {
   mockScreenDeclinedText,
   mockScreenSubmittedText,
+  momentAmountText,
   mockScreenWhat,
   OFFICIAL_CHECK_TITLE,
   officialCheckText,
@@ -96,6 +97,8 @@ type DeceivedMoment = {
   correctAction: string;
   /** T129 (b)(§98) — 모의 화면 승격 순간에만. 화면 항목 판정 키(`resolveMockScreenCopy`)로만 쓴다. */
   landingId?: string;
+  /** 2026-11-07 Edge 재시험 — 통화 중 문자 이체 화면 제출 순간의 요구액 대비 비교(서버 값 · 금액 값 0). 문장은 `momentAmountText`. */
+  amountComparison?: unknown;
 };
 
 // T89(§15.1.5, AC-059) — 리포트 문서 안의 **표시 전용** 문자 이벤트 스냅샷. 서버가 이미 최종 표시
@@ -713,6 +716,9 @@ export default function ReportPage() {
                           <Badge variant="caution">{displayTactic(entry.moment.tactic)}</Badge>
                         )}
                       </div>
+                      {momentAmountText(entry.moment) && (
+                        <p className="mt-2 text-lg text-ink">{momentAmountText(entry.moment)}</p>
+                      )}
                       <p className="mt-2 text-lg text-ink">
                         <span className="font-semibold">이렇게 했어야 해요: </span>
                         {entry.moment.correctAction}

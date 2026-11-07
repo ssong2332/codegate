@@ -80,6 +80,16 @@ export function mockScreenSubmittedText(entry: MockScreenFactEntry): string | nu
   return amount ? `이 화면에서 이체를 진행했습니다. ${amount}` : "이 화면에서 이체를 진행했습니다.";
 }
 
+/**
+ * M8(2026-11-07 Edge 재시험 — 기관 사칭 고급 문자 링크 이체 화면 · 980만 원 요구에 300만 원 제출인데 "적게 보냄" 문장 0) — 통화 중 문자 경로의
+ * 이체 제출 순간 카드에 붙는 금액 문장. 서버가 그 순간에만 `amountComparison`을 싣는다(메신저 경로는 화면 항목 M4가 낸다 — 중복 0).
+ * 값이 3종이 아니면 `null`(문장 0 — 옛 리포트).
+ */
+export function momentAmountText(moment: { amountComparison?: unknown }): string | null {
+  const value = moment.amountComparison;
+  return value === "less" || value === "equal" || value === "more" ? AMOUNT_SENTENCE[value] : null;
+}
+
 /** M6 · M7 — 응하지 않고 닫은 입력 · 이체 화면의 칭찬 문구. 설치 화면이면 `null`(종전 "권한 허용" 문구가 맞다). */
 export function mockScreenDeclinedText(entry: MockScreenFactEntry): string | null {
   if (entry.kind === "app-install") return null;
