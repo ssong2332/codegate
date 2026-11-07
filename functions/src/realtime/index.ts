@@ -18,7 +18,7 @@ import { getVerifyOfferTrigger } from "../scenarios/verifyIntercept";
 import { findFlowVariant, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
 import { buildPriorLegContext, resolveSessionCallLeg } from "../callLegs/legPlan";
 import type { VoiceMode } from "../scenarios/publicMeta";
-import type { ChallengeDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
+import type { ChallengeDoc, MessageDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
 import { getRealtimeProvider, requiresServerPromptProvider } from "./provider";
 import type { CreateRealtimeCallRequest, CreateRealtimeCallResponse } from "./callTypes";
 import type { RealtimeProviderName } from "./types";
@@ -164,7 +164,14 @@ export const createRealtimeCall = onCall<
   if (callLeg && callLeg.legIndex > 0) {
     try {
       const messagesSnap = await db.collection("sessions").doc(sessionId).collection("messages").orderBy("turnIndex", "asc").get();
-      priorChatContext = buildPriorLegContext(messagesSnap.docs.map((d) => d.data() as { role: string; text?: string }));
+      // 2026-11-07 실기기 신고 — 종전에는 문서를 `{ role, text }`로 읽었는데 메시지 문서 필드는 `textMasked`다(`MessageDoc` · `submitTranscript.ts`).
+      // `text`가 늘 비어 Live 레그 1부터 인계 블록이 0줄이었다(폴백 · 확인 실측 프로브는 `text`를 직접 넘겨 드러나지 않았다).
+      priorChatContext = buildPriorLegContext(
+        messagesSnap.docs.map((d) => {
+          const m = d.data() as Pick<MessageDoc, "role" | "textMasked" | "legIndex" | "notSpoken">;
+          return { role: m.role, text: m.textMasked, legIndex: m.legIndex, notSpoken: m.notSpoken === true };
+        }),
+      );
     } catch {
       priorChatContext = undefined;
     }
