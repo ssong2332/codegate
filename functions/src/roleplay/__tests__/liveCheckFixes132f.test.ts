@@ -90,9 +90,12 @@ test("[§132.13 (3)] 판정표 4-b — 후속 단계 변형은 C-5 전 끊기를
   const rows = SCAMMER_HANGUP_RULES.map((r) => r.row);
   assert.equal(rows.indexOf("4-b"), rows.indexOf("4") + 1, "4행 바로 뒤");
   // 현금 전달형 — 인증번호 도착 발화 6 · "835270 왔어요" = 발화 7.
-  const follow = goalFollowUpFor("institutional-impersonation", "fv-q7cn")!;
-  assert.equal(follow, 4);
-  const { declared } = resolveDeclaredSms("institutional-impersonation", "fv-q7cn");
+  // ⚠️ 2026-11-07(사용자 결정 D-G2 E1-b) — fv-q7cn은 앱 안 출금 예약 화면 결말이 되어 후속 단계 값이 없어졌다(4-c 결정 화면). 이 재현은 세션 eff12d2b 당시의
+  // fv-q7cn 선언(인증번호 문자 하나 · 후속 값 4)을 픽스처로 고정해 판정표 4-b 자체를 본다.
+  assert.equal(goalFollowUpFor("institutional-impersonation", "fv-q7cn"), undefined, "현행 fv-q7cn = 후속 단계 없음");
+  const follow = 4;
+  const declared = resolveDeclaredSms("institutional-impersonation", "fv-q7cn").declared.filter((d) => d.smsId === "institution-otp");
+  assert.equal(declared.length, 1);
   const delivered = [{ smsId: declared[0].smsId, userTurnsAtArrival: 6 }];
   const pending = (userTurns: number) =>
     !hasCompletedGoalAction({ delivered, mockScreens: [], declared, declaredKnown: true, userTurns, followUpUserTurns: follow });

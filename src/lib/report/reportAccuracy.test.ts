@@ -13,6 +13,9 @@ import {
   pickFirstDeceivedIndex,
   readParticipantHangup,
   readOfficialCheck,
+  readScreenHeld,
+  SCREEN_HELD_TITLE,
+  screenHeldText,
   splitSmsEvents,
 } from "./reportAccuracy.ts";
 
@@ -112,4 +115,24 @@ test("[사용자 결정 2026-11-07 방어로 집계] H1 — 먼저 끊음 기록
   const page = read("src/app/report/page.tsx");
   assert.match(page, /readParticipantHangup\(data\.participantHangup\)/);
   assert.match(page, /participantHangupText\(/);
+});
+
+test("[사용자 결정 2026-11-07 잘 대처함 칸 추가] Q1 · Q2 — 보류 기록 읽기 · 제목 · 문장 · 화면 배선", () => {
+  assert.deepEqual(readScreenHeld({ timeLabel: "95초 시점" }), { timeLabel: "95초 시점" });
+  assert.equal(readScreenHeld({ timeLabel: "어딘가" }), null);
+  assert.equal(readScreenHeld({}), null);
+  assert.equal(readScreenHeld(undefined), null);
+  assert.equal(readScreenHeld("95초 시점"), null);
+  assert.equal(SCREEN_HELD_TITLE, "잘 대처함 · 확인 질문에 사실대로 답함");
+  assert.equal(
+    screenHeldText("1분 35초 시점"),
+    "1분 35초 시점에 거래 전 확인 질문에 수사기관 · 금융기관의 요구를 받았다고 사실대로 답해 거래가 보류됐습니다. 수사기관 · 금융기관은 전화로 금 구매나 현금 인출을 요구하지 않습니다.",
+  );
+  assert.match(screenHeldText(null), /^거래 전 확인 질문에/);
+  // 문진 답 · 금액을 말하지 않는다(G138 — 서버에 없다).
+  assert.equal(/\d+\s?(원|g|돈)/.test(screenHeldText(null)), false);
+  const page = read("src/app/report/page.tsx");
+  assert.match(page, /readScreenHeld\(data\.screenHeld\)/);
+  assert.match(page, /\{SCREEN_HELD_TITLE\}/);
+  assert.match(page, /screenHeldText\(formatMomentLabel\(report\.screenHeld\.timeLabel\)\)/);
 });
