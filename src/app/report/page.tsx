@@ -35,6 +35,17 @@ import PageToc, { type PageTocEntry } from "@/components/PageToc";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { buildStageNotice, type ReportStage } from "@/lib/report/stageNotice";
 import { buildRouteSummaryLine, readRouteSummary, type RouteSummaryView } from "@/lib/report/routeSummaryCopy";
+import {
+  mockScreenDeclinedText,
+  mockScreenSubmittedText,
+  mockScreenWhat,
+  OFFICIAL_CHECK_TITLE,
+  officialCheckText,
+  pickFirstDeceivedIndex,
+  readOfficialCheck,
+  splitSmsEvents,
+  type OfficialCheckView,
+} from "@/lib/report/reportAccuracy";
 import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
 import {
   isUnansweredReport,
@@ -125,6 +136,10 @@ type MockScreenTimelineEntry = {
   timeLabel?: string;
   /** true면 같은 순간이 `deceivedMoments`에도 있다 — 교육 문구는 그쪽이 전담한다(중복 카드 금지). */
   consented: boolean;
+  // 2026-11-07 Edge 시험 판 19 — 이체 화면 · 제출 사실 · 금액 비교(부재 = 옛 리포트 → 종전 문구).
+  bankTransfer?: boolean;
+  submitted?: boolean;
+  amountComparison?: "less" | "equal" | "more";
 };
 
 type ReportData = {
@@ -156,6 +171,8 @@ type ReportData = {
   userTurnCount: number | undefined;
   // §119(D-3 b) — 이번 결말 이름 · 그 칸의 결말 수(결말 2가지 이상인 칸만 · 부재 = 줄 0).
   routeSummary: RouteSummaryView | null;
+  // 2026-11-07 Edge 시험 판 27 — 진짜 기관 번호로 직접 걸어 확인함(부재 = 블록 0).
+  officialCheck: OfficialCheckView | null;
 };
 
 type PageState = "no-session" | "loading" | "error" | "loaded";
@@ -214,6 +231,7 @@ export default function ReportPage() {
           ? data.userTurnCount
           : undefined,
       routeSummary: readRouteSummary(data.routeSummary),
+      officialCheck: readOfficialCheck(data.officialCheck),
     };
   }, []);
 
@@ -378,7 +396,8 @@ export default function ReportPage() {
   // 데이터 근거(지어내지 않음): "잘 대처함" 항목은 리포트 스키마에 세부 저항 행동(mockup의 "목소리가
   // 이상하다며 되물었다" 같은 문장)이 없어 그 자리에 wasDeceived===false라는 실제로 검증된 사실만
   // 쓴다. "다음에 할 것"은 preventionAdvice[0]을 그대로 쓴다(없는 조언을 창작하지 않음).
-  const firstDeceivedMoment = report.deceivedMoments[0] ?? null;
+  // 2026-11-07 Edge 시험 판 9 · 26 — "처음 속은 시각" = 실제 시각이 가장 이른 순간(배열 순서는 앵커 대사 순이라 시각과 어긋날 수 있다 · `reportAccuracy.ts` F1~F3).
+  const firstDeceivedMoment = report.deceivedMoments[pickFirstDeceivedIndex(report.deceivedMoments)] ?? null;
   // UX D-141 (6) — 큰 시계 값(서버 표기 "N초 시점"을 읽은 초 · 다른 꼴이면 null = 시계 0).
   const firstDeceivedSeconds = parseMomentSeconds(firstDeceivedMoment?.timeLabel);
   // §129.6 · D-160 확장 — 속지 않았고 참가자 답이 0인 리포트(`reportTacticsCopy.ts` `isUnansweredReport`).
@@ -435,13 +454,16 @@ export default function ReportPage() {
       moment,
       momentIndex,
     })),
-    ...report.smsTimeline.map((sms, seq) => ({
-      sortKey: [sms.anchorTurnIndex, 1, seq] as const,
-      // §129.10 — 문자 항목의 정렬 시각 = 첫 이벤트(도착)의 실제 시각(옛 리포트 = 앵커 시각).
-      timeLabel: sms.events[0]?.timeLabel ?? sms.timeLabel,
-      kind: "sms" as const,
-      sms,
-    })),
+    // 2026-11-07 Edge 시험 판 1 · 5 — 문자 이벤트(도착 · 열람 · 링크)를 한 줄로 묶으면 뒤 이벤트(12분 39초 링크)가 앞 시각 자리에 끼어
+    // 시간순이 깨졌다. 이벤트마다 따로 자기 시각으로 정렬한다(`reportAccuracy.ts` S1).
+    ...report.smsTimeline.flatMap((sms, seq) =>
+      splitSmsEvents(sms).map((row, eventSeq) => ({
+        sortKey: [sms.anchorTurnIndex, 1, seq * 10 + eventSeq] as const,
+        timeLabel: row.timeLabel,
+        kind: "sms" as const,
+        sms: { ...sms, events: [row.event] },
+      })),
+    ),
     // T83(§16.3.5) — 확인 항목은 같은 축에 kindRank 2로 얹는다(메시지 0 < 문자 1 < 확인 2).
     // ⚠️ 되감기 버튼을 달지 않는다 — 되감기 대상은 여전히 `deceivedMoments`뿐이다. 다만 **주석된
     // 순간**에는 원래대로 달리고(그 순간은 진짜 deceivedMoment다) 덮어쓴 correctAction을 쓴다.
@@ -567,6 +589,22 @@ export default function ReportPage() {
           </>
         )}
 
+        {/* 2026-11-07 Edge 시험 판 27 — 진짜 기관 번호로 직접 걸어 확인한 행동(서버 `officialCheck` · `reportAccuracy.ts` O1). */}
+        {report.officialCheck && (
+          <>
+            <div className="flex items-start gap-2.5">
+              <svg width="20" height="20" viewBox="0 0 16 16" className="mt-0.5 shrink-0" aria-hidden="true">
+                <circle cx="8" cy="8" r="7" fill="var(--success)" />
+              </svg>
+              <div>
+                <p className="text-lg font-bold text-ink">{OFFICIAL_CHECK_TITLE}</p>
+                <p className="mt-0.5 text-lg leading-relaxed text-ink-sub">{officialCheckText(report.officialCheck)}</p>
+              </div>
+            </div>
+            <div className="h-px bg-neutral-tint" />
+          </>
+        )}
+
         <div className="flex items-start gap-2.5">
           <span
             aria-hidden="true"
@@ -667,7 +705,7 @@ export default function ReportPage() {
                       )}
                     </li>
                   ) : entry.kind === "sms" ? (
-                    <ReportSmsTimelineItem key={`sms-${entry.sms.smsId}`} sms={entry.sms} />
+                    <ReportSmsTimelineItem key={`sms-${entry.sms.smsId}-${entry.sms.events[0]?.event ?? ""}`} sms={entry.sms} />
                   ) : entry.kind === "verify" ? (
                     // ⭐ §38.6 S3 — 한 문서가 오퍼 항목 + 전환 항목으로 갈라지므로 `offerId`만으로는
                     // key가 중복된다. 정렬 키의 seq(= 서버가 준 배열 순서)를 붙여 유일하게 만든다.
@@ -856,6 +894,10 @@ function ReportSmsTimelineItem({ sms }: { sms: SmsTimelineEntry }) {
             </p>
             <Badge variant="neutral">문자</Badge>
           </div>
+          {/* 2026-11-07 판 1 · 5 — 이벤트를 줄마다 나눈 뒤에도 어느 문자인지 알 수 있게(도착 줄은 아래 원문이 있다). */}
+          {event.event !== "sms_received" && (
+            <p className="mt-1 text-base text-ink-sub">{sms.senderLabel}에서 온 문자</p>
+          )}
           {/* 도착한 문자 원문 — 어떤 문자였는지 확인할 수 있어야 학습이 성립한다(모의 표식 유지). */}
           {event.event === "sms_received" && (
             <p className="mt-2 whitespace-pre-line rounded-[8px] bg-white/70 p-3 text-lg text-ink">
@@ -922,12 +964,17 @@ function ReportMockScreenTimelineItem({
   mockScreen: MockScreenTimelineEntry;
   deceivedMoments: readonly DeceivedMoment[];
 }) {
-  const what =
-    mockScreen.kind === "app-install"
-      ? "앱 설치 안내 화면이 표시됐습니다."
-      : "본인확인 입력 화면이 표시됐습니다.";
+  // 2026-11-07 Edge 시험 판 19 — 화면 종류 · 제출 사실을 서버 기록대로(`reportAccuracy.ts` M1~M6). 이체 화면을 "본인확인 입력 화면 · 열었습니다"로 쓰지 않는다.
+  const what = mockScreenWhat(mockScreen);
   // D-51 ③의 칭찬 문구는 **분기 "다"에서만** 나온다 — 살아 있되 제출 항목으로 새지 않는다.
-  const copy = resolveMockScreenCopy(mockScreen, deceivedMoments, "report");
+  const branchCopy = resolveMockScreenCopy(mockScreen, deceivedMoments, "report");
+  const submittedText = mockScreenSubmittedText(mockScreen);
+  const declinedText = branchCopy.branch === "declined" ? mockScreenDeclinedText(mockScreen) : null;
+  const copy = submittedText
+    ? { tone: "neutral" as const, text: submittedText }
+    : declinedText
+      ? { tone: "praise" as const, text: declinedText }
+      : branchCopy;
   return (
     <li className="flex flex-col gap-3">
       <div className="rounded-[8px] border border-caution/30 bg-caution-tint p-4">

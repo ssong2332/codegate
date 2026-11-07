@@ -760,7 +760,13 @@ test("[T194-a §84.13.3 ② · 리뷰 M2] 플래그만 더한 child-kakao · sub
             .filter((tactic) => !(v.accountHolder && tactic === accountHolderTactic(row.scenarioId, v.accountHolder)))
             .map((tactic) => (tactic === CHILD_INSTALL_TACTIC_110 ? CHILD_INSTALL_TACTIC_BEFORE_110 : tactic)),
         }
-      : currentPrompt;
+      : row.scenarioId === "messenger-subsidy-smishing-sms"
+        ? {
+            ...currentPrompt,
+            // 2026-11-07 Edge 시험 판 31(메인 지시) — 개인정보 요구 수법 1줄은 의도된 추가다 — 그 줄만 뺀다.
+            weakenedTactics: currentPrompt.weakenedTactics.filter((tactic) => !tactic.startsWith("개인정보 요구 — ")),
+          }
+        : currentPrompt;
     const assembled = buildSystemPrompt(prompt, {
       difficultyLevel: row.level,
       inCallSmsEnabled: sessionDeclaresInCallSms(row.scenarioId, row.variantId),
