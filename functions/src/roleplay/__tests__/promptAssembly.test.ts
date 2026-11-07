@@ -1726,7 +1726,8 @@ test("[2026-10-17 계좌 문자] 계좌형 문자가 있는 시나리오 전수(
 // 납치 고급 fv-k268 · fv-w7tb(계좌 문자)가 더해졌다. 납치 초 · 중급 · 원본 수법(옛 세션)은 문자 선언 0이라 대상이 아니다.
 const ACCOUNT_SMS_VARIANT_ONLY: Record<string, string[]> = {
   "prosecution-cooperation-call": ["fv-c8wq", "fv-h3vn", "fv-v2mk"],
-  "asset-protection-notice-call": ["fv-p3jx"],
+  // 2026-11-07(사용자 결정 D-G1) — 자산 보호 고급 금형 fv-t8ga(지정 거래소 문자 — 계좌 줄 없는 `account`)가 더해졌다.
+  "asset-protection-notice-call": ["fv-p3jx", "fv-t8ga"],
   "kidnapping-threat": ["fv-k268", "fv-w7tb"],
 };
 

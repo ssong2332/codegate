@@ -10,6 +10,7 @@
 // | J12 (D9 i) | 통화 · 대화 안에서 말로 불러 달라는 요구 | O4(서비스 안) — 세지 않는다 |
 // | J13 (D9 ii) | 확인 차단 · 통화 유지 요구 | O5 — 세지 않는다 |
 // | J14 (D9 iii) | 기기 실제 사진첩 · 신분증 사진 | O1-device — J9 패턴으로 센다 |
+// | J16 (2026-11-07 · 사용자 결정 D-G1 ~ D-G6 — 설계안 §6) | 서비스 안 금 거래소 화면 문면(`IN_APP_GOLD_SURFACES` 등록 영역 — 지정 거래소 문자 · 앱 안 금 구매 화면 · 그 흐름의 단계 · 수법 · 페르소나 · 결제 · 보류 뒤 지시) | O4 — J3 금 행으로 세지 않음. ⚠️ 그 안에서도 밖 행동 표현(`IN_APP_GOLD_OUTSIDE`)이 있으면 센다 |
 // | J15 (D-L9) | 서비스 안 대출 화면 문면(`IN_APP_LOAN_SURFACES` 등록 영역 — 앱 안 대출 신청 · 대출금 보관 이체 화면 · 그 화면을 여는 문자 · 그 흐름의 수법 · 상담원 통화 · 리포트 교육점) | O4 — J1 대출 행으로 세지 않음. ⚠️ 그 안에서도 밖 행동 표현(`IN_APP_LOAN_OUTSIDE`)이 있으면 센다 |
 //
 // 두 겹:
@@ -46,7 +47,7 @@ type RowId =
   | "J11_COVER_STORY";
 
 interface JudgementRow {
-  id: RowId | "J0_RULE" | "J0_LABEL" | "J12_VERBAL" | "J13_BLOCK" | "J15_IN_APP_LOAN";
+  id: RowId | "J0_RULE" | "J0_LABEL" | "J12_VERBAL" | "J13_BLOCK" | "J15_IN_APP_LOAN" | "J16_IN_APP_GOLD";
   type: string;
   pattern?: RegExp;
 }
@@ -71,6 +72,8 @@ export const JUDGEMENT_TABLE: readonly JudgementRow[] = [
   { id: "J13_BLOCK", type: "O5 (D9 ii) — 확인 차단 · 통화 유지, 세지 않음" },
   // ⭐ D-L9(2026-11-07 사용자 결정 "앱 안 대출은 예외 (권장)") — 영역으로 판정한다(아래 `IN_APP_LOAN_SURFACES`). 패턴 없음 = 제외 행.
   { id: "J15_IN_APP_LOAN", type: "O4 (D-L9) — 서비스 안 대출 화면 안내, J1로 세지 않음(밖 행동 표현은 셈)" },
+  // ⭐ 2026-11-07(사용자 결정 D-G1 ~ D-G6 — 설계안 §6) — 영역으로 판정한다(아래 `IN_APP_GOLD_SURFACES`). 패턴 없음 = 제외 행.
+  { id: "J16_IN_APP_GOLD", type: "O4 (D-G) — 서비스 안 금 거래소 화면 안내, J3로 세지 않음(밖 행동 표현은 셈)" },
 ];
 
 /**
@@ -105,22 +108,46 @@ const IN_APP_LOAN_SURFACES = {
 /** 등록 영역 안에서도 세는 밖 행동 표현(창구 · 지점 방문 · 다른 앱 · 다른 금융회사 · 은행 · 금융회사에서 대출). "금융회사에서 확인 전화가 간다"(앱 안 통화)는 밖 행동이 아니다. */
 const IN_APP_LOAN_OUTSIDE = /창구|지점|영업점|방문|다른\s?(앱|금융|은행|캐피탈)|(은행|금융회사)에서\s?(직접\s?)?대출을?\s?(받|신청)/;
 
-function inAppLoanRegion(node: ts.Node): boolean {
+/**
+ * ⭐ J16(2026-11-07 · 사용자 결정 D-G1 ~ D-G6 "앱 안 화면으로 바꾸기" — 설계안 §6) — 서비스 안 금 거래소 문면 등록부(J15와 같은 방식). 문자열 리터럴의 조상이 아래 중
+ * 하나면 그 문장은 J3_GOLD로 세지 않는다. ⛔ 접두사로 넓히지 않는다. 영역 안에서도 밖 행동 표현(`IN_APP_GOLD_OUTSIDE`)은 센다.
+ * | 종류 | 무엇 |
+ * |---|---|
+ * | 변수 | 금 구매형 단계 · 수법 · 자산 보호 금형 페르소나 · 결정 순간 · 결제 · 보류 뒤 실시간 지시 |
+ * | 문자 | `smsId` = 지정 거래소 안내(기관 고급 · 자산 보호 고급) |
+ * | 화면 | `landingId` · 화면 문구 표 키 = `gold-buy` · `asset-gold-buy` · 클라 서브 컴포넌트 `GoldBuyMockup` |
+ */
+const IN_APP_GOLD_SURFACES = {
+  variables: ["INSTITUTION_GOLD_STAGE", "INSTITUTION_GOLD_DEMAND", "ASSET_GOLD_PERSONA", "GOLD_DECISION_MOMENT", "GOLD_PURCHASED_INSTRUCTION", "GOLD_HELD_INSTRUCTION"],
+  smsIds: ["institution-gold-shop", "asset-gold-shop"],
+  landingIds: ["gold-buy", "asset-gold-buy"],
+  functions: ["GoldBuyMockup"],
+} as const;
+/** 등록 영역 안에서도 세는 밖 행동 표현(창구 · 지점 · 금은방 · 매장 방문 · 다른 거래소 · 앱 · 현금 인출 · 직원 대면 제출). */
+const IN_APP_GOLD_OUTSIDE = /창구|지점|영업점|방문|금은방|다른\s?(앱|거래소|매장|은행)|(현금|수표)(으로|을)?\s?(찾|인출|뽑)|직원에게\s?(제출|맡기|건네)/;
+
+type SurfaceRegistry = { variables: readonly string[]; smsIds: readonly string[]; landingIds: readonly string[]; functions: readonly string[] };
+
+function inSurfaceRegion(node: ts.Node, surfaces: SurfaceRegistry): boolean {
   const stringValue = (e: ts.Expression | undefined) => (e && (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e)) ? e.text : undefined);
   for (let n: ts.Node | undefined = node.parent; n; n = n.parent) {
-    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && (IN_APP_LOAN_SURFACES.variables as readonly string[]).includes(n.name.text)) return true;
-    if (ts.isFunctionDeclaration(n) && n.name && (IN_APP_LOAN_SURFACES.functions as readonly string[]).includes(n.name.text)) return true;
-    if (ts.isPropertyAssignment(n) && ts.isStringLiteral(n.name) && (IN_APP_LOAN_SURFACES.landingIds as readonly string[]).includes(n.name.text)) return true;
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && surfaces.variables.includes(n.name.text)) return true;
+    if (ts.isFunctionDeclaration(n) && n.name && surfaces.functions.includes(n.name.text)) return true;
+    if (ts.isPropertyAssignment(n) && ts.isStringLiteral(n.name) && surfaces.landingIds.includes(n.name.text)) return true;
     if (ts.isObjectLiteralExpression(n)) {
       for (const prop of n.properties) {
         if (!ts.isPropertyAssignment(prop) || !ts.isIdentifier(prop.name)) continue;
         const value = stringValue(prop.initializer);
-        if (prop.name.text === "smsId" && value && (IN_APP_LOAN_SURFACES.smsIds as readonly string[]).includes(value)) return true;
-        if (prop.name.text === "landingId" && value && (IN_APP_LOAN_SURFACES.landingIds as readonly string[]).includes(value)) return true;
+        if (prop.name.text === "smsId" && value && surfaces.smsIds.includes(value)) return true;
+        if (prop.name.text === "landingId" && value && surfaces.landingIds.includes(value)) return true;
       }
     }
   }
   return false;
+}
+
+function inAppLoanRegion(node: ts.Node): boolean {
+  return inSurfaceRegion(node, IN_APP_LOAN_SURFACES);
 }
 
 /** 장부 행 → 앱 안으로 옮길 단계(문서 §5). J8은 D7로 0건이어야 한다. */
@@ -145,10 +172,10 @@ const RULE = JUDGEMENT_TABLE.find((r) => r.id === "J0_RULE")!.pattern!;
 const LABEL = JUDGEMENT_TABLE.find((r) => r.id === "J0_LABEL")!.pattern!;
 
 /** 문자열 리터럴 · 템플릿 조각만 모은다(주석 · 식별자 제외). `inAppLoan` = D-L9 등록 영역 안. */
-function literalTexts(absPath: string, source = readFileSync(absPath, "utf8")): { text: string; inAppLoan: boolean }[] {
+function literalTexts(absPath: string, source = readFileSync(absPath, "utf8")): { text: string; inAppLoan: boolean; inAppGold: boolean }[] {
   const file = ts.createSourceFile(absPath, source, ts.ScriptTarget.ES2020, true, absPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
-  const out: { text: string; inAppLoan: boolean }[] = [];
-  const push = (node: ts.Node, text: string) => out.push({ text, inAppLoan: inAppLoanRegion(node) });
+  const out: { text: string; inAppLoan: boolean; inAppGold: boolean }[] = [];
+  const push = (node: ts.Node, text: string) => out.push({ text, inAppLoan: inAppLoanRegion(node), inAppGold: inSurfaceRegion(node, IN_APP_GOLD_SURFACES) });
   const visit = (node: ts.Node) => {
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) push(node, node.text);
     else if (ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) push(node, node.text);
@@ -167,12 +194,14 @@ function sentences(text: string): string[] {
 
 function countRows(absPath: string, source?: string): Partial<Record<RowId, number>> {
   const counts: Partial<Record<RowId, number>> = {};
-  for (const { text, inAppLoan } of literalTexts(absPath, source)) {
+  for (const { text, inAppLoan, inAppGold } of literalTexts(absPath, source)) {
     for (const sentence of sentences(text)) {
       if (RULE.test(sentence) || LABEL.test(sentence)) continue; // J0 · J0_LABEL
       for (const row of COUNTED) {
         // J15(D-L9) — 서비스 안 대출 문면은 J1로 세지 않는다 · 밖 행동 표현이 섞이면 센다.
         if (row.id === "J1_LOAN" && inAppLoan && !IN_APP_LOAN_OUTSIDE.test(sentence)) continue;
+        // J16 — 서비스 안 금 거래소 문면은 J3로 세지 않는다 · 밖 행동 표현이 섞이면 센다.
+        if (row.id === "J3_GOLD" && inAppGold && !IN_APP_GOLD_OUTSIDE.test(sentence)) continue;
         if (row.pattern.test(sentence)) counts[row.id] = (counts[row.id] ?? 0) + 1;
       }
     }
@@ -213,9 +242,10 @@ const ROUTE_LEDGER: Readonly<Record<string, number>> = {
   // PR-B(2026-11-07) — 기관 고급 fv-c5fj가 3통화 앱 안 대출 체험으로 바뀌어 밖 대출 유도 2문장(통화 중 "금융회사에서 대출을 받아" · 은행 직원 둘러대기)이
   // 빠졌다(16 → 14 · J11 8 → 6). 새 대출 문면은 J15 등록 영역이라 세지 않는다. 은퇴 fv-pgqt 원문은 그대로 센다.
   "functions/src/scenarios/flowVariants.ts#J1_LOAN": 14, // P4
-  "functions/src/scenarios/flowVariants.ts#J11_COVER_STORY": 6, // P5
-  "functions/src/scenarios/flowVariants.ts#J2_CASH": 9, // P5
-  "functions/src/scenarios/flowVariants.ts#J3_GOLD": 5, // P5
+  // ⭐ 2026-11-07(Edge 재시험 2 S7 · 사용자 결정 D-G1 ~ D-G6) — 금 구매형 결말(기관 고급 fv-g2ld · 자산 보호 고급 fv-t8ga)이 앱 안 금 거래소 화면 구매로 바뀌었다.
+  // 금 문면은 J16 등록 영역이라 세지 않고(J3 5 → 0), 종전 "예금 · 적금을 찾아" 2문장(J2 9 → 7) · "판매점 직원이 용도를 물으면" 코칭 1문장(J11 6 → 5)이 빠졌다.
+  "functions/src/scenarios/flowVariants.ts#J11_COVER_STORY": 5, // P5
+  "functions/src/scenarios/flowVariants.ts#J2_CASH": 7, // P5
   // 2026-11-07(Edge 시험 판 12 · 사용자 결정 "앱 안 화면 추가") — 검찰 상품권형 fv-v2mk의 상품권 문면은 이제 앱 안 구매 화면(`voucher-purchase`)을 가리킨다
   // (문자 속 구매 화면에서 사고 화면에 뜬 핀을 불러 달라 — J12 통화 안 말 요구 · O4). 패턴은 표기만 봐서 계속 센다(5 → 6 · 문자 · 화면 · 화면 문구 · 결제 뒤 지시 새 항목).
   "functions/src/scenarios/flowVariants.ts#J4_VOUCHER": 6, // O4 확인(상품권 구매 화면 안)
@@ -277,11 +307,11 @@ const VERBAL_ACCOUNT_WITHOUT_SCREEN_LEDGER: readonly string[] = [
 const ACCOUNT_READOUT = /계좌\s*불러\s*(?:줄게|드릴게)|계좌는\s*'[^']+'\s*(?:같은|처럼)[^.]*(?:부르|부른)|불러주는 계좌/;
 
 describe("P0 서비스 밖 행동 유도 — 판정표 고정", () => {
-  it("판정표: 세는 행 11개 · 제외 행 5개(J0 규칙 · J0 이름표 · D9 i · D9 ii · D-L9 서비스 안 대출) · D9 iii은 세는 행", () => {
+  it("판정표: 세는 행 11개 · 제외 행 6개(J0 규칙 · J0 이름표 · D9 i · D9 ii · D-L9 서비스 안 대출 · D-G 서비스 안 금 거래소) · D9 iii은 세는 행", () => {
     assert.equal(COUNTED.length, 11);
     assert.deepEqual(
       JUDGEMENT_TABLE.filter((r) => r.pattern === undefined).map((r) => r.id),
-      ["J12_VERBAL", "J13_BLOCK", "J15_IN_APP_LOAN"],
+      ["J12_VERBAL", "J13_BLOCK", "J15_IN_APP_LOAN", "J16_IN_APP_GOLD"],
     );
     assert.equal(JUDGEMENT_TABLE.find((r) => r.id === "J9_PHOTO")?.type.startsWith("O1-device"), true);
     for (const row of COUNTED) assert.ok(ROW_PLAN[row.id], `${row.id}: 담당 단계`);
@@ -334,6 +364,27 @@ describe("P0 서비스 밖 행동 유도 — J15 서비스 안 대출 예외(D-L
     assert.ok(end > 0);
     const declaration = fv.slice(at, at + end + 1);
     assert.ok(j1(declaration) >= 1, "fv-pgqt 대출 유도 원문");
+  });
+});
+
+describe("P0 서비스 밖 행동 유도 — J16 서비스 안 금 거래소 예외(D-G1 ~ D-G6)", () => {
+  it("등록부의 이름 · id가 실제로 있다(조용한 공회전 방지)", () => {
+    const fv = readFileSync(path.join(FN_SRC, "scenarios", "flowVariants.ts"), "utf8");
+    const screens = readFileSync(path.join(FN_SRC, "scenarios", "mockScreens.ts"), "utf8");
+    for (const name of IN_APP_GOLD_SURFACES.variables) assert.ok(new RegExp(`const ${name}\\b`).test(fv + screens), name);
+    assert.ok(findInCallSmsItem("institutional-impersonation", "institution-gold-shop"));
+    assert.ok(findInCallSmsItem("asset-protection-notice-call", "asset-gold-shop"));
+    assert.ok(readFileSync(path.join(ROOT_SRC, "components", "MessengerFakeLanding.tsx"), "utf8").includes("function GoldBuyMockup("));
+  });
+
+  it("'금은방 · 다른 거래소 · 직원에게 제출' 류는 계속 잡힌다 — 등록 영역 밖 · 영역 안 밖 행동 표현", () => {
+    const j3 = (source: string) => countRows("sample.ts", source).J3_GOLD ?? 0;
+    assert.equal(j3(`const OTHER = "예금을 찾아 금을 사서 담당 직원에게 제출하세요.";`), 1, "등록 영역 밖");
+    assert.equal(j3(`const INSTITUTION_GOLD_STAGE = "가까운 금은방에 가서 골드바를 사 오세요.";`), 1, "영역 안이어도 금은방");
+    assert.equal(j3(`const INSTITUTION_GOLD_DEMAND = "다른 거래소에서 골드바를 사 두세요.";`), 1, "영역 안이어도 다른 거래소");
+    assert.equal(j3(`const INSTITUTION_GOLD_STAGE = "금을 사서 담당 직원에게 제출하게 한다.";`), 1, "영역 안이어도 직원 대면 제출");
+    assert.equal(j3(`const INSTITUTION_GOLD_STAGE = "문자 속 링크의 거래소 화면에서 예금으로 금을 사게 한다.";`), 0, "앱 안 화면 안내 = 예외");
+    assert.equal(j3(`const INSTITUTION_GOLD_PLAN = "문자 속 링크의 거래소 화면에서 예금으로 금을 사게 한다.";`), 1, "접두사가 같아도 등록 안 된 이름은 센다");
   });
 });
 

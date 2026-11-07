@@ -111,9 +111,13 @@ test("[§127 로그 재현] 243a51df — 할 일을 마친 뒤 6행에 막히면
   assert.equal(decideScammerHangup(input({ verifyEnabled: true, goalActionDone: at(9), userTurns: 9 })).status, "accepted");
 });
 
-// 2026-11-07 — 상품권형 fv-v2mk는 앱 안 구매 화면 결말이 되어 뺐다(8 → 7 · `multiRoute1b.test.ts` 같은 날 주석).
-test("[§127] 말로 끝나는 결말 7벌(1a 4 + 1b 3) — 약속하면 되풀이 없이 마무리 · 통화를 끝낸다 줄을 갖는다", () => {
-  for (const id of ["fv-q7cn", "fv-g2ld", "fv-r4hc", "fv-e5mv", "fv-a6lq", "fv-t8ga", "fv-p3jx"]) {
+// 2026-11-07 — 상품권형 fv-v2mk는 앱 안 구매 화면 결말이 되어 뺐다(8 → 7 · `multiRoute1b.test.ts` 같은 날 주석). 같은 날 금형 fv-g2ld · fv-t8ga도
+// 앱 안 금 거래소 화면 결말이 되어 뺐다(7 → 5 — 약속만으로 끝나지 않는다 · 결정 화면 4-c).
+test("[§127] 말로 끝나는 결말 5벌(1a 3 + 1b 2) — 약속하면 되풀이 없이 마무리 · 통화를 끝낸다 줄을 갖는다", () => {
+  for (const id of ["fv-g2ld", "fv-t8ga"]) {
+    assert.equal(findFlowVariant(id)!.stages.some((s) => /같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary)), false, `${id}: 앱 안 화면 결말`);
+  }
+  for (const id of ["fv-q7cn", "fv-r4hc", "fv-e5mv", "fv-a6lq", "fv-p3jx"]) {
     const v = findFlowVariant(id)!;
     const hits = v.stages.filter((s) => /같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary));
     assert.equal(hits.length, 1, `${id}: 마무리 줄 1번`);
