@@ -100,7 +100,10 @@ export type InCallSmsEvent =
   | "landing_submitted"
   | "landing_identity"
   | "landing_converted"
-  | "landing_amount";
+  | "landing_amount"
+  // ⭐ 2026-11-07(사용자 결정 D-G4) — 금 거래소 구매 화면의 고액 구매 확인 질문에서 "수사기관 요구를 받았다"를 골라 구매가 보류됐다는 사실 하나(고정 값 ·
+  // 답 내용 · 금액 · 중량은 싣지 않는다 — AC-045 · G138). 금 거래소 화면(`GOLD_LANDINGS`) 문서에서만 받는다.
+  | "landing_held";
 export type RecordInCallSmsEventRequest = {
   sessionId: string;
   smsId: string;

@@ -77,10 +77,10 @@ test("[§125 결말] 말로 끝나는 결말 — 결정 순간 · 출처(C · S)
 // 2026-11-07 — 상품권형 fv-v2mk는 결말이 앱 안 구매 화면 결제 + 핀 낭독이 되어 "약속하면 마무리" 줄을 뺐다(약속만으로 끝나지 않는다 — 결정 화면 4-c).
 test("[§125 실측 반영] 말로 끝나는 결말 3벌(대출금 · 금 · 공탁금) — 약속하면 되풀이 없이 마무리 · 답을 미루면 한 번만 다시", () => {
   assert.equal(findFlowVariant("fv-v2mk")!.stages.some((s) => /같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary)), false);
-  for (const id of ["fv-a6lq", "fv-t8ga", "fv-p3jx"]) {
+  for (const id of ["fv-a6lq", "fv-p3jx"]) {
     const v = findFlowVariant(id)!;
     assert.ok(v.stages.some((s) => /같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary)), id);
   }
-  // §127 — 1a 말로 끝나는 결말 4벌에도 붙였다(운영 243a51df 재현). 금 구매 결말을 공유하는 fv-t8ga에는 한 번만 붙는다(이중 0).
-  assert.equal(findFlowVariant("fv-t8ga")!.stages.filter((s) => /짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary)).length, 1);
+  // 2026-11-07(사용자 결정 D-G1) — 금형 fv-t8ga는 결말이 앱 안 금 거래소 화면 결제가 되어 "약속하면 마무리" 줄을 뺐다(fv-v2mk와 같은 이유).
+  assert.equal(findFlowVariant("fv-t8ga")!.stages.filter((s) => /짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary)).length, 0);
 });
