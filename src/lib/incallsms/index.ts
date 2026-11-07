@@ -1,7 +1,12 @@
 export {
+  MIXED_THREAD_HEADER_LABEL,
   countUnread,
   formatSmsClock,
+  groupSmsThreads,
+  initialThreadNumber,
   latestSmsId,
+  threadKeyOf,
+  threadPreviewText,
   needsTimeSeparator,
   prefilledAccountOf,
   prefilledTransferOf,
@@ -14,4 +19,4 @@ export {
   takeNewlyVisibleSmsIds,
   threadHeaderLabel,
 } from "./inCallSms";
-export type { InCallSmsView, SmsVisibilityEntry } from "./inCallSms";
+export type { InCallSmsView, SmsThreadSummary, SmsVisibilityEntry } from "./inCallSms";

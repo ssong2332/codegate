@@ -30,21 +30,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import MessengerFakeLanding, { type LandingProgressEvent } from "./MessengerFakeLanding";
 import PhoneIcon from "./PhoneIcon";
 import {
+  MIXED_THREAD_HEADER_LABEL,
   formatSmsClock,
+  groupSmsThreads,
+  initialThreadNumber,
   needsTimeSeparator,
   prefilledAccountOf,
   prefilledTransferOf,
-  sameSenderNumber,
-  sortByArrival,
   spellOutOtp,
   splitBodyAtDialNumber,
   splitBodyAtOtp,
   takeNewlyVisibleSmsIds,
-  threadHeaderLabel,
+  threadPreviewText,
   type InCallSmsView,
 } from "@/lib/incallsms";
 import { runExitSequence } from "@/lib/incallsms/closeSequence";
-import { CALL_BAR_TOKENS, smsThreadTokensFor } from "@/lib/phone/skinTokens";
+import { CALL_BAR_TOKENS, smsListTokensFor, smsThreadTokensFor } from "@/lib/phone/skinTokens";
 import { BANK_APP_COPY, amountFromSmsBody, holderFromSmsBody, type AmountComparison, type TransferTarget } from "@/lib/bankapp/bankApp";
 import type { MessengerSkin } from "@/lib/messenger/detectSkin";
 
@@ -116,6 +117,11 @@ type InCallSmsOverlayProps = {
    * 부재 = 머리띠는 발급처 이름 · 합계 열쇠 빈 값.
    */
   bankIdentity?: { myBankName: string; ledgerKey: string };
+  /**
+   * 2026-11-07 실기기 신고("문자 발신처는 다른데 한 곳에서 오는 걸로 되어 있다") — 열 때 바로 보일 **대화방**(발신 라벨 또는 번호).
+   * 도착 배너를 눌러 열면 그 문자를 보낸 번호의 대화방이 바로 열린다(실제 휴대폰 알림). 부재 · 없는 번호 = 받은 문자 목록(메시지 앱 첫 화면).
+   */
+  initialThread?: string | null;
 };
 
 const FOCUSABLE =
@@ -146,13 +152,20 @@ export default function InCallSmsOverlay({
   onSendToAccount,
   onDialNumber,
   bankIdentity,
+  initialThread = null,
 }: InCallSmsOverlayProps) {
-  const sorted = sortByArrival(messages);
+  // 2026-11-07 실기기 신고 — 실제 메시지 앱처럼 **보낸 번호마다 대화방 하나**. 첫 화면 = 번호별 목록, 행을 누르면 그 번호의 문자만.
+  // 묶는 열쇠 = 발신 라벨의 번호 부분(S3 `sameSenderNumber`와 같은 판정 — 옛 꼴 `번호 (안내 이름)` 라벨도 같은 번호면 한 방).
+  const threads = groupSmsThreads(messages);
   const thread = smsThreadTokensFor(skin);
-  // UX-027 v1.33 (3) — 모두 같은 발신처면 헤더에 그 값, 섞이면 "메시지" + 말풍선마다 발신처(D-89).
-  const headerLabel = threadHeaderLabel(sorted);
-  // S3 — 같은 번호면 안내 이름이 달라도 섞인 것이 아니다(한 방 · 한 제목).
-  const mixedSenders = sorted.length > 0 && sorted.some((sms) => !sameSenderNumber(sms.senderLabel, sorted[0].senderLabel));
+  const list = smsListTokensFor(skin);
+  // 지금 열린 대화방의 번호(목록으로 돌아가도 유지 — 숨긴 대화방의 열람 관측이 그대로 이어진다).
+  const [openNumber, setOpenNumber] = useState<string | null>(() => initialThreadNumber(threads, initialThread));
+  const openThread = threads.find((item) => item.number === openNumber) ?? null;
+  // 열린 대화방의 문자 — 도착 순. 대화방 안에서는 발신처가 하나뿐이라 말풍선 위 발신처 줄이 없다.
+  const sorted = openThread ? openThread.messages : [];
+  // 머리줄 = 그 방 첫 문자의 발신 라벨(서버가 번호만 보내면 번호만 — 저장 안 된 번호는 이름이 보이지 않는다).
+  const headerLabel = openThread ? openThread.title : "";
   const panelRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
   // 말풍선 스레드의 스크롤 컨테이너 = 열람 판정의 뷰포트(IntersectionObserver root).
@@ -187,7 +200,11 @@ export default function InCallSmsOverlay({
     /** ⭐ P2(X6) — 훈련용 이체 화면의 받는 분 · 금액 · 은행(문자 문서 구조화 필드). */
     prefilledTransfer?: ReturnType<typeof prefilledTransferOf>;
   } | null>(null);
-  const [view, setView] = useState<"thread" | "landing">("thread");
+  // 보기 3개 — 받은 문자 목록 · 번호별 대화방 · 그 안에서 연 랜딩(전부 이 대화상자 안 · `hidden` 토글).
+  const [view, setView] = useState<"list" | "thread" | "landing">(() => (openNumber ? "thread" : "list"));
+  // 목록 행 — 대화방에서 목록으로 돌아올 때 그 행으로 포커스를 되돌린다.
+  const listTitleRef = useRef<HTMLHeadingElement | null>(null);
+  const rowRefs = useRef(new Map<string, HTMLButtonElement>());
   // ⭐ BA-1 간소화안 — '송금' 메뉴가 열린 말풍선.
   const [sendMenuSmsId, setSendMenuSmsId] = useState<string | null>(null);
   // ⭐ reviewer Major(포커스) — 보기 전환 때 포커스가 `hidden`이 된 요소와 함께 body로 떨어지지 않게 한다.
@@ -196,7 +213,7 @@ export default function InCallSmsOverlay({
   const landingViewRef = useRef<HTMLDivElement | null>(null);
   const linkButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const returnFocusSmsIdRef = useRef<string | null>(null);
-  const previousViewRef = useRef<"thread" | "landing">("thread");
+  const previousViewRef = useRef<"list" | "thread" | "landing">(view);
 
   /**
    * 닫기 요청 — Esc·바깥 탭·필 탭·"통화로 돌아가기"가 전부 여기로 온다.
@@ -240,7 +257,7 @@ export default function InCallSmsOverlay({
   // 열릴 때 포커스를 오버레이 제목으로 이동한다(UX-027 Focus Order). 닫을 때의 복귀는 호출부가
   // 직전 트리거(배너/"문자함" 버튼)로 되돌린다.
   useEffect(() => {
-    titleRef.current?.focus();
+    (previousViewRef.current === "list" ? listTitleRef.current : titleRef.current)?.focus();
   }, []);
 
   // 전면 전환을 스크린리더에 알린다(UX Accessibility v1.13 — "문자함을 엽니다. 통화는 계속됩니다.").
@@ -262,7 +279,7 @@ export default function InCallSmsOverlay({
   // ⛔ 판정 기준은 **"뷰포트에 들어왔는가" 하나**다 — 노출 시간·읽음 확인 같은 새 개념을 만들지
   // 않는다. 서버 계약(1회성·영구 기록)도 무변경이며, 고치는 것은 **언제 부르는가** 뿐이다.
   // ⚠️ 관측 수단이 없으면(구형 브라우저) **기록하지 않는다** — 과다 기록보다 누락이 낫다.
-  const threadIds = sorted.map((sms) => sms.smsId).join(",");
+  const threadIds = `${openNumber ?? ""}|${sorted.map((sms) => sms.smsId).join(",")}`;
   useEffect(() => {
     const root = threadRef.current;
     if (!root || typeof IntersectionObserver !== "function") return;
@@ -297,7 +314,9 @@ export default function InCallSmsOverlay({
       if (event.key === "Escape") {
         event.stopPropagation();
         // T190-5(§74.8) — 랜딩 보기에서는 Esc = 브라우저 뒤로("문자" — 숨김, 입력값 유지).
+        // 2026-11-07 — 대화방에서는 Esc = 뒤로(목록 · 실제 휴대폰 뒤로 키) · 목록에서는 통화로.
         if (view === "landing") setView("thread");
+        else if (view === "thread") setView("list");
         else requestClose();
         return;
       }
@@ -335,11 +354,18 @@ export default function InCallSmsOverlay({
       landingViewRef.current?.querySelector<HTMLElement>('[role="region"]')?.focus();
       return;
     }
+    if (view === "list") {
+      // 대화방에서 돌아오면 그 방의 행으로(없으면 목록 제목으로).
+      const row = openNumber ? rowRefs.current.get(openNumber) : undefined;
+      if (row) row.focus();
+      else listTitleRef.current?.focus();
+      return;
+    }
     const smsId = returnFocusSmsIdRef.current;
     const trigger = smsId ? linkButtonRefs.current.get(smsId) : undefined;
     if (trigger) trigger.focus();
     else titleRef.current?.focus();
-  }, [view]);
+  }, [view, openNumber]);
 
 
   const openLanding = (sms: InCallSmsView) => {
@@ -361,6 +387,13 @@ export default function InCallSmsOverlay({
           },
     );
     setView("landing");
+  };
+
+  // 목록 행 누름 = 그 번호의 대화방. 앞 대화방의 랜딩 복귀 자리는 잊는다(다른 방의 링크로 포커스를 보내지 않는다).
+  const openThreadOf = (number: string) => {
+    returnFocusSmsIdRef.current = null;
+    setOpenNumber(number);
+    setView("thread");
   };
 
   const closeLanding = () => {
@@ -426,12 +459,128 @@ export default function InCallSmsOverlay({
           </button>
           )}
 
-          {/* ── 보기 1: 문자 스레드(UX-027 v1.33 (1)~(5)). 랜딩을 보는 동안 `hidden`(접근성 트리·포커스 밖 — G460). */}
+          {/* ── 보기 0: 받은 문자 목록(2026-11-07 실기기 신고 — 메시지 앱 첫 화면). 보낸 번호마다 한 행: 번호 · 마지막 문자 미리보기 ·
+              시각 · 안 읽음. 가장 최근 문자가 온 방이 위. 행을 누르면 그 번호의 대화방(보기 1).
+              ⛔ 실제 앱의 검색 · 새 메시지 · 편집 · 더보기를 그리지 않는다(동작 없는 버튼 금지 — P-37 R-6 · 보내는 쪽 0 — AC-060 · G80).
+              왼쪽 뒤로 = 통화 복귀(종전 문자함 헤더의 뒤로와 같은 자리 · 같은 이름). */}
+          <div
+            hidden={view !== "list"}
+            className={view === "list" ? "flex min-h-0 flex-1 flex-col" : "hidden"}
+            style={{ backgroundColor: list.bg }}
+          >
+            <div className="flex h-12 shrink-0 items-center">
+              <button
+                type="button"
+                onClick={requestClose}
+                aria-label="통화로 돌아가기"
+                className="flex h-12 w-12 shrink-0 items-center justify-center"
+                style={{ color: list.chevron }}
+              >
+                <PhoneIcon name="chevron-back" size={24} />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {/* 큰 제목 — iOS형 왼쪽 34px · One UI형 펼친 앱 바 가운데 30px. 낱말 = 섞인 스레드 제목과 같은 "메시지"(새 문구 0). */}
+              <h2
+                ref={listTitleRef}
+                tabIndex={-1}
+                className={
+                  list.titleLayout === "ios-large"
+                    ? "px-4 pb-2 pt-1 text-[34px] font-bold leading-tight outline-none"
+                    : "flex h-[112px] items-center justify-center text-[30px] font-semibold outline-none"
+                }
+                style={{ color: list.title }}
+              >
+                {MIXED_THREAD_HEADER_LABEL}
+              </h2>
+              {threads.length === 0 ? (
+                // Empty — §114(UX D-152) 이후 메시지 버튼이 처음부터 활성이라 첫 문자 전에 누르면 이 상태가 보인다(UX-027 States).
+                <p role="status" className="px-5 py-6 text-base" style={{ color: list.preview }}>
+                  아직 도착한 문자가 없습니다.
+                </p>
+              ) : (
+                <ul>
+                  {threads.map((item, index) => {
+                    const clock = formatSmsClock(item.latest.arrivedAtMs);
+                    const unread = item.unreadCount > 0;
+                    return (
+                      <li key={item.number}>
+                        <button
+                          type="button"
+                          ref={(node) => {
+                            if (node) rowRefs.current.set(item.number, node);
+                            else rowRefs.current.delete(item.number);
+                          }}
+                          onClick={() => openThreadOf(item.number)}
+                          className="flex min-h-[76px] w-full items-center gap-3 py-2.5 pr-4 text-left"
+                          style={{ paddingLeft: list.unreadStyle === "dot" ? 6 : 16 }}
+                        >
+                          {list.unreadStyle === "dot" && (
+                            <span aria-hidden="true" className="flex w-2.5 shrink-0 justify-center">
+                              {unread && <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: list.unreadBg }} />}
+                            </span>
+                          )}
+                          <span
+                            aria-hidden="true"
+                            className={`flex shrink-0 items-center justify-center rounded-full text-white ${
+                              list.unreadStyle === "dot" ? "h-10 w-10" : "h-12 w-12"
+                            }`}
+                            style={{ backgroundColor: list.avatarBg }}
+                          >
+                            <PhoneIcon name="person" size={list.unreadStyle === "dot" ? 24 : 28} />
+                          </span>
+                          <span
+                            className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 self-stretch"
+                            style={{
+                              borderBottom:
+                                list.unreadStyle === "dot" && index < threads.length - 1 ? `0.5px solid ${list.divider}` : undefined,
+                            }}
+                          >
+                            <span className="flex items-baseline gap-2">
+                              <span className="min-w-0 flex-1 truncate text-[17px] font-semibold" style={{ color: list.name }}>
+                                {item.title}
+                              </span>
+                              {clock !== null && (
+                                <span
+                                  className={`flex shrink-0 items-center gap-0.5 ${list.unreadStyle === "dot" ? "text-[15px]" : "text-[12px]"}`}
+                                  style={{ color: list.time }}
+                                >
+                                  {clock}
+                                  {list.unreadStyle === "dot" && <PhoneIcon name="chevron-back" size={14} className="rotate-180" />}
+                                </span>
+                              )}
+                            </span>
+                            <span className="flex items-start gap-2">
+                              <span className="line-clamp-2 min-w-0 flex-1 break-words text-[15px] leading-snug" style={{ color: list.preview }}>
+                                {threadPreviewText(item.latest)}
+                              </span>
+                              {list.unreadStyle === "count" && unread && (
+                                <span
+                                  aria-hidden="true"
+                                  className="mt-0.5 flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[12px] font-bold tabular-nums"
+                                  style={{ backgroundColor: list.unreadBg, color: list.unreadText }}
+                                >
+                                  {item.unreadCount}
+                                </span>
+                              )}
+                            </span>
+                            {unread && <span className="sr-only">{`읽지 않은 문자 ${item.unreadCount}개`}</span>}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          {/* ── 보기 1: 번호별 대화방(UX-027 v1.33 (1)~(5) · 2026-11-07 — 목록에서 고른 번호의 문자만). 랜딩을 보는 동안 `hidden`(접근성 트리·포커스 밖 — G460). */}
           <div
             hidden={view !== "thread"}
             className={view === "thread" ? "flex min-h-0 flex-1 flex-col" : "hidden"}
           >
-            {/* ② 대화 헤더(D-89) — 왼쪽 뒤로(= 통화 복귀) · 발신자(iOS형 가운데 · One UI형 왼쪽).
+            {/* ② 대화 헤더(D-89) — 왼쪽 뒤로(2026-11-07 — = 받은 문자 목록 · 실제 메시지 앱) · 발신자(iOS형 가운데 · One UI형 왼쪽).
                 ⛔ 실제 앱의 통화·영상·메뉴 아이콘을 그리지 않는다(동작 없는 버튼 금지 — P-37 R-6).
                 T187(§72 · AC-086) — 세션 중 표식 0. ⚠️ 사용자 결정(2026-10-18) — 오른쪽 종료 버튼과 그것만 들던
                 `justify-end` 칸(옛 G449)을 **없앴다**. 오른쪽은 비워 둔다(새 컨트롤로 채우지 않는다 — P-37 R-6).
@@ -443,8 +592,8 @@ export default function InCallSmsOverlay({
             >
               <button
                 type="button"
-                onClick={requestClose}
-                aria-label="통화로 돌아가기"
+                onClick={() => setView("list")}
+                aria-label="메시지 목록으로"
                 className="flex h-12 w-12 shrink-0 items-center justify-center"
                 style={{ color: thread.chevron }}
               >
@@ -484,12 +633,8 @@ export default function InCallSmsOverlay({
               <h2 ref={titleRef} tabIndex={-1} className="sr-only outline-none">
                 문자 메시지
               </h2>
-              {sorted.length === 0 ? (
-                // Empty — §114(UX D-152) 이후 메시지 버튼이 처음부터 활성이라 첫 문자 전에 누르면 이 상태가 보인다(UX-027 States).
-                <p role="status" className="rounded-[14px] bg-white p-5 text-base text-[#5F6368]">
-                  아직 도착한 문자가 없습니다.
-                </p>
-              ) : (
+              {/* 열린 대화방이 없으면(목록 보기) 그리지 않는다 — 빈 상태 안내는 목록이 맡는다. */}
+              {sorted.length === 0 ? null : (
                 <ul className="flex flex-col gap-2">
                   {sorted.map((sms, index) => {
                     const previous = index > 0 ? sorted[index - 1] : null;
@@ -498,9 +643,6 @@ export default function InCallSmsOverlay({
                       thread.timeStyle === "separator" &&
                       clock !== null &&
                       needsTimeSeparator(previous ? previous.arrivedAtMs : null, sms.arrivedAtMs);
-                    // 발신처가 섞였을 때만 말풍선 위에 다시 보인다(같은 발신처가 이어지면 반복하지 않는다 — D-89).
-                    const showSender =
-                      mixedSenders && (previous === null || !sameSenderNumber(previous.senderLabel, sms.senderLabel));
                     // D-90 · G459 — 본문 안 인증번호를 **정확 일치 첫 1회**로 감싼다. null이면 박스 폴백.
                     const otpSplit = sms.otpCode ? splitBodyAtOtp(sms.body, sms.otpCode) : null;
                     // D-101 — 링크 줄 = 가짜 주소(부재 = 옛 문서 → 표시 텍스트).
@@ -536,11 +678,6 @@ export default function InCallSmsOverlay({
                         {showSeparator && (
                           <p className="mb-1 mt-2.5 w-full text-center text-xs" style={{ color: thread.time }}>
                             오늘 {clock}
-                          </p>
-                        )}
-                        {showSender && (
-                          <p className="ml-1 mt-1.5 text-sm font-semibold" style={{ color: thread.headerText }}>
-                            {sms.senderLabel}
                           </p>
                         )}
                         <div className="flex w-full items-end gap-1.5">
@@ -677,23 +814,6 @@ export default function InCallSmsOverlay({
                 </ul>
               )}
             </div>
-
-            {/* ④ 하단 복귀 바(P-27 (3) 큰 복귀 버튼 유지 · UX-027 v1.33 (5)) — 실제 앱의 입력창 자리에 "통화로 돌아가기".
-                ⛔ 입력창 모양을 흉내 내지 않는다(placeholder·전송 화살표·＋·카메라 0 — AC-060 · G80). 안내 줄도 0. */}
-            <div
-              className="shrink-0 pb-[env(safe-area-inset-bottom)]"
-              style={{ backgroundColor: CALL_BAR_TOKENS.bg }}
-            >
-              <button
-                type="button"
-                onClick={requestClose}
-                className="flex h-[52px] w-full items-center justify-center gap-2 text-base font-bold"
-                style={{ color: CALL_BAR_TOKENS.text }}
-              >
-                <PhoneIcon name="accept-call" size={20} />
-                통화로 돌아가기
-              </button>
-            </div>
           </div>
 
           {/* ── 보기 2: 랜딩(UX-023 재사용 — 그리는 곳은 여전히 MessengerFakeLanding 한 파일). 문자함과 **같은 대화상자
@@ -731,6 +851,26 @@ export default function InCallSmsOverlay({
                 }}
               />
             </div>
+          )}
+
+          {/* ④ 하단 복귀 바(P-27 (3) 큰 복귀 버튼 유지 · UX-027 v1.33 (5)) — 실제 앱의 입력창 자리에 "통화로 돌아가기".
+              2026-11-07 — 목록 · 대화방 두 보기가 함께 쓴다(랜딩 보기에서는 종전처럼 없다 — 표시줄 · 브라우저 바 "‹ 문자"로 복귀).
+              ⛔ 입력창 모양을 흉내 내지 않는다(placeholder·전송 화살표·＋·카메라 0 — AC-060 · G80). 안내 줄도 0. */}
+          {view !== "landing" && (
+          <div
+            className="shrink-0 pb-[env(safe-area-inset-bottom)]"
+            style={{ backgroundColor: CALL_BAR_TOKENS.bg }}
+          >
+            <button
+              type="button"
+              onClick={requestClose}
+              className="flex h-[52px] w-full items-center justify-center gap-2 text-base font-bold"
+              style={{ color: CALL_BAR_TOKENS.text }}
+            >
+              <PhoneIcon name="accept-call" size={20} />
+              통화로 돌아가기
+            </button>
+          </div>
           )}
         </div>
       </div>
