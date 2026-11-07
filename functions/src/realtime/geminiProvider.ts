@@ -16,10 +16,13 @@ import { GoogleGenAI, Modality, EndSensitivity, StartSensitivity } from "@google
 import { asksIdentityCheck } from "../roleplay/personaAuthority";
 import { isL3Procedural } from "../roleplay/l3Depth";
 import { buildSystemPrompt } from "../roleplay/promptAssembly";
-import { resolveSessionScenarioPrompt, routeEndsWithoutAccount, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
+import { buildGenuineLegPrompt } from "../roleplay/genuineLegPrompt";
+import { genuineLegOf, resolveSessionScenarioPrompt, routeEndsWithoutAccount, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
 import { resolveRouteAccountNumber, sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
 import { callPhaseScenarioPrompt } from "../roleplay/escalatedCall";
 import {
+  buildGenuineLegToolDeclarations,
+  buildGenuineLegToolNames,
   buildLiveToolDeclarations,
   buildLiveToolNames,
   declaresEndCall,
@@ -184,17 +187,16 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // 빈 배열 = 오늘과 동일"은 C3부터 메신저 · 중간 leg에서만 참이다(아래 `tools` 주석).
     // T194-a(§84.4.3) — 층 1(음성 풀) · 층 2([화자] 블록)가 **같은 값**을 쓴다(§50.3.1).
     const speakerGender = input.speakerGender ?? speakerGenderFor(input.scenarioId);
+    // ⭐ PR-B — 정당한 제3자 레그(대출 실행 확인 상담원)는 사기범 조립 대신 전용 프롬프트 · 결과 보고 + 끊기 도구만(`roleplay/genuineLegPrompt.ts`).
+    const genuineLeg = genuineLegOf(input.flowVariantId, input.callLeg?.legIndex);
     const endCallScope: EndCallScope = {
       channel: input.channel,
       relay: input.hangupRelay,
       liveAvailable: this.endCallLiveAvailable,
     };
-    const liveToolDeclarations = buildLiveToolDeclarations(
-      input.scenarioId,
-      input.difficultyLevel,
-      input.flowVariantId,
-      endCallScope,
-    );
+    const liveToolDeclarations = genuineLeg
+      ? buildGenuineLegToolDeclarations()
+      : buildLiveToolDeclarations(input.scenarioId, input.difficultyLevel, input.flowVariantId, endCallScope);
     const familyAddressPrompt = resolveFamilyAddressPrompt(input.scenarioId, input.familyAddress);
     const systemPrompt = buildSystemPrompt(scenarioPrompt, {
       difficultyLevel: input.difficultyLevel,
@@ -257,7 +259,8 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
           model: GEMINI_LIVE_MODEL,
           config: {
             responseModalities: [Modality.AUDIO],
-            systemInstruction: systemPrompt,
+            // ⭐ PR-B — 정당한 제3자 레그(대출 실행 확인 상담원)는 사기범 조립 대신 전용 프롬프트(`roleplay/genuineLegPrompt.ts`).
+            systemInstruction: genuineLeg ? buildGenuineLegPrompt(genuineLeg, input.fictionalBankName) : systemPrompt,
             speechConfig: {
               languageCode: "ko-KR",
               voiceConfig: {
@@ -357,7 +360,9 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     if (!tokenName) {
       throw new Error("Gemini 단기 토큰 발급 응답에 name이 없습니다.");
     }
-    const liveTools = buildLiveToolNames(input.scenarioId, input.difficultyLevel, input.flowVariantId, endCallScope);
+    const liveTools = genuineLeg
+      ? buildGenuineLegToolNames()
+      : buildLiveToolNames(input.scenarioId, input.difficultyLevel, input.flowVariantId, endCallScope);
 
     return {
       provider: "gemini",

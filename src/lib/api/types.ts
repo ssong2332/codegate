@@ -205,6 +205,9 @@ export type LiveTools = {
    */
   endCall?: string;
   endCallFailureInstruction?: string;
+  /** ⭐ PR-B — 정당한 제3자 레그(대출 실행 확인 상담원)만. 결과 보고 도구 이름과 보고 실패 문면(쌍 — 서버 `buildGenuineLegToolNames`). */
+  reportLoanReview?: string;
+  reportLoanReviewFailureInstruction?: string;
   failureInstruction: string;
 };
 
@@ -432,6 +435,8 @@ export type EndSessionRequest = {
   endReason: EndSessionReason;
   /** 2026-11-06 — 세션 끝 통화 진단 요약(숫자 · 상태값만). 부재 = 로그 없음. */
   diag?: CallDiagSummary;
+  /** 2026-11-07 — 통화 화면의 통화 종료 버튼으로 끝냈을 때만(`endReasonHint.ts` B1 · 서버 `session/endReason.ts` H1). 부재 = 그 밖 모든 종료. */
+  hangupButton?: true;
 };
 export type EndSessionResponse = { status: "ended"; reportPending: true };
 
@@ -467,7 +472,8 @@ export type RequestScammerHangupResponse = {
 
 // --- startCallLeg (§142 카드사 고급 재구성 · functions/src/callLegs/request.ts와 1:1) ---
 /** 통화가 끝난 방식 — `dial` = 참가자가 다시 건다(또는 상대가 다시 건다 · D4) · `transfer` = 호 전환. */
-export type CallLegEnd = { exit: "dial" | "transfer" };
+/** ⭐ PR-B — `incoming` = 이 통화가 끝난 뒤 다음 사람이 참가자에게 전화를 걸어 온다(조건 화면을 마쳤을 때만 — 서버 `not_ready(screen_pending)`이면 훈련 끝). */
+export type CallLegEnd = { exit: "dial" | "transfer" | "incoming" };
 // ⚠️ 2026-11-07 — `hangup`(참가자가 통화를 먼저 끊음 → `ended`)은 **클라가 먼저** 둔 계약이다(서버 구현은 서버 세션 몫 · 메인 세션 보고).
 // 서버가 아직 모르면 `invalid-argument`로 거절하고, 화면은 종전대로 훈련을 끝낸다(`afterHangupResponse` 2행 — 배포 순서와 무관).
 export type StartCallLegRequest = { sessionId: string; action: "dial" | "transfer" | "callback" | "hangup"; dialed?: string };
@@ -477,7 +483,12 @@ export type StartCallLegResponse =
   | { status: "ended" }
   | { status: "genuine"; number: string; contactLabel?: string; notice: readonly string[] }
   | { status: "unknown_number" }
-  | { status: "not_ready"; reason: "not_multi_call" | "leg_in_progress" | "no_next_leg" | "wrong_action" };
+  | { status: "not_ready"; reason: "not_multi_call" | "leg_in_progress" | "no_next_leg" | "wrong_action" | "screen_pending" };
+
+// --- recordLoanReview (⭐ PR-B · functions/src/callLegs/loanReview.ts와 1:1) ---
+export type LoanReviewOutcome = "approved" | "held";
+export type RecordLoanReviewRequest = { sessionId: string; outcome: LoanReviewOutcome };
+export type RecordLoanReviewResponse = { recorded: boolean; outcome: LoanReviewOutcome; guidance: string };
 
 // --- updateMessengerSkin (T29 · UX-022 · AC-031/P-16) ---
 // 메신저 채팅(UX-022)의 UA 자동 감지·수동 전환 결과를 세션 문서에 지속한다(리포트·새로고침·

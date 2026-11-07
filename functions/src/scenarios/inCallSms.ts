@@ -98,6 +98,14 @@ export const CARD_R1_SMS_SENDER: Readonly<Record<string, string>> = {
   "card-safe-account": "070-0462-1593",
 };
 
+/**
+ * ⭐ PR-B(2026-11-07 · 기관 사칭 고급 3통화) — 시나리오 고정 번호(§104.10 표) 밖 발신처. 대출 실행 입금 안내는 사기범이 아니라 가상 캐피탈이 보낸다
+ * (사기범 번호와 같은 대화방에 묶이지 않게 · 저장 안 된 번호는 번호만 — 위 R1 표와 같은 규칙). 번호 = 대출 확인 상담원 번호(`flowVariants.ts` 통화 2).
+ */
+export const INSTITUTION_LOAN_SMS_SENDER: Readonly<Record<string, string>> = {
+  "institution-loan-disbursed": "02-0719-3300",
+};
+
 const LOAN_SCAM: InCallSmsItem[] = [
   {
     smsId: "loan-account",
@@ -298,6 +306,49 @@ const INSTITUTIONAL_IMPERSONATION: InCallSmsItem[] = [
     afterScammerTurns: 7,
     announceInstruction:
       "(참가자 휴대전화로 방금 안전계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 문자에 적힌 금액을 이체해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
+  },
+  // ⭐ PR-B(2026-11-07 · 사용자 결정 "앱 안 대출 체험" — docs/research/institution-advanced-loan-design-2026-11-07.md §6) — 기관 사칭 고급 3통화(fv-c5fj) 문자 3종.
+  // | smsId | 언제 · 누가 | 여는 화면 |
+  // |---|---|---|
+  // | `institution-loan-guide` | 통화 1 · 검사가 도구로 보낸다 | `loan-apply` — 앱 안 비대면 대출 신청(본인 확인 → 한도 조회 → 신청 · 금액 · 용도는 화면 밖으로 나가지 않는다) |
+  // | `institution-loan-disbursed` | 대출 실행 확인 결과 = 실행일 때 서버가 바로 보낸다(`recordLoanReview` — 게이트 밖 · 선언 밖) | 없음(입금 안내) |
+  // | `institution-loan-safe-account` | 통화 3 · 실행일 때만 선언(`whenLoanReview`) · 검사가 도구로 보낸다 | `loan-safe-transfer` — 대출금 보관 계좌 이체 화면 |
+  // ⛔ 금액 줄 0 — 대출 금액은 참가자가 화면에서 정한 값이라 서버가 모른다(G138). 이체 화면 요구액은 대사 · 같은 탭에 남은 신청 금액이 정한다.
+  // ⛔ 실제 금융회사 이름 0 — "○○캐피탈"은 세션 가상 캐피탈명으로 바뀐다(§83).
+  {
+    smsId: "institution-loan-guide",
+    kind: "link",
+    senderLabel: `${SMS_SENDER_NUMBER["institutional-impersonation"]} (자산보호 안내)`,
+    body: "[명의도용 입증 절차] 비대면 대출 신청 안내\n○○캐피탈 비대면 신용대출로 정상 거래 여부를 확인합니다.\n아래 링크에서 본인 확인 후 신청해 주세요.\n신청 후 담당자에게 바로 알려 주세요.",
+    linkDisplayText: "비대면 대출 신청하기",
+    fakeLandingId: "loan-apply",
+    linkAddress: "credit-loan-apply.invalid/apply/R4tw",
+    afterScammerTurns: 9,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 대출 신청 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크에서 비대면 대출을 신청해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 금융회사 이름 · 금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
+  },
+  {
+    smsId: "institution-loan-disbursed",
+    kind: "callback",
+    senderLabel: INSTITUTION_LOAN_SMS_SENDER["institution-loan-disbursed"]!,
+    body: "[○○캐피탈] 신청하신 비대면 신용대출금이 고객님 명의 입출금 계좌로 입금되었습니다.\n대출 계약은 14일 안에 철회를 신청할 수 있습니다.\n문의 02-0719-3300",
+    afterScammerTurns: 11,
+    // 본문 속 번호 = 가상 캐피탈 대출센터(번호부 — 참가자가 걸면 진짜 안내 · 방어 종료).
+    dialNumberId: "loan-capital-center",
+    announceInstruction:
+      "(참가자 휴대전화로 방금 금융회사의 대출금 입금 안내 문자가 도착했다. 이 문자는 네가 보낸 것이 아니다. 상대가 이 문자 이야기를 꺼내면, 상대의 말에 대답할 때 그 대답 안에서 한두 문장으로 받고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 금액 · 계좌번호를 새로 지어내 말하지 마라.)",
+  },
+  {
+    smsId: "institution-loan-safe-account",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["institutional-impersonation"]} (자산보호 안내)`,
+    body: "[자산보호절차] 대출금 보관 계좌 안내\n예금주: 노은채\nOO은행 318-0472-6619-05\n입금된 대출금 전액을 아래에서 이체해 주세요.\n이체 후 담당자에게 바로 알려 주세요.",
+    linkDisplayText: "대출금 보관 이체 진행하기",
+    fakeLandingId: "loan-safe-transfer",
+    linkAddress: "loan-keep-account.invalid/transfer/Lp3d",
+    afterScammerTurns: 2,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 대출금 보관 계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 입금된 대출금을 그대로 옮겨 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호를 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
   },
 ];
 

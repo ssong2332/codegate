@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mapChallengesToListItems } from "./mapChallengeItems.ts";
+import { EXPIRED_STATUS_LABEL, PENDING_STATUS_LABEL, mapChallengesToListItems } from "./mapChallengeItems.ts";
 import type { ChallengeSource } from "./mapChallengeItems.ts";
 
 test("AC-043: 미완료(pending/consented/in_progress) 챌린지는 '아직 해보지 않았습니다'만 표시한다", () => {
@@ -227,4 +227,37 @@ test("[T181 C-1c 역방향] 메신저·generic은 완료 + 공유 동의 + suspi
     const label = oneItem({ status, resultSharingConsented: true, suspicionTimeLabel: "40초", ...extra });
     assert.equal(label.includes("의심 시점"), false, `${JSON.stringify(extra)}: '${label}'`);
   }
+});
+
+// D6(2026-11-07 Edge 실사용 시험 판 33) — 링크 만료(3일)가 지난 미사용 챌린지가 "대기"로 보였다. 서버 목록 콜러블이 그 상태를
+// "expired"로 내보내고(`functions/src/challenge/consentGate.ts` `listedChallengeStatus`), 매핑 · 화면이 "만료"로 바꾼다.
+test("[D6] expired 챌린지는 대기 라벨이 아니라 만료 라벨을 받는다", () => {
+  const items = mapChallengesToListItems([
+    {
+      challengeId: "c-exp",
+      displayName: "민수",
+      status: "expired",
+      resultSharingConsented: false,
+      suspicionTimeLabel: null,
+      createdAt: new Date("2026-10-17T10:00:00+09:00"),
+    },
+    {
+      challengeId: "c-pend",
+      displayName: "지수",
+      status: "pending",
+      resultSharingConsented: false,
+      suspicionTimeLabel: null,
+      createdAt: new Date("2026-11-06T10:00:00+09:00"),
+    },
+  ]);
+  assert.equal(items[0].statusLabel, EXPIRED_STATUS_LABEL);
+  assert.notEqual(items[0].statusLabel, PENDING_STATUS_LABEL);
+  assert.equal(items[1].statusLabel, PENDING_STATUS_LABEL);
+});
+
+test("[D6] 결과 화면은 만료 라벨을 '만료' 배지로, 대기 라벨만 '대기' 배지로 그린다(배선)", () => {
+  const page = readFileSync(new URL("../../app/challenge/results/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /statusLabel === EXPIRED_STATUS_LABEL\)\s*\{\s*return \{ variant: "neutral", text: "만료" \}/);
+  assert.match(page, /statusLabel === PENDING_LABEL\)\s*\{\s*return \{ variant: "caution", text: "대기" \}/);
+  assert.match(page, /const PENDING_LABEL = PENDING_STATUS_LABEL;/);
 });

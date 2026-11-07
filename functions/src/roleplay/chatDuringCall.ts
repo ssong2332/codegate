@@ -307,7 +307,7 @@ function chatFollowUpPending(
 /** P1 M1 — 4-c행 입력(화면 기록 read 0 — 설치 화면 응낙은 보지 않는다 · 이 경로는 `give_up`만 받는다). */
 function chatDecisionScreenPending(session: SessionDoc, delivered: readonly DeliveredSmsRecord[]): boolean {
   // §142 — 다통화 변형은 현재 레그 선언으로(마지막 레그가 아니면 결정 화면이 없다).
-  const { declared, reason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId, { relay: session.relay });
+  const { declared, reason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId, { relay: session.relay, loanReview: session.loanReview?.outcome });
   return isDecisionScreenPending({
     scenarioId: session.scenarioId,
     flowVariantId: session.flowVariantId,

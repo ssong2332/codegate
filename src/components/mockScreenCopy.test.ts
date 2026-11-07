@@ -730,7 +730,7 @@ function componentHosts(code: string): string[] {
 test("[T190/G453 클라] 컴포넌트의 가짜 호스트 전부(카탈로그 8 + 범용 폴백 1)가 .invalid 규칙을 지킨다", (t) => {
   const hosts = componentHosts(componentCode);
   t.diagnostic(`[G453 클라] 호스트 ${hosts.length}개: ${hosts.join(" · ")}`);
-  assert.equal(hosts.length, 30, "2026-11-07 앱 안 결말 — 납치 이체 · 상품권 구매 2 + §142 카드사 고급 재구성 2(안전계좌 이체 · 원격 지원 설치) + 카탈로그 credential 19(P2 훈련용 이체 화면 5 · P2-c 메신저 2 · P2-d 환급 수수료 1 포함) + 설치 6(T194-a parcel-install · T194-c-1 Q2 3종 · §110.2 자녀 보험 접수 앱 1 · §92.3 credential 2 · §98 보관 지갑 1 · §101 자산 검수 사이트 1) + 범용 폴백 1");
+  assert.equal(hosts.length, 32, "PR-B 기관 고급 3통화 2(대출 신청 · 대출금 보관 이체) + 2026-11-07 앱 안 결말 — 납치 이체 · 상품권 구매 2 + §142 카드사 고급 재구성 2(안전계좌 이체 · 원격 지원 설치) + 카탈로그 credential 19(P2 훈련용 이체 화면 5 · P2-c 메신저 2 · P2-d 환급 수수료 1 포함) + 설치 6(T194-a parcel-install · T194-c-1 Q2 3종 · §110.2 자녀 보험 접수 앱 1 · §92.3 credential 2 · §98 보관 지갑 1 · §101 자산 검수 사이트 1) + 범용 폴백 1");
   assert.deepEqual(hosts.flatMap(clientHostViolations), []);
   // 범용 폴백 호스트는 카탈로그 호스트와 겹치지 않는다(겹치면 미스가 다른 사이트처럼 보인다).
   assert.equal(new Set(hosts).size, hosts.length);
@@ -776,6 +776,8 @@ const NUMERIC_FIELD_LABELS = [
   "입금 계좌", "받는 사람 계좌", "보낼 금액", "보낼 금액",
   // ⭐ P2-d — 환급 처리 수수료 이체 화면.
   "수수료 입금 계좌", "보낼 금액",
+  // ⭐ PR-B — 기관 고급 3통화 대출 신청(문자 화면 폴백의 금액 칸) · 대출금 보관 이체 화면(받는 계좌 · 금액).
+  "대출 신청 금액", "보관 계좌 번호", "이체 금액",
   // 2026-11-07 앱 안 결말 — 납치 협박 고급 이체 화면(받는 계좌 · 금액). 상품권 구매 화면은 버튼으로 고른다(숫자 칸 0).
   "입금받을 계좌", "보낼 금액",
 ];
@@ -970,7 +972,7 @@ test("[§101 D-115 ①②] 미리 채움 칸 = 이체형 3종의 수취 계좌 �
   const prefilled = [...componentCode.matchAll(/\{ label: "([^"]+)", placeholder: "[^"]*", inputMode: "numeric", prefill: "account" \}/g)].map((m) => m[1]);
   // ⭐ P2(X6) — 훈련용 이체 화면 5종의 받는 계좌 칸도 문자 계좌로 미리 채운다(같은 D-115 원천 · 읽기 전용).
   // §142 — 카드사 고급 재구성 안전계좌 이체의 받는 계좌 칸 "안전계좌 번호"(기관 사칭 안전계좌와 같은 라벨) +1.
-  assert.deepEqual(prefilled.sort(), ["안전계좌 번호", "안전계좌 번호", "보호계좌 번호", "이관 전용 계좌번호", "상환 전용 계좌", "공탁금 계좌", "받는 분 계좌", "수수료 납부 계좌", "국가 안전계좌", "입금 계좌", "받는 사람 계좌", "수수료 입금 계좌", "입금받을 계좌"].sort());
+  assert.deepEqual(prefilled.sort(), ["안전계좌 번호", "안전계좌 번호", "보호계좌 번호", "이관 전용 계좌번호", "상환 전용 계좌", "공탁금 계좌", "받는 분 계좌", "수수료 납부 계좌", "국가 안전계좌", "입금 계좌", "받는 사람 계좌", "수수료 입금 계좌", "입금받을 계좌", "보관 계좌 번호"].sort()); // PR-B 대출금 보관 이체 +1
   for (const line of [
     "이체하실 금액만 입력하시면 보호 조치가 바로 적용됩니다.",
     "이관하실 금액을 적고 아래 버튼을 눌러 주세요.",
@@ -986,7 +988,8 @@ test("[§101 ③④⑤] 금액 칸은 필드별 명시 · 검증 실패면 콜�
   const amounts = [...componentCode.matchAll(/\{ label: "([^"]+)", placeholder: "[^"]*", inputMode: "numeric", amount: true \}/g)].map((m) => m[1]);
   // ⭐ P2(X6) — 훈련용 이체 화면 5종의 금액 칸(라벨 공통 · 처음 값만 문자 금액).
   // §142 — 카드사 고급 재구성 안전계좌 이체 "보호 금액" +1.
-  assert.deepEqual(amounts.sort(), ["보호 금액", "보관 신청 금액", "전송 금액", "전환 금액", "이체 금액", "이관 금액", "옮길 금액", ...Array<string>(9).fill("보낼 금액")].sort());
+  // PR-B — 기관 고급 3통화 "대출 신청 금액" · 대출금 보관 이체 "이체 금액" +2.
+  assert.deepEqual(amounts.sort(), ["보호 금액", "보관 신청 금액", "전송 금액", "전환 금액", "이체 금액", "이체 금액", "대출 신청 금액", "이관 금액", "옮길 금액", ...Array<string>(9).fill("보낼 금액")].sort());
   const submit = componentCode.slice(componentCode.indexOf("const handleSubmit"), componentCode.indexOf("const issuerBar"));
   const guard = submit.indexOf("if (Object.keys(found).length > 0) return;");
   assert.ok(guard > 0, "검증 실패 시 되돌아가는 줄");

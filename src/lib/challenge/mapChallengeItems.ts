@@ -36,6 +36,15 @@ export type ChallengeListItem = {
 // 상태를 구분한다(Accessibility 요구).
 const COMPLETION_STATUSES: ReadonlySet<ChallengeStatus> = new Set(["completed", "reported"]);
 
+/** 미완료 라벨 — 화면(`/challenge/results`)이 "대기" 배지로 바꾼다. */
+export const PENDING_STATUS_LABEL = "상대가 아직 해보지 않았습니다";
+/**
+ * D6(2026-11-07 Edge 실사용 시험 판 33) — 링크 만료(3일)가 지난 미사용 챌린지. 서버 목록 콜러블이 `pending` ∧ 만료 경과를
+ * `"expired"`로 내보낸다(`functions/src/challenge/consentGate.ts` `listedChallengeStatus`). 종전에는 이 상태도 미완료 라벨로 묶여
+ * "대기"로 보였다. 화면이 "만료" 배지로 바꾼다.
+ */
+export const EXPIRED_STATUS_LABEL = "링크가 만료되어 더 이상 열 수 없습니다";
+
 export function mapChallengesToListItems(
   challenges: readonly ChallengeSource[],
 ): ChallengeListItem[] {
@@ -51,8 +60,9 @@ export function mapChallengesToListItems(
 }
 
 function resolveStatusLabel(challenge: ChallengeSource): string {
+  if (challenge.status === "expired") return EXPIRED_STATUS_LABEL;
   if (!COMPLETION_STATUSES.has(challenge.status)) {
-    return "상대가 아직 해보지 않았습니다";
+    return PENDING_STATUS_LABEL;
   }
   // AC-043 — 사용자2가 결과 공유에 동의한 경우에만 상세(의심 시점)를 보여준다. 대화 전문은 이
   // 스키마에 애초에 없다(ChallengeDoc.resultSummary는 completed/suspicionTimeLabel 요약뿐).

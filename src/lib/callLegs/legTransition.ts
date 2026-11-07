@@ -130,8 +130,14 @@ export function afterHangupResponse(response: { status: string } | null): "phone
   return response?.status === "ended" ? "phone_app" : "end_training";
 }
 
-/** 통화가 끝난 직후의 화면(넘김 = 통화 화면 유지 · 직접 걸기 = 다이얼). */
-export function screenAfterLegEnd(exit: "dial" | "transfer"): LegScreen {
+/**
+ * ⭐ PR-B — 나감 `incoming`(통화가 끝난 뒤 다른 사람이 따로 걸어 온다 — 기관 고급 대출 확인 전화 · 검사 재통화)까지의 시간(판단값 — 실측 전).
+ * 실제 대출 실행 확인 전화는 신청 직후 몇 분 안에 오는 것으로 알려져 있으나(추정 — 확인 방법: 금융회사 비대면 대출 안내문 대조) 훈련 흐름을 끊지 않게 짧게 둔다.
+ */
+export const LEG_INCOMING_CALL_DELAY_MS = 12_000;
+
+/** 통화가 끝난 직후의 화면(넘김 = 통화 화면 유지 · 직접 걸기 · 상대가 걸어 옴 = 전화 앱). */
+export function screenAfterLegEnd(exit: "dial" | "transfer" | "incoming"): LegScreen {
   return exit === "transfer" ? { kind: "holding" } : { kind: "dialer", digits: "" };
 }
 

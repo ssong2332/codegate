@@ -6,6 +6,8 @@
 //   ① "페이로드는 가상값만" 줄 기관명 예시에서 "국민안전지원센터" 제거(사기범 소속 · 예금주로 새어 나옴)
 //   ② "같은 압박을 반복하지 않는다" 항목 끝에 거절된 요구를 같은 형태로 다시 꺼내지 않는다는 1문장 추가
 import {
+  BEGINNER_ENDING_HANGUP,
+  BEGINNER_ENDING_NO_HANGUP,
   CLAIM_CONSISTENCY_RULE,
   HANGUP_EXHAUSTED_SENTENCE,
   HANGUP_NO_NEW_DEMAND_SENTENCE,
@@ -99,10 +101,34 @@ export function revertFullAudit(assembled: string): string {
     },
     p0Reverted,
   );
+  // ⑫ D4(2026-11-07 Edge 실사용 시험 판 29 · 32) — 초급 블록 물러섬 보강(초급 조립에만 · 0 또는 1회). 중급 · 고급 조립에는 없다.
+  const beginnerD4Reverted = BEGINNER_D4_TEXT_CHANGES.reduce((text, [now, before]) => {
+    const count = text.split(now).length - 1;
+    if (count > 1) throw new Error(`D4 문면 "${now.slice(0, 20)}"이 조립 산출물에 ${count}회 있다(0 또는 1회여야 한다)`);
+    return count === 1 ? text.replace(now, before) : text;
+  }, probe129Reverted);
   // ⑪ P2(2026-10-31 · X6) — 계좌 문자에 이체 화면 링크를 병기한 루트(대출 · 통관 · 유포 협박 · 자산 보호)의 수법 · 단계 문면에 "문자 속 링크의 이체 화면에서"
   //    절을 더했다(그 시나리오 조립에만 · 대출은 수법 2개라 2회까지). 0회 이상 전부 되돌린다.
-  return P2_TEXT_CHANGES.reduce((text, [now, before]) => text.split(now).join(before), probe129Reverted);
+  return P2_TEXT_CHANGES.reduce((text, [now, before]) => text.split(now).join(before), beginnerD4Reverted);
 }
+
+/**
+ * ⑫ D4 — 초급 블록 교체분 [지금, 이전]. `promptAssembly.ts` `BEGINNER_BLOCK_TEMPLATE`과 글자 단위로 같다(마무리 줄은 끊기 변형별 상수를 그대로 쓴다).
+ * 재설득 비적용 줄의 꼬리 1문장이 우선순위 문장 · 물러섬 순서 줄 · 마무리 줄로 바뀌었고, 시간 압박 줄 끝에 비밀 유지 요구 금지 1문장이 붙었다.
+ */
+const BEGINNER_D4_OLD_TAIL = "상대가 의심하거나 거절하면 한 번 더 설득하지 않고 물러선다.";
+const BEGINNER_D4_NEW_TAIL_HEAD =
+  '위 [진행 강제]의 "같은 압박을 반복하지 않는다"에 적힌 다른 카드(다른 수법으로 갈아타기, 요구 조건을 낮춰 다시 제안하기, 더 강한 압박으로 올리기)도 이 난이도에서는 꺼내지 않는다. 상대의 의심과 거절에 대해서는 이 블록이 위 [말투/톤]·[사용 가능한 수법]·[진행 강제]보다 우선한다.\n' +
+  '- **의심·거절이 나오면 물러서고, 그래도 이어지면 마무리한다.** 상대가 의심하거나 거절하거나 직접 확인해 보겠다고 하면 새 근거, 불이익 암시, 비밀 유지 요구, 낮춘 요구를 꺼내지 말고 "네, 그럼 확인해 보세요"처럼 상대의 말을 받아들이며 물러선다. 그러고도 상대가 다시 의심하거나 거절하면 요구를 거두고 마무리한다. 아직 요구를 말하기 전이었다면 물러서는 그 응답에서 요구를 짧게 말해 두고 물러선다.\n';
+const BEGINNER_D4_NO_SECRECY = ' 위 [진행 강제]의 "상대가 응하면 실제로 진행시킨다"에 예로 든 비밀 유지 요구도 이 난이도에서는 하지 않는다.';
+export const BEGINNER_D4_TEXT_CHANGES: readonly (readonly [string, string])[] = [
+  [BEGINNER_D4_NEW_TAIL_HEAD + BEGINNER_ENDING_HANGUP, BEGINNER_D4_OLD_TAIL],
+  [BEGINNER_D4_NEW_TAIL_HEAD + BEGINNER_ENDING_NO_HANGUP, BEGINNER_D4_OLD_TAIL],
+  [BEGINNER_D4_NO_SECRECY, ""],
+];
+/** D4로 초급(끊기 변형 NONE) 조립이 늘어난 글자 수 — 중급 · 고급은 0. */
+export const BEGINNER_D4_LENGTH_DELTA_NONE =
+  BEGINNER_D4_NEW_TAIL_HEAD.length + BEGINNER_ENDING_NO_HANGUP.length - BEGINNER_D4_OLD_TAIL.length + BEGINNER_D4_NO_SECRECY.length;
 
 /** ⑪ P2 시나리오 문면 교체 — [지금, 이전] 쌍(전부 되돌림). `functions/src/scenarios/*.prompt.ts` · `flowVariants.ts`와 글자 단위로 같다. */
 export const P2_TEXT_CHANGES: readonly (readonly [string, string])[] = [

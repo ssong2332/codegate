@@ -77,7 +77,7 @@ export async function collectToolResponses(
 // ══════════════════════════════════════════════════════════════════════════════════════════
 // §59.6 ②~⑥ — 실제 라우팅(판정만, 부수효과 0)
 
-export type ResolvedToolCallKind = "send_prepared_sms" | "offer_verification_desk" | "end_call" | "unsupported";
+export type ResolvedToolCallKind = "send_prepared_sms" | "offer_verification_desk" | "end_call" | "report_loan_review" | "unsupported";
 
 /**
  * §59.6 ②(G385) — `toolCall`이 부른 함수 이름을 **하드코딩된 문자열이 아니라
@@ -94,6 +94,8 @@ export function resolveToolCallKind(
   if (name === liveTools.offerVerificationDesk) return "offer_verification_desk";
   // T192 C5(§79.8 R1) — 서버가 이 세션에 `end_call`을 선언했을 때만(이름은 서버 값 · 하드코딩 0 — G385).
   if (liveTools.endCall !== undefined && name === liveTools.endCall) return "end_call";
+  // ⭐ PR-B — 정당한 제3자 레그에만 선언된다(이름은 서버 값).
+  if (liveTools.reportLoanReview !== undefined && name === liveTools.reportLoanReview) return "report_loan_review";
   return "unsupported";
 }
 
@@ -109,10 +111,19 @@ export function endCallBatchHasOtherCalls(
   liveTools: LiveTools | undefined,
 ): boolean {
   const endCallName = liveTools?.endCall;
-  return calls.some((call) => endCallName === undefined || call.name !== endCallName);
+  // ⭐ PR-B — 결과 보고(`report_loan_review`)는 화면에 아무것도 띄우지 않는다(문자 · 창구 0) — 같은 배치여도 끊기를 막지 않는다.
+  const reportName = liveTools?.reportLoanReview;
+  return calls.some((call) => endCallName === undefined || (call.name !== endCallName && (reportName === undefined || call.name !== reportName)));
 }
 
 /** T192 C5 — `end_call`의 `reason` 인자 원값(문자열만). 정규화 · 판정은 서버(`normalizeScammerHangupKind` — 거절 0). */
+/** ⭐ PR-B — `report_loan_review`의 `outcome` 인자(고정 enum 밖 = undefined → 보류로 기록하지 않고 실패 문면). */
+export function readLoanReviewOutcomeArg(args: unknown): "approved" | "held" | undefined {
+  if (typeof args !== "object" || args === null) return undefined;
+  const outcome = (args as { outcome?: unknown }).outcome;
+  return outcome === "approved" || outcome === "held" ? outcome : undefined;
+}
+
 export function readEndCallReasonArg(args: unknown): string | undefined {
   if (typeof args !== "object" || args === null) return undefined;
   const reason = (args as { reason?: unknown }).reason;

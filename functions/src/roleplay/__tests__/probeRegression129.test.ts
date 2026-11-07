@@ -718,7 +718,8 @@ test("[§129.13 (c) C5] '그렇게 할게요'는 따름 약속 — 요구 없는
 });
 
 test("[§129.13 (e)] 안전계좌 이체형 — 화면 제출 직후 '이체 완료했어요'는 송금 범주 이행 보고 → 화면 순간 하나(T1 · ㉠) · (a) 부인 + 방법 질문은 속음 아님", () => {
-  const tactics = resolveSessionScenarioPrompt("institutional-impersonation", "fv-c5fj")!.weakenedTactics;
+  // PR-B — fv-c5fj는 3통화(대출 신청 링크 수법 포함)로 바뀌었다 ⇒ 단일 통화 안전계좌 이체형 판정은 같은 루트의 종전 변형 fv-pgqt로 본다.
+  const tactics = resolveSessionScenarioPrompt("institutional-impersonation", "fv-pgqt")!.weakenedTactics;
   const lines: [role: "scammer" | "user", text: string][] = [
     ["scammer", "여보세요, 고객님 맞으시죠? 저는 한빛지방검찰청 금융범죄수사팀 수사관입니다."],
     ["user", "네 맞는데요, 무슨 일이세요?"],

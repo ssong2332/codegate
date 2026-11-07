@@ -52,6 +52,9 @@ import { stripLeakedThought } from "../realtime/thoughtLeak";
 import { resolveReportTimeBaseMs } from "../session/answeredAt";
 import { personaCardKind } from "../scenarios/personaCardCatalog";
 import { findDialEntry } from "../scenarios/dialDirectory";
+import { buildTacticPremiseText } from "./tacticPremise";
+import { isAmountComparison } from "../roleplay/screenAction";
+import { resolveParticipantHangup } from "./participantHangup";
 
 /**
  * 2026-11-07 Edge 시험 판 27 — 공식 번호 확인 기록.
@@ -164,6 +167,15 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     listOtpItems(session.scenarioId).map((item) => withSessionOtp(item, sessionId).otpCode!),
     // §142 N3 — 다통화 변형은 대사의 수법을 그 통화 목록에서만 고른다(통화 번호 = 메시지 `legIndex`).
     multiCallLegTactics(multiCallVariant),
+    // 2026-11-07 Edge 재시험 — 요구 수법 문구 키를 시나리오 설정 문구(기본 사연 · 문자 제목)와 구별한다(하지 않은 수법이 목록에 오르던 것).
+    buildTacticPremiseText(session.scenarioId),
+    // ⭐ PR-B — 정당한 제3자 통화(대출 실행 확인 상담원)는 사기 대사가 아니고, 그 결과(실행)만 속은 순간으로 올린다(판정표 G).
+    multiCallVariant?.legs.some((leg) => leg.genuine)
+      ? {
+          legIndexes: multiCallVariant.legs.flatMap((leg, i) => (leg.genuine ? [i] : [])),
+          ...(session.loanReview ? { loanReview: session.loanReview.outcome } : {}),
+        }
+      : undefined,
   );
 
   // ②-b 통화 중 문자 이벤트 스냅샷(T89, §15.1.5, AC-059) — `sessions/{sid}/inCallSms`를 **1회 추가
@@ -200,6 +212,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       ...(data.landingIdentityAt ? { landingIdentityAtMs: data.landingIdentityAt.toMillis() } : {}),
       ...(data.landingConvertedAt ? { landingConvertedAtMs: data.landingConvertedAt.toMillis() } : {}),
       ...(data.landingAmountAt ? { landingAmountAtMs: data.landingAmountAt.toMillis() } : {}),
+      // 2026-11-07 Edge 재시험 — 문자 링크 이체 화면의 요구액 대비 비교(승격 순간 문장 전용 · 스냅샷에 싣지 않는다).
+      ...(isAmountComparison(data.landingAmountComparison) ? { landingAmountComparison: data.landingAmountComparison } : {}),
       ...(data.fakeLandingId ? { fakeLandingId: data.fakeLandingId } : {}),
     };
   });
@@ -366,6 +380,15 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     challengeId: session.challengeId,
   });
   const officialCheck = resolveOfficialCheck(session.scenarioId, session.relay?.genuineNumberId);
+  // 사용자 결정 2026-11-07 "방어로 집계" — 참가자가 먼저 끊었고 그 전에 속은 순간이 없으면 잘 대처함(`participantHangup.ts` P1~P4 · 판정 무변경).
+  // 사용자 결정 2026-11-07 "단일 통화도 집계" — 단일 통화의 참가자 종료도 같은 블록(종료 사유는 그 모듈 안에서만 읽는다 · G511 좁힘).
+  const participantHangup = resolveParticipantHangup({
+    session,
+    isMultiCall: multiCallVariant !== undefined,
+    messages,
+    deceivedMoments: mock.deceivedMoments,
+    baseMs: reportTimeBaseMs,
+  });
   const reportDoc: ReportDoc = {
     reportId: sessionId,
     sessionId,
@@ -388,6 +411,7 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     ...(routeSummary ? { routeSummary } : {}),
     // 2026-11-07 Edge 시험 판 27 — 진짜 기관 번호로 직접 걸어 확인한 사실(서버 `relay.genuineNumberId` · 부재 = 필드 0).
     ...(officialCheck ? { officialCheck } : {}),
+    ...(participantHangup ? { participantHangup } : {}),
     createdAt: Timestamp.now(),
     scenarioId: session.scenarioId,
     channel: session.channel ?? "voice",

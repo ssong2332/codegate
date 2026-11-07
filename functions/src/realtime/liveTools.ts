@@ -19,6 +19,7 @@ import { hasVerifyIntercept, VERIFY_DECLINE_ALREADY } from "../scenarios/verifyI
 import { sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
 import { isNonLastRelayLeg, type HangupRelayContext } from "../scammerHangup/decide";
 import { SCAMMER_HANGUP_FAILURE_INSTRUCTION } from "../scammerHangup/guidance";
+import { LIVE_TOOL_REPORT_LOAN_REVIEW_NAME } from "../roleplay/genuineLegPrompt";
 
 /**
  * §59.5 T1 — 클라가 하드코딩하지 않도록 이름은 `createRealtimeCall` 응답으로도 내려간다(G385).
@@ -236,6 +237,47 @@ export function buildLiveToolDeclarations(
   return [{ functionDeclarations: declarations }];
 }
 
+/**
+ * ⭐ PR-B(2026-11-07 · 기관 사칭 고급 3통화 — 설계 §7) — 정당한 제3자 레그(대출 실행 확인 상담원)의 결과 보고. 클라는 `recordLoanReview`로 서버에 적는다
+ * (세션 `loanReview` — 통화 3의 문자 선언 · 맥락 줄이 이 값을 본다). 값은 고정 enum 하나(대사 0).
+ */
+export const LIVE_TOOL_REPORT_LOAN_REVIEW = LIVE_TOOL_REPORT_LOAN_REVIEW_NAME;
+const REPORT_LOAN_REVIEW_DECLARATION: FunctionDeclaration = {
+  name: LIVE_TOOL_REPORT_LOAN_REVIEW,
+  description:
+    "대출 실행 확인 결과를 정했을 때, 결과를 고객에게 말하기 전에 한 번 부른다. outcome은 approved(본인 의사로 확인돼 실행) 또는 held(보이스피싱이 의심돼 보류) 중 하나다. 결과를 받은 뒤 그 결과를 안내한다.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      outcome: {
+        type: Type.STRING,
+        format: "enum",
+        enum: ["approved", "held"],
+      },
+    },
+    required: ["outcome"],
+  },
+  behavior: TOOL_BEHAVIOR,
+};
+/** PR-B — 결과 보고가 서버에 닿지 못했을 때 모델에게 돌려줄 1줄(결과는 그대로 안내하게 한다 — 보고 실패는 통화 3이 보류로 진행). */
+export const REPORT_LOAN_REVIEW_FAILURE_INSTRUCTION = "(결과 기록이 접수됐다. 정한 결과를 그대로 고객에게 안내하라.)";
+
+/** PR-B — 정당한 제3자 레그의 도구 = 결과 보고 + 끊기(문자 · 확인 창구 0). */
+export function buildGenuineLegToolDeclarations(): Tool[] {
+  return [{ functionDeclarations: [REPORT_LOAN_REVIEW_DECLARATION, END_CALL_DECLARATION] }];
+}
+
+/** PR-B — 정당한 제3자 레그의 도구 이름(`buildGenuineLegToolDeclarations`와 같은 판정). */
+export function buildGenuineLegToolNames(): LiveToolNames {
+  return {
+    reportLoanReview: LIVE_TOOL_REPORT_LOAN_REVIEW,
+    reportLoanReviewFailureInstruction: REPORT_LOAN_REVIEW_FAILURE_INSTRUCTION,
+    endCall: LIVE_TOOL_END_CALL,
+    endCallFailureInstruction: SCAMMER_HANGUP_FAILURE_INSTRUCTION,
+    failureInstruction: LIVE_TOOL_FAILURE_INSTRUCTION,
+  };
+}
+
 /** §59.6 — 콜러블이 아예 닿지 못했을 때 모델에게 돌려줄 서버 소유 한국어 1줄(G386). */
 export const LIVE_TOOL_FAILURE_INSTRUCTION =
   "(지금은 문자를 보낼 수 없다. 문자를 보냈다고 말하지 말고 하던 이야기를 그대로 이어가라.)";
@@ -255,6 +297,9 @@ export type LiveToolNames = {
    */
   endCall?: typeof LIVE_TOOL_END_CALL;
   endCallFailureInstruction?: string;
+  /** ⭐ PR-B — 정당한 제3자 레그만(`buildGenuineLegToolNames`). 결과 보고 도구 이름과 보고 실패 문면(쌍). */
+  reportLoanReview?: string;
+  reportLoanReviewFailureInstruction?: string;
   /**
    * 문자 전용 실패 문면 — **필수 그대로**(클라 타입이 필수라서). `end_call`만 선언된 세션에서도 실리지만 무해하다:
    * 그 문면을 쓰는 분기(문자 도구)가 그 세션에 없다(§79.19 (5) 6).

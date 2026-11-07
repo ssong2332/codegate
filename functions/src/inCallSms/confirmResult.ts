@@ -80,6 +80,12 @@ export function transferClaimsReachDemandStages(userTexts: readonly string[], de
 export const LANDING_SUBMITTED_INSTRUCTION =
   "(앱 확인: 상대가 방금 문자 링크 화면에서 이체하기를 눌러 이체를 마쳤다. 이체가 끝난 것으로 받아들이고, 아직 완료되지 않았다거나 다시 이체하라는 말은 하지 마라. 이번 대답에서 입금 확인이 끝났다고 그럴듯하게 알려 주고, 상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
 
+/** ⭐ PR-B — 앱 안 대출 신청 화면 id(`scenarios/mockScreens.ts` 카탈로그 · 클라 `MessengerFakeLanding.tsx` `LoanApplyMockup`). */
+export const LOAN_APPLY_LANDING_ID = "loan-apply";
+/** ⭐ PR-B(판정표 L0) — 대출 신청 화면 제출 맥락 1줄. 금액 · 용도는 앱이 알리지 않는다(값 0 — G138). 다음 단계(확인 전화 코칭)로 넘어가게 한다. */
+export const LOAN_APPLY_SUBMITTED_INSTRUCTION =
+  "(앱 확인: 상대가 방금 문자 링크의 대출 신청 화면에서 신청을 마쳤다. 신청이 접수된 것으로 받아들이고, 아직 안 됐다거나 다시 신청하라는 말은 하지 마라. 이번 대답에서 신청이 접수됐다고 짧게 확인하고, 흐름의 다음 단계로 넘어가라.)";
+
 /**
  * N1(실기기 신고 2026-11-01 — *"요구하는 금액보다 더 적은 금액을 보내도 통과"*) — 이체 화면이 보낸 요구액 대비 비교로 고르는 제출 맥락 1줄.
  * | # | If | Then |
@@ -99,7 +105,13 @@ export const LANDING_SUBMITTED_SHORT_INSTRUCTION =
 export const LANDING_RESUBMITTED_FULL_INSTRUCTION =
   "(앱 확인: 상대가 모자랐던 금액을 방금 문자 링크 화면에서 마저 보내 이제 요구한 금액이 다 들어왔다. 입금 확인이 끝났다고 그럴듯하게 알려 주고, 상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
 
-export function landingSubmittedInstructionFor(comparison: "less" | "equal" | "more" | undefined, resubmitted: boolean): string {
+export function landingSubmittedInstructionFor(
+  comparison: "less" | "equal" | "more" | undefined,
+  resubmitted: boolean,
+  /** ⭐ PR-B — 제출된 화면 id. 대출 신청 화면(`loan-apply`)이면 L0(이체가 아니라 신청 접수 문면). 부재 = 종전 판정표. */
+  landingId?: string,
+): string {
+  if (landingId === LOAN_APPLY_LANDING_ID) return LOAN_APPLY_SUBMITTED_INSTRUCTION; // L0
   if (comparison === "less") return LANDING_SUBMITTED_SHORT_INSTRUCTION; // L1
   if (resubmitted) return LANDING_RESUBMITTED_FULL_INSTRUCTION; // L2
   return LANDING_SUBMITTED_INSTRUCTION; // L3

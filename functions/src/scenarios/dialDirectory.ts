@@ -34,7 +34,21 @@ export const SUPERVISOR_OFFICIAL_NUMBER_ID = "supervisor-official";
  */
 export const PROSECUTOR_OFFICIAL_NUMBER_ID = "prosecutor-official";
 
+/** ⭐ PR-B — 기관 사칭 고급 3통화: 입금 안내 문자 속 가상 캐피탈 대출센터 번호(= 대출 확인 상담원 번호). 참가자가 걸면 진짜 안내(방어 종료). */
+export const LOAN_CAPITAL_CENTER_NUMBER_ID = "loan-capital-center";
+
 export const DIAL_DIRECTORY: Readonly<Record<string, readonly DialEntry[]>> = {
+  "institutional-impersonation": [
+    {
+      numberId: LOAN_CAPITAL_CENTER_NUMBER_ID,
+      number: "02-0719-3300",
+      genuineNotice: [
+        "비대면 대출센터 자동 안내입니다.",
+        "검찰 · 경찰 · 금융 당국은 대출을 받으라고 하거나 대출금을 다른 계좌로 옮기라고 하지 않습니다.",
+        "누군가의 지시로 대출을 받으셨다면 대출금을 보내지 마시고, 대출계약 철회와 지급정지를 신청해 주세요.",
+      ],
+    },
+  ],
   "card-company-impersonation": [
     { numberId: CARD_FAKE_CALLBACK_NUMBER_ID, number: "02-0762-5513" },
     {

@@ -179,6 +179,29 @@ export function finalTransferScreenSms(scenarioId: string, declared: readonly Fl
   return landingId !== undefined && isBankTransferLanding(landingId) ? screen : undefined;
 }
 
+/**
+ * ⭐ PR-B(2026-11-07 · 기관 사칭 고급 3통화 — 설계 §5 L-a) — 화면 보류 레그(`holdUntilScreens`)의 4-c행 입력. 마지막이 아닌 레그도 그 레그가 선언한
+ * **화면을 여는 문자**를 모두 마칠 때까지 goal 끊기를 막는다(포기 끊기 `give_up`은 4-c를 지나므로 그대로 통과).
+ * | # | If | Then |
+ * |---|---|---|
+ * | S1 | 선언 문자 중 화면을 여는 것이 아직 도착하지 않았다 | 대기(참) — 이체 · 대출 신청을 꺼내기 전 끝내지 않는다 |
+ * | S2 | 도착했지만 그 화면을 제출하지 않았다 | 대기(참) |
+ * | S3 | 제출했지만 마지막 제출이 요구액보다 적다(N1 `less`) | 대기(참) |
+ * | S4 | 그 밖(화면 문자 전부 제출 · 화면 문자 0) | 거짓 |
+ */
+export function isLegScreenHoldPending(input: {
+  scenarioId: string;
+  declared: readonly FlowVariantSms[];
+  delivered: readonly DeliveredSmsRecord[];
+}): boolean {
+  for (const item of input.declared) {
+    if (findInCallSmsItem(input.scenarioId, item.smsId)?.fakeLandingId === undefined) continue;
+    const record = input.delivered.find((d) => d.smsId === item.smsId);
+    if (record === undefined || record.landingSubmitted !== true || record.landingAmountComparison === "less") return true;
+  }
+  return false;
+}
+
 /** D-3 — 이 선언의 결정 화면 문자(선언 순서상 마지막 · 없으면 undefined). */
 export function finalDecisionScreenSms(scenarioId: string, declared: readonly FlowVariantSms[]): FlowVariantSms | undefined {
   const screens = declared.filter(

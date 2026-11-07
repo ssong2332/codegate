@@ -18,6 +18,7 @@
 // | M7 | 제출 사실 없음 ∧ 분기 "다" ∧ 그 밖 입력 화면 | "잘 대응한 지점입니다 — 입력 내용을 보내지 않았습니다." |
 // | M8 | 그 밖 | 종전 분기 문구(`mockScreenTimelineCopy.ts`) |
 // | O1 | `officialCheck` 있음 | "{이름}({번호})로 직접 걸어 확인했습니다" — 잘 대처한 행동 |
+// | H1 | `participantHangup` 있음(사용자 결정 2026-11-07 "방어로 집계" — 먼저 끊었고 그 전에 속은 순간 없음) | "잘 대처함 · 먼저 전화를 끊음" |
 
 function parseSeconds(timeLabel: string | null | undefined): number | null {
   const m = typeof timeLabel === "string" ? timeLabel.trim().match(/^(\d+)초 시점$/) : null;
@@ -79,6 +80,16 @@ export function mockScreenSubmittedText(entry: MockScreenFactEntry): string | nu
   return amount ? `이 화면에서 이체를 진행했습니다. ${amount}` : "이 화면에서 이체를 진행했습니다.";
 }
 
+/**
+ * M8(2026-11-07 Edge 재시험 — 기관 사칭 고급 문자 링크 이체 화면 · 980만 원 요구에 300만 원 제출인데 "적게 보냄" 문장 0) — 통화 중 문자 경로의
+ * 이체 제출 순간 카드에 붙는 금액 문장. 서버가 그 순간에만 `amountComparison`을 싣는다(메신저 경로는 화면 항목 M4가 낸다 — 중복 0).
+ * 값이 3종이 아니면 `null`(문장 0 — 옛 리포트).
+ */
+export function momentAmountText(moment: { amountComparison?: unknown }): string | null {
+  const value = moment.amountComparison;
+  return value === "less" || value === "equal" || value === "more" ? AMOUNT_SENTENCE[value] : null;
+}
+
 /** M6 · M7 — 응하지 않고 닫은 입력 · 이체 화면의 칭찬 문구. 설치 화면이면 `null`(종전 "권한 허용" 문구가 맞다). */
 export function mockScreenDeclinedText(entry: MockScreenFactEntry): string | null {
   if (entry.kind === "app-install") return null;
@@ -102,4 +113,22 @@ export const OFFICIAL_CHECK_TITLE = "잘 대처함 · 공식 번호로 직접 �
 /** O1 — 문장. */
 export function officialCheckText(view: OfficialCheckView): string {
   return `${view.label}(${view.number})로 직접 걸어 사실을 확인했습니다. 상대가 알려 준 번호가 아니라 스스로 찾은 공식 번호로 확인한 것은 가장 확실한 대처입니다.`;
+}
+
+export type ParticipantHangupView = { legIndex: number; timeLabel?: string };
+
+/** H1 — 서버 값 읽기(모양이 다르면 `null` = 블록 0). */
+export function readParticipantHangup(raw: unknown): ParticipantHangupView | null {
+  if (!raw || typeof raw !== "object") return null;
+  const { legIndex, timeLabel } = raw as { legIndex?: unknown; timeLabel?: unknown };
+  if (typeof legIndex !== "number" || !Number.isInteger(legIndex) || legIndex < 0) return null;
+  return typeof timeLabel === "string" && parseSeconds(timeLabel) !== null ? { legIndex, timeLabel } : { legIndex };
+}
+
+export const PARTICIPANT_HANGUP_TITLE = "잘 대처함 · 먼저 전화를 끊음";
+
+/** H1 — 문장(시각 표기는 화면의 `formatMomentLabel` 결과를 받는다 · 없으면 시각 없이). */
+export function participantHangupText(momentLabel: string | null): string {
+  const when = momentLabel ? `${momentLabel}에 ` : "";
+  return `${when}상대의 요구에 응하기 전에 먼저 전화를 끊었습니다. 의심이 들면 바로 끊는 것이 가장 빠르고 확실한 대처입니다.`;
 }

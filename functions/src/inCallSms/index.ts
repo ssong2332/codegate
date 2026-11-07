@@ -40,7 +40,7 @@ import { GOAL_WRAP_UP_INSTRUCTION } from "../scammerHangup/guidance";
 import { withModelToolNoRepeat } from "./toolGuidance";
 import { findFlowVariant } from "../scenarios/flowVariants";
 import { LEG_LATER_SMS_DECLINE, LEG_TRANSFER_HANDOFF_INSTRUCTION, isLaterLegSmsPurpose, planLegHandoff } from "../callLegs/legHandoff";
-import { landingSubmittedInstructionFor } from "./confirmResult";
+import { landingSubmittedInstructionFor, LOAN_APPLY_LANDING_ID, LOAN_APPLY_SUBMITTED_INSTRUCTION } from "./confirmResult";
 import { VOUCHER_PURCHASED_INSTRUCTION, isVoucherLanding } from "../scenarios/mockScreens";
 import type {
   DeliverInCallSmsRequest,
@@ -171,7 +171,7 @@ export const deliverInCallSms = onCall<
 
   // ⭐ T191 — 판정 원천은 세션의 흐름 변형 선언이다(카탈로그 고정 턴 폐기). 선언 밖 목적은 보내지 않는다.
   // §142 — 다통화 변형은 현재 레그 문자만 · 하한은 레그 시작 기준(`legScope`).
-  const { declared, reason: declaredReason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId, { relay: session.relay });
+  const { declared, reason: declaredReason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId, { relay: session.relay, loanReview: session.loanReview?.outcome });
   // §142 D1 — 다통화 변형의 레그 넘김 판정 입력(서버 `relay`만 · 다른 시나리오의 변형 = 없음).
   const sessionVariant = findFlowVariant(session.flowVariantId);
   const legVariant = sessionVariant && sessionVariant.scenarioId === session.scenarioId ? sessionVariant : undefined;
@@ -401,6 +401,8 @@ export const recordInCallSmsEvent = onCall<
     await smsRef.update({ [field]: Timestamp.now(), ...comparisonUpdate });
     // §132.7 — 이체 화면 제출을 처음 기록한 순간에만 실시간 사기범용 맥락 1줄을 돌려준다(이미 기록됨 = 없음 · 중복 주입 0).
     // N1 — 요구액보다 적게 보냈으면 모자란 금액을 요구하는 문면(판정표 `landingSubmittedInstructionFor`).
+    // ⭐ PR-B — 대출 신청 화면(`loan-apply`) 제출은 이체가 아니라 신청 접수 문면(판정표 L0).
+    if (event === "landing_submitted" && snap.get("fakeLandingId") === LOAN_APPLY_LANDING_ID) return { recorded: true, contextInstruction: LOAN_APPLY_SUBMITTED_INSTRUCTION };
     if (event === "landing_submitted") return { recorded: true, contextInstruction: landingSubmittedInstructionFor(amountComparison, false) };
   } else if (event === "landing_submitted" && amountComparison !== undefined) {
     await smsRef.update(comparisonUpdate);

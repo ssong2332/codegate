@@ -48,6 +48,7 @@ import {
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import type { DifficultyLevel } from "../shared/difficulty";
 import { generateShareToken } from "./token";
+import { listedChallengeStatus } from "./consentGate";
 import { purgeChallengeArtifacts, selectChallengesToPurge } from "./purge";
 import type { ChallengeDoc, DeletionLogDoc, MessengerChannel, SessionDoc } from "../shared/types";
 import type {
@@ -312,6 +313,7 @@ export const listMyChallenges = onCall<
   denyAnonymous(request.auth);
   const db = getFirestore();
   const snap = await db.collection("challenges").where("creatorUid", "==", request.auth.uid).get();
+  const nowMs = Date.now();
 
   const challenges: ListMyChallengesItem[] = snap.docs.map((doc) => {
     const data = doc.data() as ChallengeDoc;
@@ -324,7 +326,8 @@ export const listMyChallenges = onCall<
     return {
       challengeId: data.challengeId,
       displayName: data.displayName,
-      status: data.status,
+      // D6 — 만료가 지난 미사용 링크는 "expired"(동의 게이트와 같은 판정 · `consentGate.ts`).
+      status: listedChallengeStatus(data.status, data.linkExpiresAt.toMillis(), nowMs),
       resultSharingConsented: Boolean(data.resultSharingConsented),
       suspicionTimeLabel: suppressSuspicion ? null : (data.resultSummary?.suspicionTimeLabel ?? null),
       createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : null,

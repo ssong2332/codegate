@@ -16,7 +16,7 @@ import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { getVerifyOfferTrigger } from "../scenarios/verifyIntercept";
 import { findFlowVariant, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
-import { buildLegRejoinContext, legSentSmsDescriptions, resolveSessionCallLeg } from "../callLegs/legPlan";
+import { buildLegLoanReviewContext, buildLegRejoinContext, legSentSmsDescriptions, resolveSessionCallLeg } from "../callLegs/legPlan";
 import type { VoiceMode } from "../scenarios/publicMeta";
 import type { ChallengeDoc, MessageDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
 import { getRealtimeProvider, requiresServerPromptProvider } from "./provider";
@@ -188,7 +188,11 @@ export const createRealtimeCall = onCall<
   } else if (callLeg && callLeg.legIndex > 0) {
     // 2026-11-07(카드사 고급 R1 · 사용자 지적 "a와 이야기 한 내용을 b나 c가 알면 안되지") — 다통화 다음 레그는 앞 통화 대화를 싣지 않는다
     // (메시지 읽기 0). 같은 일당이 넘겨받았을 사건 골격은 레그 프롬프트(`caseBrief`)에 있다. 아래 메신저 → 통화 갈래로도 가지 않는다.
+    // ⭐ PR-B — 정당한 제3자 통화 뒤 같은 인물이 다시 건 레그(기관 고급 통화 3)는 확인 결과 1줄만 싣는다(대화 원문 0 · 판정표 K).
     priorChatContext = undefined;
+    const legVariant = findFlowVariant(session.flowVariantId);
+    const loanReviewLine = legVariant ? buildLegLoanReviewContext(legVariant, callLeg.legIndex, session.loanReview?.outcome) : undefined;
+    if (loanReviewLine) priorChatContext = loanReviewLine;
   } else if (isEscalatedVoiceCall(session.channel, session.channelHistory)) {
     try {
       const sessionRef = db.collection("sessions").doc(sessionId);

@@ -11,7 +11,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/lib/auth";
 import { deleteChallenge } from "@/lib/api";
-import { fetchMyChallenges, mapChallengesToListItems, type ChallengeListItem } from "@/lib/challenge";
+import {
+  EXPIRED_STATUS_LABEL,
+  PENDING_STATUS_LABEL,
+  fetchMyChallenges,
+  mapChallengesToListItems,
+  type ChallengeListItem,
+} from "@/lib/challenge";
 import { Badge, Button, LoadingStatus } from "@/components/ui";
 
 type PageState = "loading" | "error" | "empty" | "success";
@@ -20,13 +26,16 @@ type PageState = "loading" | "error" | "empty" | "success";
 // 문자열 하나만 대기(caution) 배지로 취급하고, 그 외(전부 완료 계열 라벨)는 완료(success) 배지로
 // 다룬다 — statusLabel 문자열에 결합된 판정이라 다소 취약하지만, 이 화면 파일만 손대라는 태스크
 // 범위상 mapChallengeItems.ts에 원본 status를 노출하도록 바꿀 수 없어 택한 절충이다(구현 보고서
-// 참고). "만료" 배지는 라벨이 대기와 구분되지 않아(원본 데이터에 없음) 만들지 않는다 — 없는
-// 데이터를 지어내지 않는다는 원칙.
-const PENDING_LABEL = "상대가 아직 해보지 않았습니다";
+// 참고). D6(2026-11-07 Edge 실사용 시험 판 33) — 서버 목록이 만료 경과 미사용 링크를 "expired"로 내보내고 매핑이 만료 라벨을
+// 따로 만들므로 "만료"(중립) 배지를 둔다 — 종전에는 만료가 대기 라벨에 묶여 3일이 지난 링크도 "대기"로 보였다.
+const PENDING_LABEL = PENDING_STATUS_LABEL;
 
-function resolveStatusBadge(statusLabel: string): { variant: "caution" | "success"; text: string } {
+function resolveStatusBadge(statusLabel: string): { variant: "caution" | "success" | "neutral"; text: string } {
   if (statusLabel === PENDING_LABEL) {
     return { variant: "caution", text: "대기" };
+  }
+  if (statusLabel === EXPIRED_STATUS_LABEL) {
+    return { variant: "neutral", text: "만료" };
   }
   return { variant: "success", text: "완료" };
 }

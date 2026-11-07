@@ -118,9 +118,42 @@ export function accountLabel(account: Pick<WithdrawAccount, "bankName" | "masked
 const withdrawn = new Map<string, number>();
 const sentToday = new Map<string, number>();
 
-/** 출금 가능 금액(처음 잔액 − 이 세션에서 그 계좌로 보낸 합계). */
+/** 출금 가능 금액(처음 잔액 + 이 세션에 입금된 대출금(첫 계좌만) − 이 세션에서 그 계좌로 보낸 합계). */
 export function availableBalance(ledgerKey: string, account: Pick<WithdrawAccount, "id" | "balance">): number {
-  return Math.max(0, account.balance - (withdrawn.get(`${ledgerKey}:${account.id}`) ?? 0));
+  const deposit = account.id === "main" ? (deposited.get(ledgerKey) ?? 0) : 0;
+  return Math.max(0, account.balance + deposit - (withdrawn.get(`${ledgerKey}:${account.id}`) ?? 0));
+}
+
+// ── ⭐ PR-B(2026-11-07 · 기관 사칭 고급 앱 안 대출 체험) — 대출 신청 · 입금(탭 메모리 · 서버 0 · G138) ─────────────────────────────
+// | 때 | 무엇 |
+// |---|---|
+// | 대출 신청 화면 마지막 버튼(`MessengerFakeLanding.tsx` `LoanApplyMockup`) | 신청 금액을 이 표에 적는다(`recordLoanApplication`) — 콜백 · 네트워크에는 싣지 않는다 |
+// | 입금 안내 문자 도착(대출 실행 확인 결과 = 실행 · 화면이 문자 id로 안다) | 신청 금액을 첫 계좌에 입금(`disburseLoan` — 두 번 불러도 한 번) |
+// | 대출금 보관 이체 화면 | 요구액 대사가 없으면 입금된 대출금을 요구액으로 쓴다(`loanDisbursedAmount`) |
+// 실제 돈 · 실제 대출 0 — 숫자는 이 탭에서만 살고 탭을 닫으면 사라진다.
+const loanApplied = new Map<string, number>();
+const deposited = new Map<string, number>();
+const disbursed = new Map<string, number>();
+
+/** 대출 신청 금액을 적는다(판정 불가 금액은 적지 않는다 · 다시 신청하면 마지막 값). */
+export function recordLoanApplication(ledgerKey: string, raw: string): void {
+  const value = amountValue(raw);
+  if (value !== undefined) loanApplied.set(ledgerKey, value);
+}
+
+/** 신청한 대출금을 첫 계좌에 입금한다(한 세션에 한 번 · 신청 기록이 없으면 0). */
+export function disburseLoan(ledgerKey: string): void {
+  if (disbursed.has(ledgerKey)) return;
+  const value = loanApplied.get(ledgerKey);
+  if (value === undefined) return;
+  disbursed.set(ledgerKey, value);
+  deposited.set(ledgerKey, (deposited.get(ledgerKey) ?? 0) + value);
+}
+
+/** 입금된 대출금(숫자 문자열 · 쉼표 포함 "12,000,000") — 없으면 undefined. */
+export function loanDisbursedAmount(ledgerKey: string): string | undefined {
+  const value = disbursed.get(ledgerKey);
+  return value === undefined ? undefined : String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
 /** 오늘 더 보낼 수 있는 금액(1일 한도 − 이 세션에서 보낸 합계). */

@@ -125,7 +125,9 @@ test("[기관명] ⭐ 서버 출력 전수 — 문자 문서 모든 문자열 �
       for (const [field, value] of Object.entries(doc)) if (typeof value === "string") outputs.push([`${item.smsId}.${field}`, value]);
       if (/○○캐피탈/.test(item.senderLabel + item.body)) {
         capitalSms += 1;
-        assert.ok(String(doc.senderLabel).includes(capitalName) && String(doc.body).includes(capitalName), `${item.smsId}: 발신자·본문이 같은 캐피탈명`);
+        // PR-B — 사기범이 보낸 대출 안내 · 번호만 보이는 입금 안내는 본문에만 캐피탈명이 있다(발신자에 자리표시가 있을 때만 발신자도 대조).
+        if (/○○캐피탈/.test(item.senderLabel)) assert.ok(String(doc.senderLabel).includes(capitalName), `${item.smsId}: 발신자 캐피탈명`);
+        if (/○○캐피탈/.test(item.body)) assert.ok(String(doc.body).includes(capitalName), `${item.smsId}: 본문 캐피탈명`);
         if (!hasBankPlaceholder(item.body)) assert.equal("bankName" in doc, false, `${item.smsId}: 은행 자리표시자가 없으면 bankName 없음`);
       }
       outputs.push([`${item.smsId}.announce`, buildInCallSmsResponse(item, { placed: false, fictionalBankName: bank }).announceInstruction ?? ""]);

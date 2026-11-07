@@ -61,7 +61,9 @@ test("[§124 신고 (2)] 대출 단계 — 실제 논리(부정 사기 대출 �
     assert.match(stage.summary, /왜 대출을 받아야 하는지부터 분명히 설명한다/);
     assert.match(stage.summary, /더 조르지 않고 마무리한다/);
   }
-  assert.equal(findFlowVariant("fv-c5fj")!.goalFollowUpUserTurns, 3, "§117 값 유지 — 코칭 직후 바로 끊는 동작");
+  // ⭐ PR-B — fv-c5fj는 3통화(통화 1 화면 보류 · 통화 3 결정 화면)라 후속 단계 값을 쓰지 않는다. §117 값(3)은 은퇴 fv-pgqt에 남는다.
+  assert.equal(findFlowVariant("fv-c5fj")!.goalFollowUpUserTurns, undefined, "PR-B — 후속 단계 판정 대신 화면 보류 · 4-c");
+  assert.equal(findFlowVariant("fv-pgqt")!.goalFollowUpUserTurns, 3, "§117 값 유지(은퇴 변형)");
 });
 
 test("[§124 신고 (3)] 수사기관 사칭 루트 첫 단계 — 내 정보 목록의 사는 곳 · 이름 · 생년월일을 사건 설명에 섞되 지어내지 않는다", () => {

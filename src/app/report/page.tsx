@@ -38,9 +38,14 @@ import { buildRouteSummaryLine, readRouteSummary, type RouteSummaryView } from "
 import {
   mockScreenDeclinedText,
   mockScreenSubmittedText,
+  momentAmountText,
   mockScreenWhat,
   OFFICIAL_CHECK_TITLE,
   officialCheckText,
+  PARTICIPANT_HANGUP_TITLE,
+  participantHangupText,
+  readParticipantHangup,
+  type ParticipantHangupView,
   pickFirstDeceivedIndex,
   readOfficialCheck,
   splitSmsEvents,
@@ -92,6 +97,8 @@ type DeceivedMoment = {
   correctAction: string;
   /** T129 (b)(§98) — 모의 화면 승격 순간에만. 화면 항목 판정 키(`resolveMockScreenCopy`)로만 쓴다. */
   landingId?: string;
+  /** 2026-11-07 Edge 재시험 — 통화 중 문자 이체 화면 제출 순간의 요구액 대비 비교(서버 값 · 금액 값 0). 문장은 `momentAmountText`. */
+  amountComparison?: unknown;
 };
 
 // T89(§15.1.5, AC-059) — 리포트 문서 안의 **표시 전용** 문자 이벤트 스냅샷. 서버가 이미 최종 표시
@@ -173,6 +180,8 @@ type ReportData = {
   routeSummary: RouteSummaryView | null;
   // 2026-11-07 Edge 시험 판 27 — 진짜 기관 번호로 직접 걸어 확인함(부재 = 블록 0).
   officialCheck: OfficialCheckView | null;
+  // 사용자 결정 2026-11-07 "방어로 집계" — 먼저 끊었고 그 전에 속은 순간 없음(부재 = 블록 0).
+  participantHangup: ParticipantHangupView | null;
 };
 
 type PageState = "no-session" | "loading" | "error" | "loaded";
@@ -232,6 +241,7 @@ export default function ReportPage() {
           : undefined,
       routeSummary: readRouteSummary(data.routeSummary),
       officialCheck: readOfficialCheck(data.officialCheck),
+      participantHangup: readParticipantHangup(data.participantHangup),
     };
   }, []);
 
@@ -590,6 +600,24 @@ export default function ReportPage() {
         )}
 
         {/* 2026-11-07 Edge 시험 판 27 — 진짜 기관 번호로 직접 걸어 확인한 행동(서버 `officialCheck` · `reportAccuracy.ts` O1). */}
+        {/* 사용자 결정 2026-11-07 "방어로 집계" — 참가자가 먼저 끊은 행동(서버 `participantHangup` · `reportAccuracy.ts` H1). */}
+        {report.participantHangup && (
+          <>
+            <div className="flex items-start gap-2.5">
+              <svg width="20" height="20" viewBox="0 0 16 16" className="mt-0.5 shrink-0" aria-hidden="true">
+                <circle cx="8" cy="8" r="7" fill="var(--success)" />
+              </svg>
+              <div>
+                <p className="text-lg font-bold text-ink">{PARTICIPANT_HANGUP_TITLE}</p>
+                <p className="mt-0.5 text-lg leading-relaxed text-ink-sub">
+                  {participantHangupText(report.participantHangup.timeLabel ? formatMomentLabel(report.participantHangup.timeLabel) : null)}
+                </p>
+              </div>
+            </div>
+            <div className="h-px bg-neutral-tint" />
+          </>
+        )}
+
         {report.officialCheck && (
           <>
             <div className="flex items-start gap-2.5">
@@ -688,6 +716,9 @@ export default function ReportPage() {
                           <Badge variant="caution">{displayTactic(entry.moment.tactic)}</Badge>
                         )}
                       </div>
+                      {momentAmountText(entry.moment) && (
+                        <p className="mt-2 text-lg text-ink">{momentAmountText(entry.moment)}</p>
+                      )}
                       <p className="mt-2 text-lg text-ink">
                         <span className="font-semibold">이렇게 했어야 해요: </span>
                         {entry.moment.correctAction}

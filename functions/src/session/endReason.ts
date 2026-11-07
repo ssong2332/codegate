@@ -30,3 +30,21 @@ export function resolveRecordedEndReason(
   if (requested === "scammer_ended" && !session.scammerHangup) return "user_ended";
   return requested;
 }
+
+/**
+ * 2026-11-07(사용자 결정 "단일 통화도 집계 (권장)" · 메인 지시 — 조건 "참가자가 끊은 통화 · 사기범이 끊은 통화 · 오류 종료가 아닌 것") —
+ * **통화 화면의 통화 종료 버튼으로 끝낸 세션**에만 서버 표식 `participantHangupButton: true`를 쓴다. 리포트 "잘 대처함 · 먼저 전화를 끊음"(단일 통화)의 유일한 근거다.
+ * | # | If(요청 `hangupButton` · 요청 사유 · 기록 사유) | Then |
+ * |---|---|---|
+ * | H1 | `hangupButton === true`(정확 일치) ∧ 요청 사유 `user_ended` ∧ 기록 사유 `user_ended` | 표식 쓴다 |
+ * | H2 | 그 밖(필드 없음 · `true` 아닌 값 · `limit_reached` · `scammer_ended` — 강등돼 `user_ended`로 기록돼도) | 쓰지 않는다 |
+ * 클라가 이 값을 싣는 곳은 통화 화면 `handleHangup`의 종료 1곳뿐이다(원격 끊김 · 오류 · 시간 초과 · 새로고침 복원 · "훈련 종료" 버튼 = 싣지 않음 — 배선 단언).
+ * ⛔ 판정 입력이 아니다 — 리포트는 이 표식을 표시 블록 하나에만 쓴다(G511).
+ */
+export function shouldMarkParticipantHangupButton(
+  rawHangupButton: unknown,
+  requested: AllowedEndSessionReason,
+  recorded: SessionEndReason,
+): boolean {
+  return rawHangupButton === true && requested === "user_ended" && recorded === "user_ended";
+}

@@ -49,7 +49,7 @@ export type SendMessageResponse = {
    * §142(PR-3) — 다통화 변형의 마지막이 아닌 레그가 끝났다(`ended`는 `false` — 세션 계속). `exit`대로 화면이 다이얼(참가자 발신) ·
    * 연결(호 전환)을 열고 `startCallLeg`로 다음 레그를 시작한다.
    */
-  legEnd?: { exit: "dial" | "transfer" };
+  legEnd?: { exit: "dial" | "transfer" | "incoming" };
   /**
    * T7 추가(옵셔널, T19의 isMock 패턴과 동일) — true면 이번 응답이 MockLlmClient 산출물이라는 뜻
    * (LLM_API_KEY 미확보, PRD Risks급 고지). API.md에는 아직 명시 안 됨 — 클라(src/lib/api/types.ts)

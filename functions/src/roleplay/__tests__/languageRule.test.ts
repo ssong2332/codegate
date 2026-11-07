@@ -56,7 +56,9 @@ test("[언어] 전 시나리오 × 전 난이도 × Live/텍스트 옵션에서 
 
 test("[언어] 시스템 프롬프트를 만드는 호출부 3곳(Live 토큰·sendMessage·오프닝)이 모두 buildSystemPrompt를 쓴다 — 우회 경로 0", () => {
   const src = (rel: string) => readFileSync(path.resolve(__dirname, "../../../src", rel), "utf8");
-  assert.match(src("realtime/geminiProvider.ts"), /systemInstruction: systemPrompt/);
+  // PR-B — 정당한 제3자 레그(대출 실행 확인 상담원)만 사기범 조립 대신 자기 프롬프트를 쓴다 — 그 프롬프트도 같은 언어 규칙을 싣는다(아래 단언).
+  assert.match(src("realtime/geminiProvider.ts"), /systemInstruction: genuineLeg \? buildGenuineLegPrompt\(genuineLeg, input\.fictionalBankName\) : systemPrompt,/);
+  assert.match(src("roleplay/genuineLegPrompt.ts"), /\[leg\.personaPrompt \?\? "", flow, LANGUAGE_RULE,/);
   assert.match(src("realtime/geminiProvider.ts"), /const systemPrompt = buildSystemPrompt\(/);
   assert.match(src("roleplay/index.ts"), /systemPrompt: buildSystemPrompt\(/);
   assert.match(src("roleplay/openingLine.ts"), /systemPrompt: buildSystemPrompt\(/);

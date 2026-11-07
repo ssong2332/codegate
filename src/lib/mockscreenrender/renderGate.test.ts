@@ -176,7 +176,7 @@ function targetTexts(item: CatalogItem): Array<{ field: string; text: string }> 
 // ── ① 존재 대조(R-B) + 건수 단언(R-D) ────────────────────────────────────────────────
 
 test("[T116/렌더-존재] 카탈로그 **도달 가능 전수**의 초기 렌더 대상 문구가 실제 렌더 결과에 등장한다", (t) => {
-  assert.equal(catalogItems.length, 29, "도달 가능 랜딩은 29종이다(credential-form 22 + app-install 7, 2026-11-07 앱 안 결말 납치 이체 · 상품권 구매 · §142 카드사 고급 재구성 안전계좌 이체 · 원격 지원 설치 · P2-d 환급 수수료 · P2-c 메신저 이체 화면 2종 · P2 훈련용 이체 화면 5종 · §53/§51 커밋 D · T194-a parcel-install · T194-c-1 Q2 3종 · §110.2 자녀 보험 접수 앱 · §92.3 고급 전용 2종 · §98 검찰 보관 지갑 · §101 검찰 자산 검수 사이트)");
+  assert.equal(catalogItems.length, 31, "도달 가능 랜딩은 31종이다(credential-form 24 + app-install 7, PR-B 기관 고급 대출 신청 · 대출금 보관 이체 · 2026-11-07 앱 안 결말 납치 이체 · 상품권 구매 · §142 카드사 고급 재구성 안전계좌 이체 · 원격 지원 설치 · P2-d 환급 수수료 · P2-c 메신저 이체 화면 2종 · P2 훈련용 이체 화면 5종 · §53/§51 커밋 D · T194-a parcel-install · T194-c-1 Q2 3종 · §110.2 자녀 보험 접수 앱 · §92.3 고급 전용 2종 · §98 검찰 보관 지갑 · §101 검찰 자산 검수 사이트)");
 
   let compared = 0;
   const perItem: string[] = [];

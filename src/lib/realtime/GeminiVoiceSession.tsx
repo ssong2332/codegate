@@ -23,7 +23,7 @@
 import { useEffect, useRef } from "react";
 import { GoogleGenAI, Modality } from "@google/genai";
 import type { CallLegEnd, CreateRealtimeCallResponse } from "@/lib/api";
-import { deliverInCallSms, deliverVerifyOffer, requestScammerHangup } from "@/lib/api";
+import { deliverInCallSms, deliverVerifyOffer, recordLoanReview, requestScammerHangup } from "@/lib/api";
 import {
   GEMINI_INPUT_SAMPLE_RATE,
   GEMINI_OUTPUT_SAMPLE_RATE,
@@ -43,6 +43,7 @@ import {
   collectToolResponses,
   endCallBatchHasOtherCalls,
   readEndCallReasonArg,
+  readLoanReviewOutcomeArg,
   readSmsPurposeArg,
   resolveToolCallKind,
   type LiveToolFunctionCall,
@@ -756,6 +757,23 @@ export default function GeminiVoiceSession({
               guidance: liveTools.endCallFailureInstruction ?? liveTools.failureInstruction,
             },
           };
+        }
+      }
+
+      // ⭐ PR-B — 정당한 제3자 레그(대출 실행 확인 상담원)의 결과 보고. 판정 · 문면은 서버(`recordLoanReview`) · 화면은 고정 enum 하나만 넘긴다.
+      if (kind === "report_loan_review") {
+        const outcome = readLoanReviewOutcomeArg(call.args);
+        const reportFailure = {
+          id: call.id,
+          name: call.name ?? "unknown",
+          response: { status: "unavailable", guidance: liveTools.reportLoanReviewFailureInstruction ?? liveTools.failureInstruction },
+        };
+        if (outcome === undefined) return reportFailure;
+        try {
+          const result = await recordLoanReview({ sessionId, outcome });
+          return { id: call.id, name: call.name ?? "unknown", response: { status: result.recorded ? "recorded" : "already_recorded", guidance: result.guidance } };
+        } catch {
+          return reportFailure;
         }
       }
 

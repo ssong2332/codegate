@@ -3,7 +3,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { isDocId } from "../shared/requestValidation";
 import { findInCallSmsItem } from "../scenarios/inCallSms";
 import { findMockScreenItem } from "../scenarios/mockScreens";
-import type { LegStartAction, MultiCallVariant } from "./legPlan";
+import type { LegNotReadyReason, LegStartAction, MultiCallVariant } from "./legPlan";
 
 /** 2026-11-07 — `hangup` = 참가자가 통화를 먼저 끊었다(레그 끝 · 세션 계속 — `planLegHangup`). */
 export type StartCallLegAction = LegStartAction | "hangup";
@@ -13,7 +13,7 @@ export type StartCallLegResponse =
   | { status: "ended"; legIndex: number }
   | { status: "genuine"; number: string; contactLabel?: string; notice: readonly string[] }
   | { status: "unknown_number" }
-  | { status: "not_ready"; reason: "not_multi_call" | "leg_in_progress" | "no_next_leg" | "wrong_action" };
+  | { status: "not_ready"; reason: LegNotReadyReason };
 
 const ACTIONS: readonly StartCallLegAction[] = ["dial", "transfer", "callback", "hangup"];
 const MAX_DIALED_LENGTH = 20;
@@ -35,6 +35,17 @@ export function readStartCallLegRequest(data: unknown): StartCallLegRequest {
     throw new HttpsError("invalid-argument", "dialed가 올바르지 않습니다.");
   }
   return { sessionId, action: "dial", dialed };
+}
+
+/** ⭐ PR-B — 다음 통화 조건 화면(레그 `opensNextAfterLanding`)과 그 화면을 여는 선언 문자 id(중복 0 · 문자 없는 화면 = 빈 목록). */
+export function nextLegLandingIds(
+  variant: Pick<MultiCallVariant, "legs" | "scenarioId"> & { sms: readonly { smsId: string }[] },
+): { landingId: string; smsIds: string[] }[] {
+  const landingIds = [...new Set(variant.legs.map((leg) => leg.opensNextAfterLanding).filter((id): id is string => typeof id === "string"))];
+  return landingIds.map((landingId) => ({
+    landingId,
+    smsIds: [...new Set(variant.sms.map((s) => s.smsId))].filter((smsId) => findInCallSmsItem(variant.scenarioId, smsId)?.fakeLandingId === landingId),
+  }));
 }
 
 /** 가로채기 조건(원격 지원 앱 설치 응낙)을 보는 화면 = 변형이 선언한 문자 중 설치 화면으로 이어지는 것. */
