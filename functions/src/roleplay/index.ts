@@ -143,7 +143,7 @@ import {
 } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { decideRepeatBreak, repeatBreakInstruction } from "./repeatBreak";
-import { beginnerRetreatInstruction, decideBeginnerRetreat } from "./beginnerRetreat";
+import { beginnerRetreatInstruction, decideBeginnerRetreat, guardBeginnerRetreatReply } from "./beginnerRetreat";
 import {
   isEscalationTooEarly,
   isRepeatEscalationDuringRefusal,
@@ -1183,7 +1183,15 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         : stageHoldReply(advanceGate.kind, farewellGuard.text, userTurnsNow);
     // §128(4) — 참가자가 건 통화의 "전화 받아 줘서"류 교정(`callCaller.ts` 표 · 그 밖 턴 무변경).
     const calledShapedReplyText = participantCalled ? fixParticipantCalledReply(limitedReplyText) : limitedReplyText;
-    const shapedReplyText = forcedScreenGiveUp ? screenGiveUpReply(calledShapedReplyText) : calledShapedReplyText;
+    const screenShapedReplyText = forcedScreenGiveUp ? screenGiveUpReply(calledShapedReplyText) : calledShapedReplyText;
+    // D4 3차(Edge 재시험 3) 판정표 V(`beginnerRetreat.ts`) — 초급 물러섬 · 마무리 턴에 확인 차단 · 죄책감 · (마무리면) 금액 · 계좌 요구 · 시간 재촉이 남으면
+    // 물러섬 1줄로 바꾸고 칩을 뗀다(모델 종류 무관 · 대사 손질의 마지막 단계 · 끊기 신호는 그대로).
+    const beginnerReplyCheck = guardBeginnerRetreatReply(beginnerRetreatKind, screenShapedReplyText);
+    if (beginnerReplyCheck.replaced) {
+      // G170 — 판정 종류 · 사유 코드 · 턴 번호만(대사 0).
+      logger.info("[D4] 초급 물러섬 턴 대사 교체", { sessionId, kind: beginnerRetreatKind, reason: beginnerReplyCheck.reason, scammerTurnNumber });
+    }
+    const shapedReplyText = beginnerReplyCheck.text;
     // 로그에는 숫자·ID만 싣는다(대사 본문 금지 — G170).
     if (realNameReplacedCount > 0) {
       logger.info("사기범 대사 실존 금융회사명 치환", {
@@ -1204,12 +1212,15 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 헤더 주석 참고 — 라이브 신고 "[계좌]" 리터럴 노출, 시나리오·난이도 무관 공통 재현).
     const finalReplyText = finalizeScammerReplyText(shapedReplyText);
     // S2 · Edge 판 25 — 문장 상한 · 대사 교체 뒤 최종 대사로 이체 화면 칩을 한 번 더 판정한다(계좌 문장이 잘렸으면 칩도 뺀다 — `finalizeBankTransferChips` 표).
-    const savedReplyAttachments = finalizeBankTransferChips(replyAttachments, finalReplyText, {
-      accountNumber: routeAccountNumber,
-      bankName: fictionalBankName,
-      accountHolder: routeVariant?.scenarioId === session.scenarioId ? routeVariant.accountHolder : undefined,
-      history: storedHistory,
-    });
+    // D4 3차 판정표 V — 대사를 물러섬 1줄로 바꾼 턴은 칩을 싣지 않는다.
+    const savedReplyAttachments = beginnerReplyCheck.replaced
+      ? undefined
+      : finalizeBankTransferChips(replyAttachments, finalReplyText, {
+          accountNumber: routeAccountNumber,
+          bankName: fictionalBankName,
+          accountHolder: routeVariant?.scenarioId === session.scenarioId ? routeVariant.accountHolder : undefined,
+          history: storedHistory,
+        });
     await messagesRef.add({
       role: "scammer",
       textMasked: finalReplyText,

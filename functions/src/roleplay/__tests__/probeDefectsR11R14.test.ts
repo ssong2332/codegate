@@ -84,5 +84,6 @@ test("[R14 배선] sendMessage — 판정 · 끊기 신호 give_up · 대사 교
   const roleplay = read("roleplay/index.ts");
   assert.ok(roleplay.includes("const forcedScreenGiveUp = decideForcedScreenGiveUp({"));
   assert.ok(roleplay.includes('const endCallSignal = forcedScreenGiveUp ? ("give_up" as const) : giveUpCheck.endCall;'));
-  assert.ok(roleplay.includes("const shapedReplyText = forcedScreenGiveUp ? screenGiveUpReply(calledShapedReplyText) : calledShapedReplyText;"));
+  // D4 3차(2026-11-08) — G 교체 결과 이름이 `screenShapedReplyText`로 바뀌었다(그 뒤 초급 판정표 V가 `shapedReplyText`를 만든다 · 포기 1줄은 V를 그대로 통과).
+  assert.ok(roleplay.includes("const screenShapedReplyText = forcedScreenGiveUp ? screenGiveUpReply(calledShapedReplyText) : calledShapedReplyText;"));
 });

@@ -108,6 +108,7 @@ test("[R17 · R18 배선] sendMessage — 칩 떼기 · goal 무시 · 재촉 �
   assert.ok(roleplay.includes('      messengerStage: session.channel === "messenger",\n'));
   // R19(2026-11-02) — 재촉 교체가 포기 단계 give_up 분기를 품은 여러 줄 식이 됐다.
   const hold = roleplay.indexOf(": stageHoldReply(advanceGate.kind, farewellGuard.text, userTurnsNow);");
-  const giveUp = roleplay.indexOf("const shapedReplyText = forcedScreenGiveUp ? screenGiveUpReply(");
+  // D4 3차(2026-11-08) — G 교체 결과 이름 `screenShapedReplyText`(그 뒤 초급 판정표 V · 포기 1줄은 V를 그대로 통과).
+  const giveUp = roleplay.indexOf("const screenShapedReplyText = forcedScreenGiveUp ? screenGiveUpReply(");
   assert.ok(hold > 0 && giveUp > hold, "포기 1줄 교체가 뒤(이긴다)");
 });
