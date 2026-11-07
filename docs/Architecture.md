@@ -18385,7 +18385,7 @@ Live는 참가자 음성이 브라우저↔Google로 직접 가고 서버는 발
 1. ⛔ **구현 착수는 메인 세션 승인 뒤.** PR #301 선행 조건은 충족(병합 `9971f89`). scenario-review **S3**와 같은 파일을 고친다(79.13) — 병합 순서는 메인 세션이 정한다.
 2. ⛔ **"끝내지 않는다" 규칙을 지우기만 하지 않는다**(신고 ⑪ 재발). 공통 블록 개정과 `*.prompt.ts` 14벌 개정은 **한 커밋**(G128 · G505 · G506).
 3. ⛔ **`end_call`을 `NON_BLOCKING`으로 선언하지 않는다**(79.3 — 작별이 승인보다 앞서게 된다). 바꾸려면 79.4 프로브 결과로 강등표(79.14)에 행을 더한 뒤.
-4. ⛔ **`endReason` · `scammerHangup`을 리포트 판정 입력으로 쓰지 않는다**(AC-103 (e) · User 답 Q5 · G511).
+4. ⛔ **`endReason` · `scammerHangup`을 리포트 판정 입력으로 쓰지 않는다**(AC-103 (e) · User 답 Q5 · G511). ⚠️ 2026-11-07 좁힘 — 판정 입력은 그대로 금지, `endReason`은 "먼저 전화를 끊음" 표시 블록(`report/participantHangup.ts`)에서만 읽는다(DECISIONS #254).
 5. ⛔ **Mock 턴 · 메신저 채널 · ElevenLabs 경로에서는 끊기 0**(AC-103 (b)② · (f) · PRD OQ-53).
 6. ⛔ **승인 뒤에는 마이크 전송과 클라 텍스트 턴을 멈춘다** — 참가자 말이 새 모델 턴을 열면 "작별 뒤 다시 말하기"가 된다(G510).
 7. ⛔ **AC-006 상시 종료는 끊기 연출 중에도 동작한다** — 공통 종료 함수는 참가자 탭을 막지 않고 *대기를 건너뛰게* 한다(79.9 · G509).
@@ -18777,7 +18777,7 @@ AC-089 (b) *"사용자 완료/속아 넘어감"* 행 → 구현 뒤 = **사기�
 | **G508** | `endSession` 허용목록 · `scammer_ended` + 표식 없음 → `user_ended` 기록 · 멱등 유지 | `session` 테스트 |
 | **G509** | `callEnding.ts` 전이: 순서 S1→S7 · 재진입 1회 · 끊기 중 참가자 탭 = 대기 건너뛰기 + 사유 유지 · 상시 종료 경로의 대기 0(G309 재지정) | `src/lib/session/callEnding.test.ts` |
 | **G510** | 승인 뒤 마이크 전송 0 · 클라 텍스트 턴 0 · 침묵 넛지 0(S3 병합 뒤) · `onScammerHangupReady`는 응답 뒤 `turnComplete` + 잔여 재생 뒤(순수 `hangupDrainDelayMs`) | `GeminiVoiceSession` 소스 스캔 + 순수 함수 |
-| **G511** | `functions/src/report/**`에 `endReason` · `scammerHangup` 참조 0 + 같은 대화를 사유만 바꿔 생성해 판정 동일(AC-103 (e) · T192 D ⑤) | `report` 테스트 |
+| **G511** | `functions/src/report/**`에 `endReason` · `scammerHangup` 참조 0 + 같은 대화를 사유만 바꿔 생성해 판정 동일(AC-103 (e) · T192 D ⑤). **2026-11-07 좁힘**(사용자 결정 — 답 원문 "단일 통화도 집계 (권장)", 메인 전달 · DECISIONS #254): `endReason`은 "잘 대처함 · 먼저 전화를 끊음" 블록 모듈 `report/participantHangup.ts` **1곳만** 읽고 그 블록에만 쓴다. 속음 판정(`wasDeceived` · 속은 순간 · 방어 등급 입력)은 계속 사유와 무관 — "판정 동일" 단언 유지. `scammerHangup` · 세션 통째 전개는 그 모듈에서도 금지 | `report` 테스트(`endReasonIndependence` · `participantHangup`) |
 | **G512** | 실시간 한도 → 힌트 `limit_reached` · 종료 화면 허용목록 밖 → `user_ended` | `end/page` 소스 스캔 + `pendingSession` 단위 |
 | **G513** | `transferAccount`는 `kind === "account"` ∧ `fakeLandingId` 있을 때만 · 그 항목 `body`의 부분 문자열 · 역검증(한 글자 바꾼 사본 실패) | `functions/src/scenarios/__tests__/inCallSms.test.ts` 계열 |
 | **G514** | prefill은 `entrySurface === "in-call-sms"`에서만 · 완료 화면에 prefill 값 0(G255 확장) · 제출 무인자 유지(G138) | `mockScreenCopy.test.ts` |

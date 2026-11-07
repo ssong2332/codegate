@@ -368,8 +368,10 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   });
   const officialCheck = resolveOfficialCheck(session.scenarioId, session.relay?.genuineNumberId);
   // 사용자 결정 2026-11-07 "방어로 집계" — 참가자가 먼저 끊었고 그 전에 속은 순간이 없으면 잘 대처함(`participantHangup.ts` P1~P4 · 판정 무변경).
+  // 사용자 결정 2026-11-07 "단일 통화도 집계" — 단일 통화의 참가자 종료도 같은 블록(종료 사유는 그 모듈 안에서만 읽는다 · G511 좁힘).
   const participantHangup = resolveParticipantHangup({
-    relay: session.relay,
+    session,
+    isMultiCall: multiCallVariant !== undefined,
     messages,
     deceivedMoments: mock.deceivedMoments,
     baseMs: reportTimeBaseMs,
