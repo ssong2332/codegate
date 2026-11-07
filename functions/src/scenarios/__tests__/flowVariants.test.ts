@@ -91,7 +91,7 @@ const INTERMEDIATE_EXISTING_TACTIC_EXEMPT: Readonly<Record<string, readonly Axis
 const INTERMEDIATE_SMS_EXEMPT = [
   "family-accident-deepvoice",
   "grandchild-impersonation",
-  "kidnapping-threat",
+  "kidnapping-threat", // 2026-11-07 — 카탈로그는 고급 계좌 문자 1건뿐(중급 = "현행" 문자 0)
   "messenger-child-impersonation-kakao",
   "messenger-friend-loan-kakao",
   "messenger-parcel-smishing-sms",
@@ -191,8 +191,14 @@ test("[T191 S5 범위표 대조 · AC-096 (b) — 명시 예외 3종 제외 · �
   // 예외 집합은 손으로 적었지만 데이터에서 다시 계산해 **정확히 같아야** 한다(늘지도 줄지도 않게).
   const reduced = Object.keys(PUBLIC_SCENARIOS).filter((id) => l3DepthMode(id) === "reduced").sort();
   assert.deepEqual([...ADVANCED_D34_EXEMPT].sort(), reduced, "고급 D3/D4 예외 = L3 reduced 집합");
+  // 2026-11-07(Edge 시험 판 7 · 사용자 결정 "앱 안 화면 추가") — 납치 협박에 카탈로그가 생겼지만 그 문자를 선언하는 것은 고급 변형뿐이다(중급 fv-dxwu = "현행"
+  // 그대로 — 예외 사유 ② §2.6.3 "현행"). 근사식을 "카탈로그가 없거나, 카탈로그 문자를 고급 변형만 선언한다"로 좁혔다(중급 · 초급이 쓰는 문자가 생기면 다시 실패한다).
+  const advancedOnlyCatalog = (id: string) =>
+    (IN_CALL_SMS[id] ?? []).every((item) =>
+      FLOW_VARIANTS.filter((v) => v.scenarioId === id && v.sms.some((d) => d.smsId === item.smsId)).every((v) => v.level === "advanced"),
+    );
   const noSmsCatalog = Object.keys(PUBLIC_SCENARIOS)
-    .filter((id) => !isAdvancedOnlyScenario(id) && (IN_CALL_SMS[id] ?? []).length === 0)
+    .filter((id) => !isAdvancedOnlyScenario(id) && ((IN_CALL_SMS[id] ?? []).length === 0 || advancedOnlyCatalog(id)))
     .sort();
   assert.deepEqual([...INTERMEDIATE_SMS_EXEMPT].sort(), noSmsCatalog, "중급 문자 예외(선언값) = 통화 중 문자 카탈로그가 없는 시나리오");
   // 중급 기존 수법 예외 — 데이터에서 재계산(중급 축 D 범위 밖 값)해 상수와 정확히 같아야 한다.

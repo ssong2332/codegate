@@ -175,6 +175,8 @@ export const ACCOUNT_HOLDER_BANKS: Readonly<Record<string, string>> = {
   문성호: "새솔은행",
   배준영: "한결은행",
   신예린: "다온은행",
+  // 2026-11-07 납치 협박 고급 계좌 문자(`kidnap-ransom-account`) — Edge 시험 판 7에서 협박범이 말로 부른 은행과 같은 이름.
+  박정호: "미르은행",
   // §142 카드사 고급 재구성 안전계좌(`card-safe-account`)
   한도윤: "해담은행",
   // 메신저 변형 가상 예금주(`scenarios/flowVariants.ts` `accountHolder`)

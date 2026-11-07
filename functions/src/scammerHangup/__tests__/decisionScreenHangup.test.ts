@@ -190,10 +190,15 @@ const EXPECTED_GUARDED = [
   // §142 — 카드사 고급 재구성(다통화 · 배정 대기). 결정 화면 = 마지막 레그 안전계좌 이체 화면(card-safe-transfer).
   "fv-k3dn", // 카드사 고급 — 배송 전화 진입
   // 2026-11-07 — fv-r8vb(발급 문자 진입) 배정 은퇴(사용자 승인 "R1로 축소·진행").
+  // ⭐ 2026-11-07(Edge 시험 판 7 · 12 · 사용자 결정 "앱 안 화면 추가") — 앱 밖 결말이 앱 안 화면으로 바뀐 3루트.
+  "fv-k268", // 납치 고급 — 계좌 문자 → 이체 화면(kidnap-ransom-transfer)
+  "fv-w7tb", // 납치 고급(시비 합의금형)
+  "fv-v2mk", // 검찰 고급 — 사건 조회 → 상품권 구매 화면(voucher-purchase) · D-2b에서 옮겼다
 ];
 
-test("[P1 M1 · D-2b] 결정 순간이 말인 4변형은 화면을 선언했어도 4-c 대상이 아니다 — P4 · P5에서 화면으로 바뀌면 옮긴다", () => {
-  assert.deepEqual([...VERBAL_DECISION_VARIANTS].sort(), ["fv-a6lq", "fv-k9ra", "fv-t8ga", "fv-v2mk"]);
+// 2026-11-07 — 상품권형 fv-v2mk는 앱 안 구매 화면이 생겨 4-c 대상으로 옮겼다(4 → 3).
+test("[P1 M1 · D-2b] 결정 순간이 말인 3변형은 화면을 선언했어도 4-c 대상이 아니다 — P4 · P5에서 화면으로 바뀌면 옮긴다", () => {
+  assert.deepEqual([...VERBAL_DECISION_VARIANTS].sort(), ["fv-a6lq", "fv-k9ra", "fv-t8ga"]);
   for (const variantId of VERBAL_DECISION_VARIANTS) {
     const v = FLOW_VARIANTS.find((x) => x.variantId === variantId);
     assert.ok(v && v.retired !== true, `${variantId}: 현행 변형이어야 한다`);

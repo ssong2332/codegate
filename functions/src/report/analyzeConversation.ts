@@ -591,8 +591,26 @@ function isResistanceForReport(replyText: string): boolean {
   return RESISTANCE_PATTERN.test(replyText.replace(ECHOED_OR_NEGATED_RESISTANCE, " "));
 }
 
+// ⭐ 2026-11-07(Edge 시험 판 12 · 사용자 결정 "앱 안 화면 추가") — 상품권 핀 번호 낭독. 구매 화면 결제는 화면 기록(`landing_submitted` → 문자 승격)이 잡고,
+// 화면에 뜬 핀 번호를 **불러 준 순간**은 여기서 잡는다. 핀 값은 서버가 모른다(화면이 만든다 — G138) ⇒ 값 대조가 아니라 요구 + 숫자열로 본다(인증번호 L3과 같은 방식).
+// | # | If(바로 앞 사기범 대사 · 참가자 답) | Then |
+// |---|---|---|
+// | P1 | 대사가 핀 번호를 불러 · 말해 · 알려 · 읽어 달라고 요구하지 않았다 | 이 행 밖(종전 판정) |
+// | P2 | 답에 거절 어휘가 있다 | 이 행 밖 |
+// | P3 | 답에 숫자 4자리 이상(띄어쓰기 · 붙임표로 끊겨도 이어서 센다 · 뒤가 금액 · 날짜 단위면 아님) 또는 개인정보 가림 표지([계좌] · [전화]) 또는 한글 숫자 낱말 6개 이상 | 순응(속은 순간) — 라벨은 세션 목록의 상품권 · 핀 수법 |
+const PIN_REQUESTED = /(?:핀|PIN|pin|Pin)\s*(?:번호|넘버|코드)?[^.?!\n]{0,30}?(?:불러|부르|말씀해|알려|읽어)/;
+const PIN_DIGITS_IN_ANSWER = /(?<![\d,])\d{2,}(?:[\s-]+\d{2,})*(?![\d,]|\s*(?:원|만|천|년|월|일|시|분|살|개|명|장|층))/g;
+const PIN_WORDS_IN_ANSWER = /[공영일이삼사오육칠팔구](?:\s?[공영일이삼사오육칠팔구]){5,}/;
+function isPinGiven(scammerText: string, replyText: string): boolean {
+  if (!PIN_REQUESTED.test(scammerText) || REFUSAL_IN_ANSWER.test(replyText)) return false;
+  const digitCount = Math.max(0, ...(replyText.match(PIN_DIGITS_IN_ANSWER) ?? []).map((run) => run.replace(/\D/g, "").length));
+  // 8자리 이상 숫자열은 저장 전 개인정보 가림(`guardrails` `maskPII`)이 "[계좌]" · "[전화]"로 바꾼다 — 가려진 표지도 숫자열로 센다.
+  return digitCount >= 4 || /\[(?:계좌|전화)\]/.test(replyText) || PIN_WORDS_IN_ANSWER.test(replyText);
+}
+
 function isContextualCompliance(scammerText: string, replyText: string): boolean {
   if (REFUSAL_IN_ANSWER.test(replyText)) return false;
+  if (isPinGiven(scammerText, replyText)) return true;
   if (BIRTH_DATE_DEMAND.test(scammerText) && DATE_IN_ANSWER.test(replyText)) return true;
   if (SECRET_CODE_DEMAND.test(scammerText) && SHORT_CODE_IN_ANSWER.test(replyText)) return true;
   return ENTERED_IN_ANSWER.test(replyText);
@@ -952,7 +970,12 @@ export function analyzeConversation(
     // §129.10 최종 폴백(메인 제안 · 빈 라벨 0) — 문구 키 · 요구 어형 표 · 답 내용 범주가 모두 비면 세션 목록의 대표 요구 수법(`representativeTactic`).
     const representative = labelTactic || fallbackTactic ? undefined : representativeTactic(scopeTactics);
     if (representative) tacticLabelsUsed.add(representative);
-    const tactic = labelTactic ? extractTacticLabel(labelTactic) : (fallbackTactic ?? representative ?? "약화된 사기 수법");
+    // 2026-11-07 핀 낭독(위 P3) — 라벨은 세션 목록의 상품권 · 핀 수법이 문구 키보다 앞선다(인증번호 L3과 같은 이유 — 같은 대사의 비밀 유지 · 압박 라벨이 먼저 잡힌다).
+    const pinLabel = isPinGiven(labelSource.textMasked, userReply.textMasked)
+      ? scopeTactics.map(extractTacticLabel).find((label) => /상품권|핀\s*번호/.test(label))
+      : undefined;
+    if (pinLabel) tacticLabelsUsed.add(pinLabel);
+    const tactic = pinLabel ?? (labelTactic ? extractTacticLabel(labelTactic) : (fallbackTactic ?? representative ?? "약화된 사기 수법"));
     // AC-026 예시("15초 시점에 속았습니다")를 그대로 따르기 위해 turnIndex가 아니라 실제 경과
     // 시간(초)을 라벨로 쓴다 — MessageDoc.createdAt이 이미 존재하므로 정확한 초 단위 계산이
     // 가능하다(구현 판단, Mock 단계라 정밀 음성 타이밍 데이터는 없지만 메시지 write 시각은 실측값).
