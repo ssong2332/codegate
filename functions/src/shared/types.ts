@@ -188,7 +188,17 @@ export type SessionDoc = {
    * §142(다통화 · 카드사 고급 재구성) — 레그 런타임 상태. 서버만 쓴다(레그 시작 콜러블 `startCallLeg` · 끊기 승인 `requestScammerHangup`).
    * 판정은 `callLegs/legPlan.ts`. 부재 = 레그 0(다통화가 아닌 세션은 읽지 않는다). `genuineNumberId` = 진짜 기관 번호로 걸어 방어로 끝난 번호(D3).
    */
-  relay?: { legIndex: number; legStartUserTurns: number[]; connected?: boolean; legEnded?: number; genuineNumberId?: string };
+  relay?: {
+    legIndex: number;
+    legStartUserTurns: number[];
+    connected?: boolean;
+    legEnded?: number;
+    genuineNumberId?: string;
+    // 2026-11-07 — 참가자 끊기(`startCallLeg` hangup) · 같은 레그 재연결 표식(`callLegs/legPlan.ts` `RelayState`). 서버만 쓴다.
+    entry?: "dial" | "transfer" | "incoming";
+    hungUpBy?: "participant";
+    rejoin?: { kind: "redial" | "callback"; atUserTurns: number };
+  };
   // 개발 단계 루트 강제 지정(`session/devRouteOverride.ts` F4) — 요청 `forceVariantId`로 변형을 정했을 때만 `"forced"`. 부재 = 회전 덱 배정.
   routeOverride?: "forced";
   // §142 PR-4 — 다통화 R2(`openerSmsId` 변형): 세션이 수신 통화가 아니라 시작 문자가 도착한 화면에서 시작한다(첫 통화는 참가자 발신). 서버만 쓴다 · 부재 = 수신 통화(종전).

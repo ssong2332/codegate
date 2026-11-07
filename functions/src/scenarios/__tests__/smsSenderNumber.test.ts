@@ -3,7 +3,7 @@
 // 대표번호(15XX · 16XX · 18XX) · 휴대전화(01X) 금지. 같은 시나리오의 문자는 같은 번호(무작위 0).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { IN_CALL_SMS, SMS_SENDER_NUMBER } from "../inCallSms";
+import { CARD_R1_SMS_SENDER, IN_CALL_SMS, SMS_SENDER_NUMBER } from "../inCallSms";
 
 const FICTIONAL_NUMBER = /^(?:02|0[3-6][1-5]|070)-0\d{3}-\d{4}$/;
 
@@ -24,6 +24,14 @@ test("[§104.10] 카탈로그 전 문자 — 자리표시 0000-0000 0 · 발신�
     assert.ok(expected, `${scenarioId}: 번호 표에 없다`);
     for (const item of items) {
       assert.equal(item.senderLabel.includes("0000-0000"), false, item.smsId);
+      // 2026-11-07(카드사 고급 R1 축소) — R1 문자 3통은 보낸 곳마다 다른 번호 · 번호만(`CARD_R1_SMS_SENDER` 표 — 단언은 `cardR1Reduce.test.ts`).
+      const r1Sender = scenarioId === "card-company-impersonation" ? CARD_R1_SMS_SENDER[item.smsId] : undefined;
+      if (r1Sender !== undefined) {
+        assert.equal(item.senderLabel, r1Sender, item.smsId);
+        assert.match(r1Sender, FICTIONAL_NUMBER, item.smsId);
+        checked += 1;
+        continue;
+      }
       assert.ok(item.senderLabel === expected || item.senderLabel.startsWith(`${expected} (`), `${item.smsId}: ${item.senderLabel}`);
       checked += 1;
     }

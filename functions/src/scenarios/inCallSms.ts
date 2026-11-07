@@ -20,8 +20,8 @@
 //     T191(문자 도달 조건) 이후로는 트리거(`smsId` + `afterScammerTurns`)도 클라에 내려가지 않는다 — 발송 여부는
 //     세션 흐름 변형의 `sms` 선언 + `inCallSms/smsGate.ts`가 정한다.
 
-import { CARD_FAKE_CALLBACK_NUMBER_ID } from "./dialDirectory";
-import { CARD_REBUILD_NAMES, CASE_RECORD_NAMES } from "./fictionalNames";
+import { CARD_FAKE_CALLBACK_NUMBER_ID, dialNumberOf } from "./dialDirectory";
+import { CARD_REBUILD_NAMES } from "./fictionalNames";
 
 // §142 — `callback` = 전화번호를 안내하는 문자(번호를 누르면 앱 안 다이얼 화면이 그 번호로 채워진다 · `dialNumberId` 필수 · 링크 · 인증번호 0).
 export type InCallSmsKind = "account" | "link" | "otp" | "callback";
@@ -79,6 +79,21 @@ export const SMS_SENDER_NUMBER: Readonly<Record<string, string>> = {
   "reputation-blackmail-scam": "070-0438-9172",
   "bank-security-verify-scam": "02-0753-8264",
   "courier-customs-scam": "032-0617-4429",
+};
+
+// ⭐ 2026-11-07(카드사 고급 R1 축소 · 메인 지시 "문자 발신처 분리") — R1(fv-k3dn) 문자 3통은 **보낸 곳마다 다른 번호**이고 발신 표시는 **번호만**이다.
+// 근거: 저장되지 않은 번호는 실제 휴대폰 문자함에서 이름 없이 번호만 보인다 · 실제로 보낸 쪽(배송 대행 · 가짜 고객센터 · 자산보호 안내)이 다르다.
+// 종전에는 셋 다 `02-0762-4180 (윤슬카드 …)`라 한 대화방에 묶였다. ⛔ 위 §104.10 표(시나리오 고정 번호)와 이 표 밖 문자의 발신 표시는 무변경.
+// 클라 계약: 문자함 대화방은 `senderLabel`의 번호로 나눈다(이 세 문자는 senderLabel = 번호 그대로).
+// | smsId | 보낸 곳 | 번호 | 근거 |
+// |---|---|---|---|
+// | `card-callback-number` | 카드 배송 대행(배송원 레그) | 02-0767-3051 | 새 가상 번호(국번 첫 자리 0 · 다른 표와 중복 0) |
+// | `card-remote-support-link` | 가짜 고객센터(상담원 레그) | 02-0762-5513 | 참가자가 방금 건 그 고객센터 번호(번호부 `card-fake-callback`) — 그 번호에서 문자가 온다 |
+// | `card-safe-account` | 자산보호 안내(검사 레그) | 070-0462-1593 | 새 가상 인터넷전화 번호(사기 문자 발신에 흔한 070 · 검찰청 대표번호와 다른 번호) |
+export const CARD_R1_SMS_SENDER: Readonly<Record<string, string>> = {
+  "card-callback-number": "02-0767-3051",
+  "card-remote-support-link": dialNumberOf("card-company-impersonation", CARD_FAKE_CALLBACK_NUMBER_ID),
+  "card-safe-account": "070-0462-1593",
 };
 
 const LOAN_SCAM: InCallSmsItem[] = [
@@ -309,7 +324,7 @@ const CARD_COMPANY_IMPERSONATION: InCallSmsItem[] = [
   {
     smsId: "card-callback-number",
     kind: "callback",
-    senderLabel: `${SMS_SENDER_NUMBER["card-company-impersonation"]} (${CARD_REBUILD_NAMES.cardCompany} 배송)`,
+    senderLabel: CARD_R1_SMS_SENDER["card-callback-number"]!,
     body: `[${CARD_REBUILD_NAMES.cardCompany} 배송] 카드 반송 · 사고 접수는 고객센터로 연락 바랍니다.\n고객센터 02-0762-5513`,
     dialNumberId: CARD_FAKE_CALLBACK_NUMBER_ID,
     afterScammerTurns: 7,
@@ -320,7 +335,7 @@ const CARD_COMPANY_IMPERSONATION: InCallSmsItem[] = [
   {
     smsId: "card-remote-support-link",
     kind: "link",
-    senderLabel: `${SMS_SENDER_NUMBER["card-company-impersonation"]} (${CARD_REBUILD_NAMES.cardCompany} 고객센터)`,
+    senderLabel: CARD_R1_SMS_SENDER["card-remote-support-link"]!,
     body: `[${CARD_REBUILD_NAMES.cardCompany}] 명의 도용 피해 확인을 위한 보안 점검 안내입니다.\n아래에서 원격 지원 도우미를 설치해 주세요.`,
     linkDisplayText: "원격 지원 도우미 설치하기",
     fakeLandingId: "card-remote-support-install",
@@ -333,7 +348,7 @@ const CARD_COMPANY_IMPERSONATION: InCallSmsItem[] = [
   {
     smsId: "card-safe-account",
     kind: "account",
-    senderLabel: `${SMS_SENDER_NUMBER["card-company-impersonation"]} (${CASE_RECORD_NAMES.office} 자산보호 안내)`,
+    senderLabel: CARD_R1_SMS_SENDER["card-safe-account"]!,
     body: "[자산보호 안내] 조사 기간 안전계좌 안내\n예금주: 한도윤\nOO은행 503-1847-2260-91\n금액: 9,800,000원\n아래에서 자산 보호 이체를 진행해 주세요.",
     linkDisplayText: "자산 보호 이체 진행하기",
     fakeLandingId: "card-safe-transfer",

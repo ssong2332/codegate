@@ -468,9 +468,12 @@ export type RequestScammerHangupResponse = {
 // --- startCallLeg (§142 카드사 고급 재구성 · functions/src/callLegs/request.ts와 1:1) ---
 /** 통화가 끝난 방식 — `dial` = 참가자가 다시 건다(또는 상대가 다시 건다 · D4) · `transfer` = 호 전환. */
 export type CallLegEnd = { exit: "dial" | "transfer" };
-export type StartCallLegRequest = { sessionId: string; action: "dial" | "transfer" | "callback"; dialed?: string };
+// ⚠️ 2026-11-07 — `hangup`(참가자가 통화를 먼저 끊음 → `ended`)은 **클라가 먼저** 둔 계약이다(서버 구현은 서버 세션 몫 · 메인 세션 보고).
+// 서버가 아직 모르면 `invalid-argument`로 거절하고, 화면은 종전대로 훈련을 끝낸다(`afterHangupResponse` 2행 — 배포 순서와 무관).
+export type StartCallLegRequest = { sessionId: string; action: "dial" | "transfer" | "callback" | "hangup"; dialed?: string };
 export type StartCallLegResponse =
   | { status: "connected"; legIndex: number; callerLabel: string; entry: "dial" | "transfer" | "incoming" }
+  | { status: "ended" }
   | { status: "genuine"; number: string; contactLabel?: string; notice: readonly string[] }
   | { status: "unknown_number" }
   | { status: "not_ready"; reason: "not_multi_call" | "leg_in_progress" | "no_next_leg" | "wrong_action" };

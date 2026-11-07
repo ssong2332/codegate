@@ -204,7 +204,7 @@ test("[UX-014 v1.35 (1)(3)(6) · D-110] remote-hangup — 정본 문구는 상�
 function openHandlersGuarded(code: string): string[] {
   const missing: string[] = [];
   for (const [label, head] of [
-    ["문자함", "const handleOpenSmsOverlay = (trigger: HTMLButtonElement | null) => {"],
+    ["문자함", "const handleOpenSmsOverlay = (trigger: HTMLButtonElement | null, thread: string | null = null) => {"],
     ["확인 시트", "const handleOpenVerifyOverlay = () => {"],
   ] as const) {
     const start = code.indexOf(head);
@@ -226,7 +226,7 @@ test("[C5 리뷰 M1] 문자함 · 확인 시트를 여는 핸들러의 첫 줄 =
 
 test("[C5 리뷰 M1 역검증] 두 가드 중 하나를 지운 사본은 같은 판정식에 걸린다", () => {
   for (const head of [
-    "const handleOpenSmsOverlay = (trigger: HTMLButtonElement | null) => {",
+    "const handleOpenSmsOverlay = (trigger: HTMLButtonElement | null, thread: string | null = null) => {",
     "const handleOpenVerifyOverlay = () => {",
   ]) {
     const start = pageCode.indexOf(head);

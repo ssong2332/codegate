@@ -37,7 +37,15 @@ export type PhoneIconName =
   | "screen-share"
   | "waveform"
   | "more-horizontal"
-  | "send-message";
+  | "send-message"
+  // 2026-11-07 — 다통화 세션의 전화 앱 · 홈 화면 · 인터넷 검색(`CallLegScreens`). 장식(이름은 감싼 버튼이 가진다).
+  | "clock"
+  | "backspace"
+  | "search"
+  | "arrow-in"
+  | "arrow-out"
+  | "nav-recents"
+  | "nav-home";
 
 type PhoneIconProps = {
   name: PhoneIconName;
@@ -244,6 +252,35 @@ function glyph(name: PhoneIconName) {
           <path d="M8.5 12.5l7-3.5-2.5 7-1.5-2.5z" />
         </>
       );
+    case "clock":
+      return (
+        <>
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 7.5V12l3 2" />
+        </>
+      );
+    case "backspace":
+      return (
+        <>
+          <path d="M9 5h10.5a1.5 1.5 0 0 1 1.5 1.5v11a1.5 1.5 0 0 1-1.5 1.5H9l-6-7z" />
+          <path d="M12 9.5l5 5M17 9.5l-5 5" />
+        </>
+      );
+    case "search":
+      return (
+        <>
+          <circle cx="10.5" cy="10.5" r="6.5" />
+          <path d="M15.5 15.5L20.5 20.5" />
+        </>
+      );
+    case "arrow-in":
+      return <path d="M17.5 6.5L7 17M7 9.5V17h7.5" />;
+    case "arrow-out":
+      return <path d="M6.5 17.5L17 7M9.5 7H17v7.5" />;
+    case "nav-recents":
+      return <path d="M7 6v12M12 6v12M17 6v12" />;
+    case "nav-home":
+      return <rect x="6" y="6" width="12" height="12" rx="4" />;
   }
 }
 

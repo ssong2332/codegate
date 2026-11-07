@@ -617,7 +617,8 @@ async function runMultiCall(job, tag) {
     const legDef = variant.legs[legIndex];
     const slot = legPlanLib.legVoiceSlot(variant, legIndex);
     const legStart = legPlanLib.legStartUserTurns(relay, legIndex);
-    const prior = legIndex > 0 ? legPlanLib.buildPriorLegContext(turns.filter((t) => t.role === "user" || (t.role === "scammer" && t.n)).map((t) => ({ role: t.role, text: t.text, legIndex: t.leg }))) : undefined;
+    // 2026-11-07(서버와 같음) — 다음 통화는 앞 통화 대화를 넘겨받지 않는다(사건 골격은 레그 프롬프트 `caseBrief`).
+    const prior = undefined;
     const nonLast = legIndex < variant.legs.length - 1;
     const voiceName = pickLegVoiceName(slot.gender, slot.slot);
     const startIndex = entry === "incoming" && legIndex === 0 ? 0 : Math.max(1, idx);

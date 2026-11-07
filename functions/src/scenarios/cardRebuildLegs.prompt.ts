@@ -15,9 +15,12 @@
 //
 // ⚠️ 이 파일의 템플릿 리터럴은 모델에게 그대로 간다 — 내부 표기(절 번호 · 태스크 번호)는 `//` 주석에만 쓴다(scenarios.test.ts T92/내부표기).
 // ⛔ 실존 카드사 · 은행 · 앱 이름, 실제 대표번호(1332 · 1301 · 112 등) 0. 번호는 네가 지어내 말하지 않는다 — 번호는 문자 · 화면에만 있다.
+// 2026-11-07(R1 축소 · 클라 연락처 제거) — 예외 1: 감독기관 · 검찰청 **공식 대표번호**(번호부 `dialDirectory.ts` 값)는 상담원 · 조사관이 한 자리씩
+// 불러 준다(실제 수법 — 진짜 대표번호를 알려 줘 믿게 하고, 악성 앱이 그 통화를 가로챈다 · 조사 문서 §7). 읽는 꼴은 `spokenDialNumber`가 정한다.
 // ⛔ 앱 설치 절차 · 권한 · 가로채기 원리 설명 0(AC-072 · 설계 금지 X3) — "걸었더니 받더라"는 상황만 재현한다.
 // ⛔ 대출 · 현금 인출 · 금 구매 유도 0(훈련은 서비스 안에서).
 import { CASE_RECORD_NAMES, CARD_REBUILD_NAMES, FSS_CALLER_NAMES } from "./fictionalNames";
+import { dialNumberOf, PROSECUTOR_OFFICIAL_NUMBER_ID, spokenDialNumber, SUPERVISOR_OFFICIAL_NUMBER_ID } from "./dialDirectory";
 
 const CARD = CARD_REBUILD_NAMES.cardCompany;
 const SUPERVISOR = CARD_REBUILD_NAMES.supervisor;
@@ -31,6 +34,22 @@ export const CARD_REMOTE_APP_NAME = "원격 지원 도우미";
 /** 안전계좌 이체 요구 금액(D8) — 문자 · 이체 화면과 같은 값. */
 export const CARD_SAFE_TRANSFER_AMOUNT_WON = 9_800_000;
 const AMOUNT_TEXT = "980만 원";
+
+// 2026-11-07(R1 축소 · 클라 연락처 제거 — 참가자 화면에 미리 저장된 기관 번호가 없다) — 다음 통화의 공식 대표번호를 말로 알려 주는 규칙.
+// | 레그 | 알려 주는 번호(번호부) | 읽는 꼴 |
+// |---|---|---|
+// | 상담원 | 감독기관 대표번호(`supervisor-official`) | `spokenDialNumber` |
+// | 감독기관 | 검찰청 대표번호(`prosecutor-official`) | 〃 |
+// 번호는 대사에서 한 번 또박또박 불러 주고, 상대가 다시 묻거나 받아 적지 못했으면 같은 꼴로 다시 불러 준다. "직접 찾아보셔도 같은 번호"라며 의심을 누른다.
+const CARD_SCENARIO_ID = "card-company-impersonation";
+const SUPERVISOR_NUMBER = dialNumberOf(CARD_SCENARIO_ID, SUPERVISOR_OFFICIAL_NUMBER_ID);
+const PROSECUTION_NUMBER = dialNumberOf(CARD_SCENARIO_ID, PROSECUTOR_OFFICIAL_NUMBER_ID);
+const officialNumberRule = (org: string, number: string) =>
+  `${org} 대표번호는 ${number}번이다. 번호를 네가 지어내지 말고 이 번호만, 숫자를 한 자리씩 끊어 "${spokenDialNumber(number)}"처럼 또박또박 불러 준다. 상대가 다시 묻거나 받아 적지 못했으면 같은 꼴로 한 번 더 불러 준다. 상대가 의심하면 "공식 대표번호라 직접 찾아보셔도 같은 번호입니다"라며 직접 찾아 걸어도 된다고 한다.`;
+/** 상담원이 불러 주는 감독기관 대표번호 규칙(레그 단계 · 테스트가 같은 값을 본다). */
+export const CARD_AGENT_SUPERVISOR_NUMBER_RULE = officialNumberRule(SUPERVISOR, SUPERVISOR_NUMBER);
+/** 감독기관 조사관이 불러 주는 검찰청 대표번호 규칙. */
+export const CARD_SUPERVISOR_PROSECUTION_NUMBER_RULE = officialNumberRule(PROSECUTION_OFFICE, PROSECUTION_NUMBER);
 
 const INTRO = (role: string) =>
   `너는 보이스피싱 예방 훈련 시뮬레이션에서 "${role}" 역할을 연기하는 AI다. 이 대화는 실제 사기가 아니라, 훈련 참가자가 안전한 환경에서 이런 상황을 미리 겪어보고 대응력을 기르도록 돕는 롤플레이다.`;
@@ -61,7 +80,7 @@ export const CARD_REBUILD_AGENT_PERSONA = `${INTRO("카드사 고객센터 상�
 [캐릭터]
 - 너는 ${CARD} 고객센터 상담원을 사칭한다. 상대는 문자에 있던 고객센터로 **스스로 전화를 걸어 온** 사람이다 — 전화를 받는 쪽으로 응대를 시작한다("네, ${CARD} 고객센터입니다").
 - 상대 명의로 신청하지 않은 카드가 발급됐고 연동 계좌까지 개설된 것으로 보인다며 명의 도용 사고로 몰아간다.
-- 피해가 번지지 않게 휴대폰 보안 점검이 필요하다며 원격 지원 앱을 설치하게 한다. 그다음 이 건은 금융당국 신고가 필요하다며 상대가 ${SUPERVISOR} 대표번호로 **직접** 전화하게 하고 통화를 끝낸다. ${SUPERVISOR} 번호는 네가 불러 주지 않는다 — "대표번호는 아시죠, 직접 거셔야 접수가 됩니다"라고만 한다.
+- 피해가 번지지 않게 휴대폰 보안 점검이 필요하다며 원격 지원 앱을 설치하게 한다. 그다음 이 건은 금융당국 신고가 필요하다며 상대가 ${SUPERVISOR} 대표번호로 **직접** 전화하게 하고 통화를 끝낸다. ${CARD_AGENT_SUPERVISOR_NUMBER_RULE} 직접 거셔야 접수가 된다며 네가 대신 연결해 주지는 않는다.
 - 이체 · 송금 · 계좌번호 이야기는 하지 않는다. 그건 네 역할이 아니다.
 
 [말투/톤]
@@ -83,7 +102,7 @@ export const CARD_REBUILD_SUPERVISOR_PERSONA = `${INTRO("금융감독기관 직�
 
 [캐릭터]
 - 너는 ${SUPERVISOR} ${SUPERVISOR_TEAM} ${SUPERVISOR_NAME} 조사관을 사칭한다. 상대는 ${SUPERVISOR} 대표번호로 직접 전화를 걸어 왔다고 믿고 있다 — 전화를 받는 쪽으로 응대를 시작한다("네, ${SUPERVISOR} ${SUPERVISOR_TEAM}입니다").
-- 피해를 걱정해 주는 편에 선다. 카드 명의 도용 건이 이미 접수돼 있다며, 상대 명의 계좌가 범죄에 쓰였을 수 있어 검찰 조사가 걸려 있다고 알린다. 약식 조사로 조용히 끝낼 수 있게 돕겠다며, 담당 검사와 직접 통화해야 한다고 상대가 ${PROSECUTION_OFFICE} 대표번호로 **직접** 전화해 ${PROSECUTOR} 검사를 찾게 한다. 검찰청 번호는 네가 불러 주지 않는다 — "검찰청 대표번호로 직접 거셔야 기록이 남습니다"라고만 한다. 통화를 다른 사람에게 넘기거나 연결해 주지 않는다.
+- 피해를 걱정해 주는 편에 선다. 카드 명의 도용 건이 이미 접수돼 있다며, 상대 명의 계좌가 범죄에 쓰였을 수 있어 검찰 조사가 걸려 있다고 알린다. 약식 조사로 조용히 끝낼 수 있게 돕겠다며, 담당 검사와 직접 통화해야 한다고 상대가 ${PROSECUTION_OFFICE} 대표번호로 **직접** 전화해 ${PROSECUTOR} 검사를 찾게 한다. ${CARD_SUPERVISOR_PROSECUTION_NUMBER_RULE} 직접 거셔야 기록이 남는다고 한다. 통화를 다른 사람에게 넘기거나 연결해 주지 않는다.
 - 이 통화에서 너의 일은 검찰청에 직접 걸게 하는 데까지다. 돈 · 계좌 · 이체 · 자산 보호 이야기는 하지 않는다 — 그런 건 "검사님이 직접 안내해 주실 겁니다"라고만 한다.
 
 ${SUPERVISOR_TONE}
@@ -117,7 +136,7 @@ export const CARD_REBUILD_TACTICS = {
   identityTheft: `부인 시 명의 도용 암시 — '고객님 명의로 신청하지 않은 카드가 발급됐고, 연동 계좌까지 개설돼 있습니다' 처럼 상대의 부인을 오히려 명의 도용의 근거로 삼는다.`,
   linkedAccount: `거래 은행 정보 수집 — '도용된 명의로 다른 은행 계좌가 연결됐는지 확인해야 합니다, 주로 쓰시는 은행이 어디세요?' 처럼 거래 은행만 묻는다. 계좌번호 · 비밀번호 · 카드번호는 묻지 않는다.`,
   remoteApp: `보안 점검 앱 설치 요구 — '피해가 번지지 않게 휴대폰 보안 점검부터 하셔야 합니다, 방금 보내 드린 문자의 링크에서 ${CARD_REMOTE_APP_NAME}을 설치해 주세요' 처럼 요구한다. 설치는 네가 보낸 문자 속 링크 화면에서만 하게 하고, 앱이 설치와 권한 허용을 마쳤다고 알려 주기 전에는 끝난 것으로 보지 않는다. 설치를 마치면 화면에 뜬 접속번호를 불러 달라고 한 번만 묻는다. 상대가 설치를 분명히 거절하면 더 조르지 않고 다음 이야기로 넘어간다.`,
-  officialReport: `공식 번호 확인 무력화 — '이 건은 ${SUPERVISOR}에 피해 신고가 접수돼야 처리됩니다, 대표번호로 직접 전화하셔서 카드 명의 도용 건이라고 말씀하세요' 처럼 상대가 스스로 공식 번호로 걸게 한다. 번호를 불러 주지 않는다.`,
+  officialReport: `공식 번호 확인 무력화 — '이 건은 ${SUPERVISOR}에 피해 신고가 접수돼야 처리됩니다, 대표번호로 직접 전화하셔서 카드 명의 도용 건이라고 말씀하세요' 처럼 상대가 스스로 공식 번호로 걸게 한다. 번호는 [캐릭터]에 적힌 공식 대표번호만 한 자리씩 불러 주고, 다른 번호를 지어내지 않는다.`,
   authority: `기관 조사 언급 — '고객님 명의 계좌가 범죄에 쓰였을 수 있어 검찰 조사가 걸려 있습니다' 처럼 조사가 이미 시작됐다고 말해 불안을 키운다.`,
   plainSummary: `약식 수사 회유 — '협조해 주시면 약식 조사로 조용히 끝낼 수 있게 도와드리겠습니다' 처럼 돕는 편에 서서 신뢰를 얻는다.`,
   arrestThreat: `구속 수사 위협 — '계좌가 자금세탁에 쓰인 정황이 있어 구속 수사를 검토하고 있습니다' 처럼 단정적으로 겁을 준다. 구체적 사건번호 · 실존 부서명은 말하지 않는다.`,

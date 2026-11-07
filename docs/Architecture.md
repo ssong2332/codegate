@@ -24988,3 +24988,15 @@ PR-2 화면 계약(이 PR이 전제하는 것):
 | 2-b | 감독기관 → 검사가 통화 중 넘김(transfer — 출처 없음) | 감독기관이 "검찰청 대표번호로 직접 걸어 담당 검사를 찾으라"고 하고 참가자가 연락처의 가상 검찰청 대표번호(`prosecutor-official` · 02-0746-2108)로 건다 — 감독기관 번호와 같은 공식 번호 가로채기(원격 지원 앱 응낙 뒤 = 검사 레그 · 전 = 진짜 안내)(조사 §7 6단계) · 걸지 않으면 D4 callback. 번호 안내 문자를 새로 두지 않은 이유: R1 문자 4통 = 고급 범위(PRD AC-096 (b) 0~3) 초과 | `dialDirectory.ts` · `flowVariants.ts` · 클라 연락처 미러 `src/lib/callLegs/legTransition.ts` |
 
 레그 표(변경 뒤): 배송원(R1만 · incoming → dial) · 상담원(dial → dial) · 감독기관(dial · 공식 번호 가로채기 → dial) · 검사(dial · 공식 번호 가로채기 · 마지막). 문자 R1 3통 · R2 2통(무변경). 카드사 재구성 변형의 `transfer` 레그는 0이 됐다(런타임 · 화면의 transfer 경로는 그대로 남는다). 리포트 교육점 4개 · 수법 라벨 문면 무변경(변형 수법 = 레그 라벨 합집합 — 감독기관 두 번째 통화의 라벨이 검사 레그로 옮겨졌다). 안전계좌 문자 발신 라벨 = 검찰청 자산보호 안내 · 하한 3(검사 레그 협박 · 비밀 유지 뒤).
+
+### 142.14 R1 축소 — 서버(2026-11-07 실기기 시험 뒤 사용자 결정 "R1로 축소·진행")
+사용자 지적: "a와 이야기 한 내용을 b나 c가 알면 안되지" · "통화를 넘겨 받을 때 모두가 내 사건에 대해서 알기 때문에 흐름이 흘러가는데 실제로는 이런 흐름으로 안 갈 거 아니야. 나를 확인하는 과정이 새로 통화가 시작되면 있어야 하는데 그게 없어". 클라 3갈래(전화 앱 · 문자 · 이체 화면)는 다른 PR.
+
+| # | 변경 | 파일 |
+|---|---|---|
+| 1 | 배정 = R1(`fv-k3dn`)만 · R2(`fv-r8vb`) `retired`(옛 세션 · 리포트 해석은 `findFlowVariant` 그대로). 카드사 고급 자가 풀 1개 ⇒ 회전 문서 조회 0 · 리포트 루트 줄 0(§119 D-3 b "1루트 칸은 줄 0") · `?route=fv-r8vb` 강제 지정 불가(풀 밖) | `flowVariants.ts` |
+| 2-a | 142.13 1-a · 1-b(앞 통화 대화 인계 `buildPriorLegContext`)를 **되돌렸다** — Live · 폴백 모두 앞 통화 메시지를 싣지 않는다. 대신 레그 `caseBrief`(같은 일당이 넘겨받은 사건 골격 — 서버 고정 문면)와 "앞 통화 대화 모름" 규칙을 레그 프롬프트에 싣는다. 142.13 1-c('신청했다' 갈래 · 같은 미끼 반복 금지)는 유지하고 R1 상담원에도 둔다(이제 앞 통화를 모른다) | `callLegs/legPlan.ts` · `realtime/index.ts` · `roleplay/index.ts` · `flowVariants.ts` `resolveMultiCallLegPrompt` |
+| 2-b | 참가자가 건 새 통화(상담원 · 감독기관 · 검사)의 1단계 = 본인 확인(성함 · 생년월일 — 거부하면 한 번 설득 뒤 진행). 사건 고지는 2단계 "조회해 보니"부터. 신원 값 처리는 기존 장치([미리 확보한 상대 정보] · 불가능한 생년월일 문장). 문자 하한 +1(원격 지원 2→3 · 안전계좌 3→4 — 판단값) | `flowVariants.ts` |
+| 3 | 클라 연락처 제거에 맞춰 상담원 · 조사관이 다음 공식 대표번호를 말로 한 자리씩 불러 준다(번호부 값 · 읽는 꼴 `spokenDialNumber`) · "직접 찾아보셔도 같은 번호" — 가로채기 판정(`planLegStart`)은 무변경 | `cardRebuildLegs.prompt.ts` · `dialDirectory.ts` |
+| 4 | R1 문자 3통 발신 = 보낸 곳마다 다른 번호 · 번호만(`CARD_R1_SMS_SENDER` — 배송 02-0767-3051 · 고객센터 02-0762-5513 · 자산보호 070-0462-1593). 클라 계약: 문자함 대화방 키 = `senderLabel` 번호. 그 밖 문자 발신 표시 무변경 | `inCallSms.ts` |
+| 5 | 참가자가 먼저 끊기(메인 승인 계약 — 전화 앱 세션 제안): `startCallLeg({action:"hangup"})` → 판정표 H1~H4(`planLegHangup` — 연결 중이면 relay `connected:false · legEnded · hungUpBy:"participant"` · 응답 `{status:"ended", legIndex}` · 이미 끝난 레그는 쓰기 0). 끊은 레그 뒤 callback · 그 레그 상대 번호(`legCounterpartNumber`) dial = 같은 레그 재연결(`rejoin` · 레그 시작 발화 수 유지) · 그 밖 번호 = 종전 판정(마지막 레그는 진짜 안내 / 없는 번호). 재연결 Live = "끊겼던 통화 · 같은 사람 · 이 통화 대화만" 맥락(`buildLegRejoinContext`) · 폴백 = 재연결 뒤 첫 턴 1줄. 리포트는 `hungUpBy`를 읽지 않는다(판정 영향은 메인 결정 대기) · 재연결은 그 레그의 통화 발급 예산(`issueBudget.ts`)을 함께 쓴다 | `callLegs/legPlan.ts` · `callLegs/index.ts` · `callLegs/request.ts` · `realtime/index.ts` · `roleplay/index.ts` · `shared/types.ts` |

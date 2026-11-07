@@ -4,7 +4,8 @@
 // | 끝난 방식 | 화면 | 다음 통화를 여는 호출 |
 // |---|---|---|
 // | `transfer` | **통화 화면 그대로**(`holding` — 통화 시간 계속 · 번호 그대로) + 통화 대기음 `LEG_TRANSFER_HOLD_TONE` · `LEG_TRANSFER_CONNECT_MS` | `startCallLeg({action:"transfer"})` |
-// | `dial` | 전화 앱 다이얼(키패드 · 연락처) — 참가자가 번호를 눌러 건다 | `startCallLeg({action:"dial", dialed})` |
+// | `dial` | 전화 앱 다이얼(키패드 · 최근 기록 — 2026-11-07 연락처 미리 저장 0) — 참가자가 번호를 눌러 건다 | `startCallLeg({action:"dial", dialed})` |
+// | 참가자가 통화를 먼저 끊음(2026-11-07) | 전화 앱 최근 기록 — 훈련 계속(`hangupMeaning` · `afterHangupResponse`) | `startCallLeg({action:"hangup"})` → 뒤는 위 두 줄과 같다 |
 // | `dial` · `LEG_CALLBACK_DELAY_MS` 동안 걸지 않음 | 상대가 다시 걸어 온다(D4 — 수신 화면) → 받기 | `startCallLeg({action:"callback"})` |
 //
 // 서버 응답별 화면:
@@ -64,9 +65,53 @@ export type LegScreen =
   /** 통화 중 넘김 대기 — 통화 사이 화면 0(통화 화면이 그대로 보인다 · `CallLegScreens`는 아무것도 그리지 않는다). */
   | { kind: "holding" }
   | { kind: "connecting"; via: "transfer" | "dial"; label: string }
-  | { kind: "dialer"; digits: string; notice?: "unknown_number" }
+  /**
+   * 전화 앱(2026-11-07 — 실제 휴대폰 전화 앱과 같게). `view` = 지금 보이는 판(부재 = 키패드). `home` · `search` = 휴대폰 홈 화면 · 인터넷 검색
+   * (공식 번호를 직접 찾는 길 — `phoneApp.ts`). 번호를 채우는 동작(문자 속 번호 누름 · 검색 결과 누름)은 키패드로 돌아온다.
+   */
+  | { kind: "dialer"; digits: string; notice?: "unknown_number"; view?: PhoneView }
   | { kind: "incoming"; label: string }
   | { kind: "genuine"; number: string; contactLabel?: string; notice: readonly string[] };
+
+/** 전화 앱의 판(키패드 · 최근 기록 · 홈 화면 · 인터넷 검색). */
+export type PhoneView = "keypad" | "recents" | "home" | "search";
+
+/** 참가자가 통화를 먼저 끊은 뒤의 화면 — 실제 휴대폰처럼 전화 앱 최근 기록으로 돌아간다. */
+export function screenAfterParticipantHangup(): LegScreen {
+  return { kind: "dialer", digits: "", view: "recents" };
+}
+
+/**
+ * 통화 화면 빨간 종료 버튼의 뜻(2026-11-07 실기기 — "내가 통화를 종료하면 훈련이 종료가 돼서 상대방이 끊을 때까지 기다려야 한다").
+ * | # | If | Then |
+ * |---|---|---|
+ * | 1 | 이미 끝나는 중(종료 래치) | `end_training`(종전 — 대기 건너뛰기) |
+ * | 2 | 메신저에서 넘어온 통화 | `messenger`(종전 §110.4 — 대화방 복귀) |
+ * | 3 | 다통화 세션 ∧ 통화 중(통화 사이 화면 없음) 또는 넘김 대기 | `end_leg` — 그 통화만 끊고 전화 앱으로(훈련 계속) |
+ * | 4 | 그 밖 | `end_training`(종전) |
+ */
+export function hangupMeaning(input: {
+  endLatched: boolean;
+  messengerReturn: boolean;
+  multiCall: boolean;
+  legScreen: LegScreen["kind"];
+}): "end_leg" | "messenger" | "end_training" {
+  if (input.endLatched) return "end_training";
+  if (input.messengerReturn) return "messenger";
+  if (input.multiCall && (input.legScreen === "none" || input.legScreen === "holding")) return "end_leg";
+  return "end_training";
+}
+
+/**
+ * 참가자가 끊은 뒤 서버 `startCallLeg({action:"hangup"})` 응답의 처리.
+ * | # | If | Then |
+ * |---|---|---|
+ * | 1 | `ended` | 전화 앱 최근 기록(훈련 계속) · 상대가 다시 걸어 올 예약 |
+ * | 2 | 그 밖(서버가 이 행동을 모른다 — 배포 전 · 실패 · 다른 응답) | 종전대로 훈련 종료(종료는 항상 성공 — AC-006) |
+ */
+export function afterHangupResponse(response: { status: string } | null): "phone_app" | "end_training" {
+  return response?.status === "ended" ? "phone_app" : "end_training";
+}
 
 /** 통화가 끝난 직후의 화면(넘김 = 통화 화면 유지 · 직접 걸기 = 다이얼). */
 export function screenAfterLegEnd(exit: "dial" | "transfer"): LegScreen {
@@ -130,21 +175,22 @@ export function formatDialDigits(digits: string): string {
   return `${digits.slice(0, 3)}-${digits.slice(3, digits.length - 4)}-${digits.slice(-4)}`;
 }
 
-/**
- * 전화 앱 연락처(참가자 휴대폰에 저장돼 있을 법한 공식 번호 — 서버 번호부 `functions/src/scenarios/dialDirectory.ts`의 `contactLabel` 항목 미러).
- * 드리프트는 `legTransition.test.ts`가 서버 파일과 대조한다. 가상 기관명 · 가상 번호만(실제 번호 0).
- */
-export const LEG_DIAL_CONTACTS: Readonly<Record<string, readonly { label: string; number: string }[]>> = {
-  "card-company-impersonation": [
-    { label: "윤슬카드 고객센터", number: "02-0715-8800" },
-    { label: "금융감독기관 대표번호", number: "02-0700-3324" },
-    // 2026-11-07 넘김 축소 — 감독기관 → 검사를 참가자가 직접 거는 통화로(공식 번호 가로채기).
-    { label: "한빛지방검찰청 대표번호", number: "02-0746-2108" },
-  ],
-};
+// 2026-11-07 실기기 신고 — 기관 번호를 연락처에 미리 저장해 두던 `LEG_DIAL_CONTACTS` · `dialContactsFor`는 없앴다
+// ("내 연락처에 왜 … 대표번호가 저장되어 있는 건데"). 공식 번호는 홈 화면의 인터넷 검색으로 직접 찾는다(`phoneApp.ts` `OFFICIAL_LISTINGS`).
 
-export function dialContactsFor(scenarioId: string): readonly { label: string; number: string }[] {
-  return LEG_DIAL_CONTACTS[scenarioId] ?? [];
+/**
+ * 통화 화면에 보일 번호(2026-11-07 — 연락처가 없으니 **번호**가 보인다, 실제 휴대폰과 같게).
+ * | # | If | Then |
+ * |---|---|---|
+ * | 1 | 참가자가 키패드로 건 통화(번호 있음) | 건 번호(하이픈 표기) |
+ * | 2 | 라벨이 이미 번호 모양 | 그대로 |
+ * | 3 | 라벨이 공식 번호 검색 결과 제목과 같다(`officialNumber` — 서버 레그 라벨 "금융감독기관 대표번호" 등) | 그 공식 번호 |
+ * | 4 | 그 밖 | 라벨 그대로 |
+ */
+export function callDisplayNumber(input: { label: string; dialed?: string; officialNumber?: string | null }): string {
+  if (input.dialed && digitsOf(input.dialed).length > 0) return formatDialDigits(digitsOf(input.dialed));
+  if (/^[0-9][0-9-\s]{2,}$/.test(input.label.trim())) return input.label.trim();
+  return input.officialNumber ?? input.label;
 }
 
 /** 화면에 보일 발신자 라벨 — 다통화 통화 라벨(서버 값)이 있으면 그것이 이긴다. 부재 = 종전 라벨. */
@@ -160,7 +206,7 @@ export const LEG_GENUINE_COPY = {
    * ⛔ 세션 중 화면이라 '모의' · '훈련용' 표식 낱말 0(G437).
    */
   defenseTitle: "올바른 대응이에요",
-  defenseBody: "문자나 전화로 안내받은 번호가 아니라, 저장해 둔 공식 번호로 직접 확인하셨어요. 통화를 끝내면 결과를 볼 수 있어요.",
+  defenseBody: "문자나 전화로 안내받은 번호가 아니라, 직접 찾은 공식 번호로 확인하셨어요. 통화를 끝내면 결과를 볼 수 있어요.",
   unknownNumber: "없는 번호입니다. 번호를 확인하고 다시 걸어 주세요.",
   callbackHint: "통화가 끊겼습니다.",
 } as const;

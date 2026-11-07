@@ -5,14 +5,17 @@ import { findInCallSmsItem } from "../scenarios/inCallSms";
 import { findMockScreenItem } from "../scenarios/mockScreens";
 import type { LegStartAction, MultiCallVariant } from "./legPlan";
 
-export type StartCallLegRequest = { sessionId: string; action: LegStartAction; dialed?: string };
+/** 2026-11-07 — `hangup` = 참가자가 통화를 먼저 끊었다(레그 끝 · 세션 계속 — `planLegHangup`). */
+export type StartCallLegAction = LegStartAction | "hangup";
+export type StartCallLegRequest = { sessionId: string; action: StartCallLegAction; dialed?: string };
 export type StartCallLegResponse =
-  | { status: "connected"; legIndex: number; callerLabel: string; entry: "dial" | "transfer" | "incoming" }
+  | { status: "connected"; legIndex: number; callerLabel: string; entry: "dial" | "transfer" | "incoming"; rejoin?: "redial" | "callback" }
+  | { status: "ended"; legIndex: number }
   | { status: "genuine"; number: string; contactLabel?: string; notice: readonly string[] }
   | { status: "unknown_number" }
   | { status: "not_ready"; reason: "not_multi_call" | "leg_in_progress" | "no_next_leg" | "wrong_action" };
 
-const ACTIONS: readonly LegStartAction[] = ["dial", "transfer", "callback"];
+const ACTIONS: readonly StartCallLegAction[] = ["dial", "transfer", "callback", "hangup"];
 const MAX_DIALED_LENGTH = 20;
 
 /** 요청 판독(순수 · 세션 read 앞 — 무효 요청이 read 비용을 태우지 않는다). */
@@ -26,7 +29,7 @@ export function readStartCallLegRequest(data: unknown): StartCallLegRequest {
   if (typeof action !== "string" || !(ACTIONS as readonly string[]).includes(action)) {
     throw new HttpsError("invalid-argument", "action이 올바르지 않습니다.");
   }
-  if (action !== "dial") return { sessionId, action: action as LegStartAction };
+  if (action !== "dial") return { sessionId, action: action as StartCallLegAction };
   const dialed = raw.dialed;
   if (typeof dialed !== "string" || dialed.length === 0 || dialed.length > MAX_DIALED_LENGTH) {
     throw new HttpsError("invalid-argument", "dialed가 올바르지 않습니다.");

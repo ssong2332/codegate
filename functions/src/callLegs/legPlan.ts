@@ -9,8 +9,10 @@
 // | `connected` | 현재 레그 통화가 연결됐는가. 첫 레그가 `incoming`이면 부재여도 연결로 본다(세션 시작 = 수신 통화) |
 // | `legEnded` | 마지막으로 끝난 레그 번호(끊기 승인이 쓴다) — `legIndex`와 같으면 다음 레그를 열 차례 |
 // | `entry` | 현재 레그가 실제로 열린 방식(`startCallLeg`가 쓴다 — D2: 참가자가 건 통화인가). 부재 = 변형 레그 정의 |
+// | `hungUpBy` | 2026-11-07 — 현재 레그를 참가자가 먼저 끊었다(`startCallLeg({action:"hangup"})`). 부재 = 사기범 끊기 승인 · 아직 연결 중 |
+// | `rejoin` | 2026-11-07 — 참가자가 끊은 레그가 같은 인물로 다시 연결됐다(재다이얼 · 상대 재발신)와 그때의 사용자 발화 수 |
 import type { FlowVariant, FlowVariantLeg } from "../scenarios/flowVariants";
-import { lookupDialedNumber, type DialEntry } from "../scenarios/dialDirectory";
+import { findDialEntry, lookupDialedNumber, normalizeDialedNumber, type DialEntry } from "../scenarios/dialDirectory";
 
 export type RelayState = {
   legIndex: number;
@@ -18,7 +20,12 @@ export type RelayState = {
   connected?: boolean;
   legEnded?: number;
   entry?: "dial" | "transfer" | "incoming";
+  hungUpBy?: "participant";
+  rejoin?: { kind: LegRejoinKind; atUserTurns: number };
 };
+
+/** 참가자가 끊은 레그의 재연결 방식 — `redial` = 참가자가 그 상대 번호로 다시 걸었다 · `callback` = 상대가 다시 걸어 왔다. */
+export type LegRejoinKind = "redial" | "callback";
 
 export type MultiCallVariant = Pick<FlowVariant, "scenarioId" | "legs" | "multiCall">;
 
@@ -48,7 +55,15 @@ export function isLegConnected(variant: Pick<FlowVariant, "legs">, relay: RelayS
 export type LegStartAction = "dial" | "transfer" | "callback";
 
 export type LegStartPlan =
-  | { status: "connected"; legIndex: number; leg: FlowVariantLeg; entry: "dial" | "transfer" | "incoming"; relay: RelayState }
+  | {
+      status: "connected";
+      legIndex: number;
+      leg: FlowVariantLeg;
+      entry: "dial" | "transfer" | "incoming";
+      relay: RelayState;
+      /** 참가자가 끊은 같은 레그를 다시 이었다(부재 = 새 레그). */
+      rejoin?: LegRejoinKind;
+    }
   | { status: "genuine"; entry: DialEntry }
   | { status: "unknown_number" }
   | { status: "not_ready"; reason: "not_multi_call" | "leg_in_progress" | "no_next_leg" | "wrong_action" };
@@ -67,6 +82,15 @@ export type LegStartPlan =
  * | 8 | dial — 대상 레그 번호이고 가로채기 조건(원격 지원 앱 응낙) 충족 또는 조건 없음 | 연결 |
  * | 9 | dial — 대상 번호지만 가로채기 조건 불충족 · 또는 진짜 기관 안내가 있는 다른 번호 | genuine(D3 — 자동 안내 · 방어 종료) |
  * | 10 | dial — 그 밖(번호부에 있지만 대상도 진짜 안내도 아님) | unknown_number |
+ *
+ * 2026-11-07(메인 승인 계약 — 참가자가 먼저 끊기) — 3행 앞에 아래 행을 먼저 본다(현재 레그를 **참가자가** 끊었을 때만 · `hungUpBy`):
+ * | # | If | Then |
+ * |---|---|---|
+ * | P1 | callback | 같은 레그를 다시 연결(entry incoming · 같은 인물 · rejoin callback) |
+ * | P2 | dial — 그 레그 상대 번호(`legCounterpartNumber`) | 같은 레그를 다시 연결(entry dial · rejoin redial) |
+ * | P3 | dial · 마지막 레그 — 그 밖 번호 | 9 · 10행과 같은 판정(진짜 안내 / unknown_number — 다음 레그가 없다) |
+ * | P4 | 그 밖 | 아래 3행부터 종전(다음 레그 대상 번호 = 가로채기 판정 · 그 밖 = 진짜 안내 / unknown_number) |
+ * 재연결은 `legStartUserTurns`를 그대로 둔다(그 레그 문자 하한 · 끊기 하한이 처음 연결 기준으로 이어진다).
  */
 export function planLegStart(input: {
   variant: MultiCallVariant;
@@ -81,6 +105,32 @@ export function planLegStart(input: {
   if (!variant.multiCall) return { status: "not_ready", reason: "not_multi_call" };
   const connected = isLegConnected(variant, relay);
   const current = currentLegIndex(variant, relay);
+  if (relay?.hungUpBy === "participant" && relay.legEnded === current) {
+    const leg = variant.legs[current];
+    const rejoinRelay = (entry: "dial" | "incoming", kind: LegRejoinKind): LegStartPlan => ({
+      status: "connected",
+      legIndex: current,
+      leg,
+      entry,
+      rejoin: kind,
+      relay: {
+        legIndex: current,
+        legStartUserTurns: [...(relay.legStartUserTurns ?? [])],
+        connected: true,
+        entry,
+        rejoin: { kind, atUserTurns: Math.max(0, Math.floor(input.userTurns)) },
+      },
+    });
+    if (action === "callback") return rejoinRelay("incoming", "callback");
+    const counterpart = legCounterpartNumber(variant.scenarioId, leg);
+    if (action === "dial" && counterpart !== undefined && normalizeDialedNumber(input.dialed ?? "") === normalizeDialedNumber(counterpart)) {
+      return rejoinRelay("dial", "redial");
+    }
+    if (action === "dial" && current >= variant.legs.length - 1) {
+      const entry = lookupDialedNumber(variant.scenarioId, input.dialed ?? "");
+      return entry?.genuineNotice ? { status: "genuine", entry } : { status: "unknown_number" };
+    }
+  }
   let target: number;
   if (!connected && current === 0 && relay?.legEnded === undefined) {
     // R2 — 세션은 문자 화면에서 시작한다. 첫 레그는 참가자 발신(callback = 상대가 먼저 건다 — D4).
@@ -118,6 +168,83 @@ export function planLegStart(input: {
   }
   return entry.genuineNotice ? { status: "genuine", entry } : { status: "unknown_number" };
 }
+
+/**
+ * 2026-11-07 — 레그 상대의 번호(참가자가 다시 걸면 같은 인물로 이어지는 번호). 참가자가 건 레그 = 그 레그 `dialTarget`의 번호부 번호 ·
+ * 수신 레그 = 발신자 라벨이 번호 꼴이면 그 번호(배송원 010-0794-2261). 그 밖(이름 라벨 · 번호 없음) = undefined.
+ */
+export function legCounterpartNumber(scenarioId: string, leg: Pick<FlowVariantLeg, "dialTarget" | "callerLabel">): string | undefined {
+  if (leg.dialTarget) return findDialEntry(scenarioId, leg.dialTarget)?.number;
+  return /^\d[\d-]{6,}$/.test(leg.callerLabel) ? leg.callerLabel : undefined;
+}
+
+export type LegHangupPlan =
+  | { status: "ended"; legIndex: number; relay?: RelayState }
+  | { status: "not_ready"; reason: "not_multi_call" | "wrong_action" };
+
+/**
+ * 2026-11-07(메인 승인 계약) — 참가자가 통화를 먼저 끊었다(`startCallLeg({action:"hangup"})` — 클라가 전사 제출 뒤 부른다).
+ * 훈련 종료가 아니다(종료는 화면의 별도 버튼 → `endSession`). 판정표(이 순서대로만):
+ * | # | If | Then |
+ * |---|---|---|
+ * | H1 | 다통화 아님 | not_ready(not_multi_call) |
+ * | H2 | 현재 레그가 이미 끝났다(`legEnded === legIndex` — 사기범 끊기 승인 · 앞선 끊기) | ended(쓰기 0 — 먼저 남은 기록을 덮지 않는다) |
+ * | H3 | 현재 레그가 연결 전이다(R2 시작 문자 화면 · 진짜 안내 뒤) | not_ready(wrong_action) |
+ * | H4 | 그 밖(연결 중) | ended + relay `connected:false · legEnded · hungUpBy:"participant"`(재연결 표식 `rejoin`은 지운다) |
+ */
+export function planLegHangup(variant: MultiCallVariant, relay: RelayState | undefined): LegHangupPlan {
+  if (!variant.multiCall) return { status: "not_ready", reason: "not_multi_call" };
+  const current = currentLegIndex(variant, relay);
+  if (relay?.legEnded === current) return { status: "ended", legIndex: current };
+  if (!isLegConnected(variant, relay)) return { status: "not_ready", reason: "wrong_action" };
+  const next: RelayState = {
+    legIndex: current,
+    legStartUserTurns: [...(relay?.legStartUserTurns ?? [0])],
+    connected: false,
+    legEnded: current,
+    hungUpBy: "participant",
+    ...(relay?.entry ? { entry: relay.entry } : {}),
+  };
+  return { status: "ended", legIndex: current, relay: next };
+}
+
+/** 같은 레그 재연결 맥락에 싣는 끊기기 전 이 통화 대화 줄 수 상한 · 줄 길이 상한(판단값). */
+export const LEG_REJOIN_MAX_LINES = 24;
+export const LEG_REJOIN_LINE_MAX_CHARS = 160;
+export type LegRejoinMessage = { role: string; text?: string; legIndex?: number; notSpoken?: boolean };
+
+const REJOIN_SITUATION: Record<LegRejoinKind, string> = {
+  redial: "조금 전 상대가 이 통화를 먼저 끊었고, 지금 상대가 같은 번호로 너에게 다시 전화를 걸어 왔다.",
+  callback: "조금 전 상대가 이 통화를 먼저 끊었고, 지금 네가 같은 번호로 상대에게 다시 전화를 걸었다.",
+};
+const REJOIN_OPENING: Record<LegRejoinKind, string> = {
+  redial: "'아까 통화가 끊겼네요'처럼 짧게 받은 뒤",
+  callback: "'아까 통화가 끊겨서 다시 연락드렸습니다'처럼 짧게 말한 뒤",
+};
+
+/**
+ * 2026-11-07 — 참가자가 끊은 레그를 같은 인물로 다시 이을 때의 맥락(Live 새 연결 · 폴백 첫 턴). 너는 같은 사람이라 **이 통화에서** 오간 말만 안다
+ * (앞 통화 대화는 여전히 싣지 않는다 — `messages` 중 `legIndex`가 이 레그인 줄만 · 부재 = 레그 0). 결정적(추가 LLM 호출 0).
+ * `messages`를 안 넘기면(폴백 — 모델 이력에 이미 이 레그 대화가 있다) 상황 문장만.
+ */
+export function buildLegRejoinContext(kind: LegRejoinKind, legIndex: number, messages?: readonly LegRejoinMessage[]): string {
+  const head = [
+    `[끊겼던 통화 다시 연결] ${REJOIN_SITUATION[kind]} 너는 끊기기 전과 같은 사람이다.`,
+    `위 [이 통화 전 상황]의 '본인 확인부터'는 처음 연결됐을 때의 규칙이다 — 끊기기 전에 이미 한 본인 확인 · 설명은 처음부터 다시 하지 않는다. ${REJOIN_OPENING[kind]} 끊기기 전 단계에서 이어 간다. 상대가 왜 끊었는지 따지거나 화내지 않는다.`,
+  ];
+  if (!messages) return head.join("\n");
+  const lines = messages
+    .filter((m) => (m.legIndex ?? 0) === legIndex && m.notSpoken !== true && (m.role === "user" || m.role === "scammer"))
+    .map((m) => ({ user: m.role === "user", text: (m.text ?? "").trim() }))
+    .filter((m) => m.text.length > 0)
+    .slice(-LEG_REJOIN_MAX_LINES)
+    .map((m) => `${m.user ? "상대" : "너"}: ${clipLine(m.text)}`);
+  if (lines.length === 0) return head.join("\n");
+  return [...head, "끊기기 전 이 통화에서 오간 말(끝부분):", ...lines].join("\n");
+}
+
+const clipLine = (text: string): string =>
+  text.length > LEG_REJOIN_LINE_MAX_CHARS ? `${text.slice(0, LEG_REJOIN_LINE_MAX_CHARS)}…` : text;
 
 /**
  * 끊기 판정에 넘길 레그 보정값. 마지막이 아닌 레그의 끊기는 "그 통화의 일을 마쳤다"이므로 결정 화면(4-c) · 후속 단계(4-b)를 보지 않고,
@@ -191,70 +318,14 @@ export function resolveLegEntry(
   return variant.legs[legIndex]?.entry ?? "incoming";
 }
 
-/**
- * 앞 레그 인계 블록(D5 — 새 연결은 앞 통화를 모른다). 같은 일당이 이어받은 설정이라 정보는 알고 있되, 앞 사람이 아니며 그 말을 되풀이하지 않는다.
- * 입력 = 이번 레그 시작 전까지의 대화(세션 `messages` — 앞 레그 전사는 레그 끝에 제출된다). 결정적(추가 LLM 호출 0).
- *
- * 2026-11-07 실기기 신고(세션 1d84811b — "방금 한 말만 반영되고 그 전 대화는 반영 안 된다") — 종전에는 마지막 16줄만 실어 4번째 통화쯤이면
- * 첫 통화에서 참가자가 말한 사실(카드 신청 여부 · 밖이라 못 받음 등)이 빠졌다. 이제 줄 고르기 규칙(이 순서대로):
- * | # | If | Then |
- * |---|---|---|
- * | 1 | 사용자 · 사기범 줄이 아니다 · 빈 줄 · 참가자에게 도달하지 않은 줄(`notSpoken`) | 뺀다 |
- * | 2 | 참가자 줄 | 전부 싣는다(앞 통화들 전체 — 참가자가 말한 사실 · 한 일) |
- * | 3 | 참가자 줄 바로 앞의 상대 줄(그 답의 질문 — "네"만으로는 뜻이 없다) | 싣는다(`PRIOR_LEG_CONTEXT_LINE_MAX_CHARS`자로 자름) |
- * | 4 | 마지막 `PRIOR_LEG_RECENT_LINES`줄(직전 통화 끝부분) | 싣는다 |
- * | 5 | 고른 줄이 `PRIOR_LEG_MAX_LINES`를 넘는다 | 끝부분(4행) 밖의 상대 줄을 오래된 것부터 빼고 · 그래도 넘으면 오래된 참가자 줄을 뺀다 |
- * 줄에 `legIndex`(§142 N3)가 있으면 통화마다 머리줄을 넣는다. 빠진 줄 자리는 "(…)" 한 줄로 표시한다.
- */
-export const PRIOR_LEG_MAX_LINES = 48;
-export const PRIOR_LEG_RECENT_LINES = 8;
-export const PRIOR_LEG_USER_LINE_MAX_CHARS = 160;
-export const PRIOR_LEG_CONTEXT_LINE_MAX_CHARS = 100;
-export type PriorLegMessage = { role: string; text?: string; legIndex?: number; notSpoken?: boolean };
-
-const clip = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max)}…` : text);
-
-export function buildPriorLegContext(messages: readonly PriorLegMessage[]): string | undefined {
-  const rows = messages
-    .filter((m) => (m.role === "user" || m.role === "scammer") && m.notSpoken !== true && typeof m.text === "string" && m.text.trim().length > 0)
-    .map((m) => ({ user: m.role === "user", text: m.text!.trim(), leg: m.legIndex }));
-  if (rows.length === 0) return undefined;
-  const recentFrom = Math.max(0, rows.length - PRIOR_LEG_RECENT_LINES);
-  const keep = rows.map((row, i) => row.user || i >= recentFrom || rows[i + 1]?.user === true);
-  const count = () => keep.filter(Boolean).length;
-  for (let i = 0; i < recentFrom && count() > PRIOR_LEG_MAX_LINES; i += 1) if (!rows[i].user) keep[i] = false;
-  for (let i = 0; i < recentFrom && count() > PRIOR_LEG_MAX_LINES; i += 1) keep[i] = false;
-
-  const byLeg = rows.some((row) => row.leg !== undefined);
-  const lines: string[] = [];
-  let lastLeg: number | undefined;
-  let gap = false;
-  rows.forEach((row, i) => {
-    if (byLeg && row.leg !== undefined && row.leg !== lastLeg) {
-      lines.push(`— ${row.leg + 1}번째 통화 —`);
-      lastLeg = row.leg;
-      gap = false;
-    }
-    if (!keep[i]) {
-      if (!gap) lines.push("(…)");
-      gap = true;
-      return;
-    }
-    gap = false;
-    const max = row.user || i >= recentFrom ? PRIOR_LEG_USER_LINE_MAX_CHARS : PRIOR_LEG_CONTEXT_LINE_MAX_CHARS;
-    lines.push(`${row.user ? "참가자" : "앞 통화 상대"}: ${clip(row.text, max)}`);
-  });
-  return [
-    "[앞선 통화 기록] 이 통화 전에 참가자가 같은 일당의 다른 사람들과 나눈 통화들이다. 너는 그 사람들이 아니다.",
-    "참가자가 한 말은 첫 통화부터 빠짐없이 싣는 것을 우선했고, 상대 말은 참가자 답의 바로 앞 질문과 직전 통화 끝부분만 실었다.",
-    "기록에 나온 사실(참가자가 말한 정보 · 한 일 · 이미 답한 것)은 이미 전달받은 것처럼 자연스럽게 이어 가되, 앞 사람의 말을 되풀이하거나 기록을 읽어 주지 않는다. 참가자가 이미 답한 것을 처음 듣는 것처럼 다시 묻지 않는다.",
-    ...lines,
-  ].join("\n");
-}
+// 2026-11-07 실기기 신고(카드사 고급 R1 · 사용자 "a와 이야기 한 내용을 b나 c가 알면 안되지" · "새로 통화가 시작되면 나를 확인하는 과정이 있어야 하는데
+// 그게 없어") — 앞 통화 대화 인계 블록(`buildPriorLegContext` — 참가자 발화 전부 + 마지막 8줄, #498)을 **없앴다**. 다음 통화 화자는 앞 통화에서 참가자가
+// 한 말을 모르고, 같은 일당이 넘겨받았을 사건 골격(레그 `caseBrief` — 서버 고정 문면)만 안다. 그 골격은 레그 프롬프트(`flowVariants.ts`
+// `resolveMultiCallLegPrompt`)에 실린다 — Live · 폴백 · 프로브가 같은 입력을 본다(앞 통화 메시지 읽기 0).
 
 /**
  * 폴백(텍스트 턴) 이력을 레그 경계로 나눈다. 레그 시작 = 앞 레그의 마지막 사용자 발화(`legStartUserTurns`번째)와 그 발화에 대한 사기범 답 1개 뒤.
- * 새 레그의 모델 이력은 `current`만 — 앞 통화는 `buildPriorLegContext(prior)`로 인계한다(Live 새 연결과 같은 입력).
+ * 새 레그의 모델 이력은 `current`만 — 앞 통화(`prior`)는 모델에 싣지 않는다(Live 새 연결과 같은 입력 · 사건 골격은 레그 프롬프트).
  */
 export function splitLegHistory<T extends { role: "user" | "scammer" }>(
   messages: readonly T[],

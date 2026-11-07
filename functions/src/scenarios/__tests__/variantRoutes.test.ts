@@ -71,8 +71,11 @@ test("[§119 끊기 매핑] 확인 무력화 고급 풀의 변형은 '문자 선
 test("[§119 D-3 b] 리포트 루트 줄 — 루트 2가지 이상인 칸만 · 부재 · 모름 · 다른 시나리오 ID · 1루트 칸은 없음", () => {
   const cc = (flowVariantId?: string, challengeId?: string) =>
     resolveRouteSummary({ scenarioId: "card-company-impersonation", difficultyLevel: "advanced", flowVariantId, challengeId });
-  assert.deepEqual(cc("fv-w3dq"), { label: "카드 배송 안내형", routeCount: 2 });
-  assert.deepEqual(cc("fv-x7ue"), { label: "보안 앱 설치형", routeCount: 2 });
+  // 2026-11-07(R1 축소) — 카드사 고급 자가 풀 = R1 하나 ⇒ 1루트 칸이라 줄 0(은퇴 변형 옛 세션도 그 칸의 현재 결말 수를 따른다 — 아래 §124).
+  assert.equal(cc("fv-w3dq"), undefined);
+  assert.equal(cc("fv-x7ue"), undefined);
+  assert.equal(cc("fv-k3dn"), undefined);
+  assert.equal(cc("fv-r8vb"), undefined);
   assert.equal(cc(undefined), undefined, "변형 도입 이전 세션 — 무소급");
   assert.equal(cc("fv-nope"), undefined);
   assert.equal(cc("fv-c5fj"), undefined, "다른 시나리오의 변형 ID");
