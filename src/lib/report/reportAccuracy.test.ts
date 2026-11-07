@@ -9,7 +9,9 @@ import {
   mockScreenWhat,
   momentAmountText,
   officialCheckText,
+  participantHangupText,
   pickFirstDeceivedIndex,
+  readParticipantHangup,
   readOfficialCheck,
   splitSmsEvents,
 } from "./reportAccuracy.ts";
@@ -95,4 +97,19 @@ test("[2026-11-07 재시험] M8 — 문자 링크 이체 화면 제출 순간 �
   assert.equal(momentAmountText({}), null);
   assert.equal(momentAmountText({ amountComparison: "3000000" }), null, "금액 값 같은 다른 모양은 싣지 않는다");
   assert.match(read("src/app/report/page.tsx"), /momentAmountText\(entry\.moment\)/);
+});
+
+test("[사용자 결정 2026-11-07 방어로 집계] H1 — 먼저 끊음 기록 읽기 · 문장 · 화면 배선", () => {
+  assert.deepEqual(readParticipantHangup({ legIndex: 0, timeLabel: "120초 시점" }), { legIndex: 0, timeLabel: "120초 시점" });
+  assert.deepEqual(readParticipantHangup({ legIndex: 2 }), { legIndex: 2 });
+  assert.equal(readParticipantHangup({ legIndex: -1 }), null);
+  assert.equal(readParticipantHangup(undefined), null);
+  assert.equal(
+    participantHangupText("2분 시점"),
+    "2분 시점에 상대의 요구에 응하기 전에 먼저 전화를 끊었습니다. 의심이 들면 바로 끊는 것이 가장 빠르고 확실한 대처입니다.",
+  );
+  assert.match(participantHangupText(null), /^상대의 요구에 응하기 전에/);
+  const page = read("src/app/report/page.tsx");
+  assert.match(page, /readParticipantHangup\(data\.participantHangup\)/);
+  assert.match(page, /participantHangupText\(/);
 });

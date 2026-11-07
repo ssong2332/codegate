@@ -30,6 +30,7 @@ import {
   markPreCallNoticeSeen,
   markSessionAnswered,
   setPendingEndReason,
+  setPendingHangupButton,
   useSpeechRecognition,
 } from "@/lib/recording";
 import { useRealtimeCall } from "@/lib/realtime";
@@ -1597,6 +1598,8 @@ export default function SessionCallPage() {
       fallbackLastLine?: { hasAudio: boolean };
       /** §128(3) — 서버가 세션을 이미 끝냈다(통화 중 카톡에서 사기범 포기) — 대화방 복귀(§112) 없이 결과로 간다. */
       sessionAlreadyEnded?: boolean;
+      /** 2026-11-07 — 통화 종료 버튼(`handleHangup`)으로 끝냈다(`endReasonHint.ts` B1). ⛔ 그 밖 호출부는 싣지 않는다(배선 단언). */
+      hangupButton?: boolean;
     },
   ) => {
     // E1
@@ -1670,6 +1673,8 @@ export default function SessionCallPage() {
       if (sessionId) handOffTranscriptFlush(sessionId, flushDone);
       // E6(사유) — 종료 화면이 읽는 1회성 힌트(C4 · 허용목록 밖이면 종료 화면이 `user_ended`). ⛔ 이 화면의 힌트 기록은 이 1곳뿐이다.
       if (sessionId) setPendingEndReason(sessionId, ending.reason);
+      // 2026-11-07 — 통화 종료 버튼으로 시작한 이 종료가 참가자 사유로 래치됐을 때만(B1). 사기범 끊기 대기 중 탭(사유 scammer) · 원격 · 한도 = 0(B2).
+      if (sessionId && opts?.hangupButton && ending.endedBy === "user" && ending.reason === "user_ended") setPendingHangupButton(sessionId);
       // 2026-11-06 — 끝내는 순간의 통화 진단 요약(종료 화면이 `endSession`에 싣는다 · 정리 뒤에 읽으면 전부 닫힌 값이다).
       if (sessionId) setPendingCallDiag(sessionId, currentCallDiag());
       // E7 — 끊기 표시만 max(표시 시간, 기록 완료) 뒤 이동한다(UX (11) ②). 상시 · 한도는 즉시.
@@ -1715,7 +1720,8 @@ export default function SessionCallPage() {
       await handleRequestReverseEscalation("hangup");
       return;
     }
-    await endCall("user");
+    // 2026-11-07 — 단일 통화 화면의 통화 종료 버튼("통화 종료 — 훈련 종료") = 참가자가 끊음(리포트 "먼저 전화를 끊음" 근거 · B1).
+    await endCall("user", { hangupButton: true });
   };
 
   // 기존 `ended` 셸("통화가 종료되었습니다." — 서버 close · 폴백 한도)의 "결과 확인하러 가기". 래치가 없으면(폴백 한도 —

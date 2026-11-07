@@ -102,5 +102,5 @@ test("[요청 2 짝] 클라 허용값 = 서버 판독 허용값(드리프트 0) 
   assert.ok(page.includes("await flushTranscript(legDiag);"));
   assert.ok(page.includes("if (sessionId) setPendingCallDiag(sessionId, currentCallDiag());"));
   const end = read("src/app/session/end/page.tsx");
-  assert.ok(end.includes("return endSession({ sessionId: sid, endReason, ...(diag ? { diag } : {}) });"));
+  assert.ok(end.includes("return endSession({ sessionId: sid, endReason, ...(diag ? { diag } : {}), ...(hangupButton ? { hangupButton: true as const } : {}) });"));
 });
