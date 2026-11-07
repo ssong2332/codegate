@@ -12,6 +12,8 @@ import {
   dialableDigits,
   formatCallDuration,
   formatRecentTime,
+  MY_CARD_BACK,
+  myCardBack,
   officialNumberForTitle,
   recentSubtitle,
   searchOfficialListings,
@@ -153,4 +155,31 @@ test("[R1 배선] 빨간 종료 → 그 통화만 끊기 · 정리 → 전사 �
   // 클라 계약 타입(서버 구현 전 — 서버가 모르면 invalid-argument).
   const types = read("src/lib/api/types.ts");
   assert.ok(types.includes('action: "dial" | "transfer" | "callback" | "hangup"') && types.includes('| { status: "ended" }'));
+});
+
+test("[11-07 내 카드 뒷면] 지갑 카드 뒷면 고객센터 = 검색 결과 · 서버 번호부의 진짜 카드사 고객센터 · 가짜 번호 0 · CVC · 전체 번호 0", () => {
+  const card = myCardBack(CARD);
+  assert.ok(card, "카드사 시나리오에 내 카드가 있다");
+  assert.equal(card.centerNumber, officialNumberForTitle(CARD, "윤슬카드 고객센터"), "검색 결과와 같은 번호");
+  const server = read("functions/src/scenarios/dialDirectory.ts");
+  assert.ok(server.includes(`number: "${card.centerNumber}",
+      contactLabel: \`\${CARD} 고객센터\``), "서버 번호부의 진짜 카드사 고객센터");
+  assert.notEqual(card.centerNumber, "02-0762-5513", "문자로 받은 가짜 번호 0");
+  assert.match(card.last4, /^[0-9]{4}$/);
+  for (const value of Object.values(MY_CARD_BACK)) {
+    const text = JSON.stringify(value);
+    assert.ok(!/cvc|cvv|보안코드|[0-9]{12,}/i.test(text), "CVC · 전체 카드 번호 0");
+  }
+  assert.equal(myCardBack("institutional-impersonation"), null, "내 카드 없는 시나리오 = 지갑 앱 0");
+});
+
+test("[11-07 내 카드 뒷면 배선] 홈 화면 지갑 아이콘(내 카드 있을 때만) → 지갑 화면 · 번호 누름 = 키패드에 채움(거는 것은 참가자) · 뒤로 = 홈", () => {
+  const code = read("src/components/CallLegScreens.tsx").replace(/^\s*\/\/.*$/gm, "");
+  assert.ok(code.includes('onOpenWallet={myCardBack(props.scenarioId) ? () => props.onView("wallet") : undefined}'));
+  assert.ok(code.includes('if (onOpenWallet) apps.push({ label: "지갑", icon: "card"'));
+  assert.ok(code.includes("<WalletScreen") && code.includes("onPickNumber={(digits) => props.onSetDigits(digits)}"));
+  assert.ok(code.includes('if (view === "search" || view === "wallet") props.onView("home");'));
+  assert.ok(code.includes("if (centerDigits) onPickNumber(centerDigits);"), "누르면 채우기만");
+  assert.ok(!/모의|훈련용|시뮬레이션/.test(code), "세션 중 표식 낱말 0(G437)");
+  assert.ok(read("src/lib/callLegs/legTransition.ts").includes('export type PhoneView = "keypad" | "recents" | "home" | "search" | "wallet";'));
 });

@@ -74,7 +74,7 @@ export type LegScreen =
   | { kind: "genuine"; number: string; contactLabel?: string; notice: readonly string[] };
 
 /** 전화 앱의 판(키패드 · 최근 기록 · 홈 화면 · 인터넷 검색). */
-export type PhoneView = "keypad" | "recents" | "home" | "search";
+export type PhoneView = "keypad" | "recents" | "home" | "search" | "wallet";
 
 /** 참가자가 통화를 먼저 끊은 뒤의 화면 — 실제 휴대폰처럼 전화 앱 최근 기록으로 돌아간다. */
 export function screenAfterParticipantHangup(): LegScreen {
@@ -164,6 +164,8 @@ export function digitsOf(number: string): string {
 /** 한국 전화번호 표기(02 지역번호 · 010 등) — 화면 표시 전용(판정은 서버가 숫자만 비교한다). */
 export function formatDialDigits(digits: string): string {
   if (!/^[0-9]+$/.test(digits)) return digits;
+  // 2026-11-07 판 27 — 전국 대표번호(15xx · 16xx · 18xx, 8자리)는 4-4로 끊는다("158-8-7742" 표시 결함). 입력 중(4자리 = 그대로 · 5~8자리 = 4-나머지)도 같은 꼴.
+  if (/^1[568]/.test(digits) && digits.length >= 4 && digits.length <= 8) return digits.length === 4 ? digits : `${digits.slice(0, 4)}-${digits.slice(4)}`;
   if (digits.startsWith("02")) {
     if (digits.length <= 2) return digits;
     if (digits.length <= 5) return `02-${digits.slice(2)}`;

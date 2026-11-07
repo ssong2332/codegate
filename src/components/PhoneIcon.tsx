@@ -45,7 +45,8 @@ export type PhoneIconName =
   | "arrow-in"
   | "arrow-out"
   | "nav-recents"
-  | "nav-home";
+  | "nav-home"
+  | "card";
 
 type PhoneIconProps = {
   name: PhoneIconName;
@@ -281,6 +282,15 @@ function glyph(name: PhoneIconName) {
       return <path d="M7 6v12M12 6v12M17 6v12" />;
     case "nav-home":
       return <rect x="6" y="6" width="12" height="12" rx="4" />;
+    // 2026-11-07 지갑(내 카드) 앱 — 카드 한 장(띠 1줄).
+    case "card":
+      return (
+        <>
+          <rect x="3" y="6" width="18" height="12" rx="2.5" />
+          <path d="M3 10h18" />
+          <path d="M6.5 14.5h4" />
+        </>
+      );
   }
 }
 

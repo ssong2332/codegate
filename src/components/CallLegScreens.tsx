@@ -11,6 +11,7 @@
 // | 전화 앱(`dialer`) | 판 = 키패드 · 최근 기록(아래 탭) · 맨 아래 시스템 탐색(One UI = 최근 앱 · 홈 · 뒤로 / iOS = 홈 막대) · 오른쪽 위 훈련 종료 |
 // | 홈 화면(`view: home`) | 시계 · 앱 3개(전화 · 메시지 · 인터넷) |
 // | 인터넷 검색(`view: search`) | 검색칸 · 추천어 · 결과(공식 번호 — 누르면 키패드에 채움) |
+// | 지갑(`view: wallet`) | 내 카드 뒷면(서명란 · 고객센터 번호 — 누르면 키패드에 채움) · 앞면 보기. 2026-11-07 사용자 결정 "내 카드 뒷면 화면" · CVC 0 |
 // | 발신 중(`connecting`) | 통화 화면과 같은 바탕 · 배치(번호 · "발신 중…" · 흐린 버튼 묶음 · 종료 원). 종료 = 그 발신만 끊기 |
 // | 넘김 대기(`holding`) | **그리지 않는다** — 통화 화면이 그대로 보이고 대기음만 들린다(2026-11-07 "검은 화면은 몰입감을 깬다") |
 // | 다시 걸려 온 전화(`incoming`) | 수신 벨과 같은 바탕 · 받기 / 거절(거절 = 그 전화만 거절 — 훈련 계속) |
@@ -23,6 +24,7 @@ import { LEG_GENUINE_COPY, formatDialDigits, type LegScreen, type PhoneView } fr
 import {
   dialableDigits,
   formatRecentTime,
+  myCardBack,
   recentSubtitle,
   searchOfficialListings,
   searchSuggestions,
@@ -366,7 +368,7 @@ function PhoneApp(props: CallLegScreensProps & { screen: Extract<LegScreen, { ki
   const ios = theme.layout === "ios";
 
   const goBack = () => {
-    if (view === "search") props.onView("home");
+    if (view === "search" || view === "wallet") props.onView("home");
     else if (view === "home") props.onView("keypad");
     else props.onView("home");
   };
@@ -377,11 +379,24 @@ function PhoneApp(props: CallLegScreensProps & { screen: Extract<LegScreen, { ki
       style={{ backgroundColor: theme.bg }}
       role="dialog"
       aria-modal="true"
-      aria-label={view === "home" ? "홈 화면" : view === "search" ? "인터넷" : "전화"}
+      aria-label={view === "home" ? "홈 화면" : view === "search" ? "인터넷" : view === "wallet" ? "지갑" : "전화"}
     >
       <div className="relative flex h-full w-full max-w-[430px] flex-col" style={{ color: theme.text }}>
         {view === "home" ? (
-          <HomeScreen theme={theme} onOpenPhone={() => props.onView("keypad")} onOpenSms={props.onOpenSms} onOpenWeb={() => props.onView("search")} />
+          <HomeScreen
+            theme={theme}
+            onOpenPhone={() => props.onView("keypad")}
+            onOpenSms={props.onOpenSms}
+            onOpenWeb={() => props.onView("search")}
+            onOpenWallet={myCardBack(props.scenarioId) ? () => props.onView("wallet") : undefined}
+          />
+        ) : view === "wallet" && myCardBack(props.scenarioId) ? (
+          <WalletScreen
+            theme={theme}
+            scenarioId={props.scenarioId}
+            onBack={() => props.onView("home")}
+            onPickNumber={(digits) => props.onSetDigits(digits)}
+          />
         ) : view === "search" ? (
           <SearchScreen
             theme={theme}
@@ -618,11 +633,14 @@ function HomeScreen({
   onOpenPhone,
   onOpenSms,
   onOpenWeb,
+  onOpenWallet,
 }: {
   theme: PhoneAppTheme;
   onOpenPhone: () => void;
   onOpenSms?: () => void;
   onOpenWeb: () => void;
+  /** 지갑(내 카드) — 부재 = 이 시나리오에 내 카드 0 → 아이콘 0. */
+  onOpenWallet?: () => void;
 }) {
   const clock = useClock();
   const apps: { label: string; icon: PhoneIconName; bg: string; onClick?: () => void }[] = [
@@ -630,6 +648,7 @@ function HomeScreen({
     { label: "메시지", icon: "message", bg: theme.layout === "ios" ? "#1E8E3E" : "#1259C3", onClick: onOpenSms },
     { label: "인터넷", icon: "globe", bg: theme.layout === "ios" ? "#0A66D6" : "#5B3FD0", onClick: onOpenWeb },
   ];
+  if (onOpenWallet) apps.push({ label: "지갑", icon: "card", bg: theme.layout === "ios" ? "#1C1C1E" : "#0F6E5C", onClick: onOpenWallet });
   return (
     <div className="flex min-h-0 flex-1 flex-col text-white" style={{ background: theme.wallpaper }}>
       <p className="pt-[calc(env(safe-area-inset-top)+56px)] text-center text-[64px] font-light leading-none tabular-nums" aria-label={`현재 시각 ${clock}`}>
@@ -765,6 +784,97 @@ function SearchScreen({
             ))}
           </ul>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 지갑 — 내 카드(2026-11-07 사용자 결정 "내 카드 뒷면 화면"). 실제 카드 뒷면처럼 마그네틱 띠 · 서명란 · 고객센터 번호 · 안내 문구.
+ * 고객센터 번호를 누르면 전화 앱 키패드에 채운다(검색 결과와 같은 동작 — 거는 것은 참가자). ⛔ CVC · 전체 카드 번호 0.
+ */
+function WalletScreen({
+  theme,
+  scenarioId,
+  onBack,
+  onPickNumber,
+}: {
+  theme: PhoneAppTheme;
+  scenarioId: string;
+  onBack: () => void;
+  onPickNumber: (digits: string) => void;
+}) {
+  const [side, setSide] = useState<"back" | "front">("back");
+  const card = myCardBack(scenarioId);
+  if (!card) return null;
+  const light = theme.text !== "#FFFFFF";
+  const centerDigits = dialableDigits(card.centerNumber);
+  return (
+    <div className="flex min-h-0 flex-1 flex-col" style={{ backgroundColor: light ? "#F2F2F4" : theme.bg }}>
+      <div className="flex items-center gap-2 px-3 pb-2" style={{ paddingTop: "calc(env(safe-area-inset-top) + 12px)" }}>
+        <button type="button" aria-label="뒤로" onClick={onBack} className="flex h-11 w-9 items-center justify-center" style={{ color: theme.sub }}>
+          <PhoneIcon name="chevron-back" size={22} />
+        </button>
+        <h2 className="text-[22px] font-bold">지갑</h2>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
+        <p className="mb-3 text-[15px]" style={{ color: theme.sub }}>
+          {`${card.cardName} · ${card.last4}`}
+        </p>
+        {side === "back" ? (
+          <section
+            aria-label={`${card.cardName} 뒷면`}
+            className="relative aspect-[1.586] w-full overflow-hidden rounded-[18px] text-[#1B1F24] shadow-lg"
+            style={{ background: "linear-gradient(160deg, #E9EEF2 0%, #D3DCE3 100%)" }}
+          >
+            <div aria-hidden="true" className="mt-[7%] h-[17%] w-full bg-[#1F2328]" />
+            <div className="mx-[6%] mt-[5%] flex items-center gap-3">
+              <div aria-hidden="true" className="h-8 flex-1 rounded-sm" style={{ background: "repeating-linear-gradient(135deg, #FFFFFF 0 6px, #E8E1CF 6px 12px)" }} />
+              <span className="text-[11px] text-[#4A5560]">서명</span>
+            </div>
+            <div className="mx-[6%] mt-[5%] flex flex-col gap-0.5">
+              <span className="text-[11px] text-[#4A5560]">{card.centerLabel}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (centerDigits) onPickNumber(centerDigits);
+                }}
+                aria-label={`${card.issuer} ${card.centerLabel} ${card.centerNumber} 전화 앱에 번호 입력`}
+                className="self-start text-[20px] font-bold tracking-wide underline underline-offset-4"
+              >
+                {card.centerNumber}
+              </button>
+            </div>
+            <div className="absolute inset-x-[6%] bottom-[6%] flex flex-col gap-0.5 text-[10px] leading-snug text-[#4A5560]">
+              {card.notes.map((line) => (
+                <span key={line}>{line}</span>
+              ))}
+            </div>
+          </section>
+        ) : (
+          <section
+            aria-label={`${card.cardName} 앞면`}
+            className="relative flex aspect-[1.586] w-full flex-col justify-between overflow-hidden rounded-[18px] p-[6%] text-white shadow-lg"
+            style={{ background: "linear-gradient(145deg, #0F6E5C 0%, #1D9A82 60%, #6CC8B4 100%)" }}
+          >
+            <span className="text-[18px] font-bold">{card.issuer}</span>
+            <span aria-hidden="true" className="h-8 w-11 rounded-md bg-[#E8C66A]" />
+            <div className="flex items-end justify-between">
+              <span className="text-[17px] tracking-[0.18em]">{`•••• •••• •••• ${card.last4}`}</span>
+              <span className="text-[12px] opacity-90">{card.validThru}</span>
+            </div>
+          </section>
+        )}
+        <div className="mt-4 flex justify-center">
+          <button
+            type="button"
+            onClick={() => setSide(side === "back" ? "front" : "back")}
+            className="min-h-[44px] rounded-full px-5 text-[15px] font-semibold"
+            style={{ backgroundColor: light ? "#FFFFFF" : theme.field, color: theme.tint }}
+          >
+            {side === "back" ? "앞면 보기" : "뒷면 보기"}
+          </button>
+        </div>
       </div>
     </div>
   );
