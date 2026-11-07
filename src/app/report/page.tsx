@@ -41,6 +41,10 @@ import {
   mockScreenWhat,
   OFFICIAL_CHECK_TITLE,
   officialCheckText,
+  PARTICIPANT_HANGUP_TITLE,
+  participantHangupText,
+  readParticipantHangup,
+  type ParticipantHangupView,
   pickFirstDeceivedIndex,
   readOfficialCheck,
   splitSmsEvents,
@@ -173,6 +177,8 @@ type ReportData = {
   routeSummary: RouteSummaryView | null;
   // 2026-11-07 Edge 시험 판 27 — 진짜 기관 번호로 직접 걸어 확인함(부재 = 블록 0).
   officialCheck: OfficialCheckView | null;
+  // 사용자 결정 2026-11-07 "방어로 집계" — 먼저 끊었고 그 전에 속은 순간 없음(부재 = 블록 0).
+  participantHangup: ParticipantHangupView | null;
 };
 
 type PageState = "no-session" | "loading" | "error" | "loaded";
@@ -232,6 +238,7 @@ export default function ReportPage() {
           : undefined,
       routeSummary: readRouteSummary(data.routeSummary),
       officialCheck: readOfficialCheck(data.officialCheck),
+      participantHangup: readParticipantHangup(data.participantHangup),
     };
   }, []);
 
@@ -590,6 +597,24 @@ export default function ReportPage() {
         )}
 
         {/* 2026-11-07 Edge 시험 판 27 — 진짜 기관 번호로 직접 걸어 확인한 행동(서버 `officialCheck` · `reportAccuracy.ts` O1). */}
+        {/* 사용자 결정 2026-11-07 "방어로 집계" — 참가자가 먼저 끊은 행동(서버 `participantHangup` · `reportAccuracy.ts` H1). */}
+        {report.participantHangup && (
+          <>
+            <div className="flex items-start gap-2.5">
+              <svg width="20" height="20" viewBox="0 0 16 16" className="mt-0.5 shrink-0" aria-hidden="true">
+                <circle cx="8" cy="8" r="7" fill="var(--success)" />
+              </svg>
+              <div>
+                <p className="text-lg font-bold text-ink">{PARTICIPANT_HANGUP_TITLE}</p>
+                <p className="mt-0.5 text-lg leading-relaxed text-ink-sub">
+                  {participantHangupText(report.participantHangup.timeLabel ? formatMomentLabel(report.participantHangup.timeLabel) : null)}
+                </p>
+              </div>
+            </div>
+            <div className="h-px bg-neutral-tint" />
+          </>
+        )}
+
         {report.officialCheck && (
           <>
             <div className="flex items-start gap-2.5">

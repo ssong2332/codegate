@@ -635,6 +635,11 @@ export type ReportDoc = {
    * 잘 대처한 행동으로 리포트에 따로 적는다. 부재 = 그런 통화 없음 · 다통화가 아닌 세션 · 옛 리포트(무백필).
    */
   officialCheck?: { label: string; number: string };
+  /**
+   * 사용자 결정 2026-11-07("방어로 집계") — 참가자가 사기범 통화를 먼저 끊었고(`relay.hungUpBy`) 그 전에 속은 순간이 없었다(`report/participantHangup.ts`).
+   * 잘 대처함 표시 전용 — `wasDeceived` · 방어 등급 입력 무변경. `timeLabel` = 끊은 통화의 마지막 대사 시각(끊은 시각 근사). 부재 = 해당 없음 · 옛 리포트.
+   */
+  participantHangup?: { legIndex: number; timeLabel?: string };
   createdAt: FirebaseFirestore.Timestamp;
   // T74 추가(전부 옵셔널, 하위호환 — §15.4.1 "아카이브 카드가 필요로 하는 세션 메타를 리포트에
   // 역정규화"). 없으면 아카이브가 카드 1장마다 세션 문서를 추가 read해야 한다(N+1, §15.6 G8).

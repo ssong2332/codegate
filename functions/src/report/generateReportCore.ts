@@ -52,6 +52,7 @@ import { stripLeakedThought } from "../realtime/thoughtLeak";
 import { resolveReportTimeBaseMs } from "../session/answeredAt";
 import { personaCardKind } from "../scenarios/personaCardCatalog";
 import { findDialEntry } from "../scenarios/dialDirectory";
+import { resolveParticipantHangup } from "./participantHangup";
 
 /**
  * 2026-11-07 Edge 시험 판 27 — 공식 번호 확인 기록.
@@ -366,6 +367,13 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     challengeId: session.challengeId,
   });
   const officialCheck = resolveOfficialCheck(session.scenarioId, session.relay?.genuineNumberId);
+  // 사용자 결정 2026-11-07 "방어로 집계" — 참가자가 먼저 끊었고 그 전에 속은 순간이 없으면 잘 대처함(`participantHangup.ts` P1~P4 · 판정 무변경).
+  const participantHangup = resolveParticipantHangup({
+    relay: session.relay,
+    messages,
+    deceivedMoments: mock.deceivedMoments,
+    baseMs: reportTimeBaseMs,
+  });
   const reportDoc: ReportDoc = {
     reportId: sessionId,
     sessionId,
@@ -388,6 +396,7 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     ...(routeSummary ? { routeSummary } : {}),
     // 2026-11-07 Edge 시험 판 27 — 진짜 기관 번호로 직접 걸어 확인한 사실(서버 `relay.genuineNumberId` · 부재 = 필드 0).
     ...(officialCheck ? { officialCheck } : {}),
+    ...(participantHangup ? { participantHangup } : {}),
     createdAt: Timestamp.now(),
     scenarioId: session.scenarioId,
     channel: session.channel ?? "voice",
