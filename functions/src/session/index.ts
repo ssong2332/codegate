@@ -28,7 +28,7 @@ import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "./channelTransition";
 import { recordVoiceTalkUnanswered } from "./voiceTalkUnanswered";
 import { applyCallReturnSessionUpdate, decideCallReturn, recordCallReturnLine } from "./callReturn";
-import { readEndSessionReason, resolveRecordedEndReason } from "./endReason";
+import { readEndSessionReason, resolveRecordedEndReason, shouldMarkParticipantHangupButton } from "./endReason";
 import { shouldMarkOpeningUnheard } from "./unheardOpening";
 import { assertDifficultyAllowed } from "./difficultyAllowance";
 import { assertScenarioNotMerged } from "./mergedScenario";
@@ -507,10 +507,17 @@ export const endSession = onCall<EndSessionRequest, Promise<EndSessionResponse>>
       // 표시 실패는 리포트에 들린 적 없는 첫마디가 남는 정도의 열화다(종전 동작).
     }
 
+    // 2026-11-07 — 통화 종료 버튼으로 끝낸 세션 표식(`endReason.ts` H1 · H2 — 리포트 "먼저 전화를 끊음" 단일 통화 근거).
+    const hangupButton = shouldMarkParticipantHangupButton(
+      (request.data as { hangupButton?: unknown } | null | undefined)?.hangupButton,
+      requestedReason,
+      recordedReason,
+    );
     await sessionRef.update({
       status: "ended",
       endReason: recordedReason,
       endedAt: Timestamp.now(),
+      ...(hangupButton ? { participantHangupButton: true as const } : {}),
     } satisfies Partial<SessionDoc>);
 
     // 이 write 자체가 Firestore 트리거 onSessionEnded(T10, 생성물 즉시 폐기)를 유발한다

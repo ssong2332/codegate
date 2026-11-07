@@ -681,6 +681,8 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
       "card-delivery-call",
       "courier-customs-scam",
       "institutional-impersonation",
+      // 2026-11-07 앱 안 결말 — 납치 협박 고급 계좌 문자가 여는 이체 화면 1건.
+      "kidnapping-threat",
       "loan-refinance-scam",
       // §92.3 — 고급 전용 2종 카탈로그 신설(credential-form 각 1건).
       "prosecution-cooperation-call",
@@ -688,7 +690,7 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
       "reputation-blackmail-scam",
       "tax-refund-scam",
     ],
-    "통화 채널 10종이 카탈로그에 없으면 정밀화가 아무것도 안 푼 것이다",
+    "통화 채널 11종이 카탈로그에 없으면 정밀화가 아무것도 안 푼 것이다",
   );
   // 그리고 **허용목록 밖** 통화 채널 시나리오는 app-install을 하나도 갖지 않는다(정밀화의 안전 전제 = M2 차단).
   // ⚠️ T194-c-1 허용목록 대체(§84.5.1 · G583 — X8): 허용목록 3종은 설치 항목을 갖되 **통화 중 문자 표면으로만** 갖는다.
@@ -732,6 +734,12 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
     "in-call-sms",
     "in-call-sms",
     "in-call-sms",
+    "in-call-sms",
+    "in-call-sms",
+    // PR-B — 기관 고급 3통화 대출 신청 · 대출금 보관 이체 화면(통화 중 문자 표면) 2건.
+    "in-call-sms",
+    "in-call-sms",
+    // 2026-11-07 앱 안 결말 — 납치 협박 고급 이체 화면 · 검찰 고급 상품권 구매 화면(통화 중 문자 표면) 2건.
     "in-call-sms",
     "in-call-sms",
     "messenger-link",
@@ -990,7 +998,7 @@ test("[AC-078 (a)] 콘텐츠 카탈로그 ↔ 도달 가능 랜딩 집합이 **�
     false,
     "어떤 프롬프트도 내지 않는 라벨이 도달 가능 집합에 들어왔다",
   );
-  assert.equal(reachableLandingKeysAllUnits().length, 27, "도달 가능 랜딩은 27종이다(§142 — 카드사 고급 재구성 원격 지원 설치 · 안전계좌 이체 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(reachableLandingKeysAllUnits().length, 31, "도달 가능 랜딩은 31종이다(PR-B — 기관 사칭 고급 앱 안 대출 신청 · 대출금 보관 이체 2종 추가 · 2026-11-07 앱 안 결말 — 납치 이체 · 상품권 구매 2종 추가 · §142 — 카드사 고급 재구성 원격 지원 설치 · 안전계좌 이체 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
 });
 
 test("[AC-078 (a) 역검증] 한쪽에서 1건을 빼면 실제로 실패한다", () => {
@@ -1081,6 +1089,10 @@ const T129B_MULTI_LANDING_UNITS: readonly string[] = [
   // P2-d — 환급 중급 · 고급은 환급 신청 화면 뒤 수수료 이체 화면을 함께 선언한다(초급은 수수료 화면 하나).
   "tax-refund-scam#fv-aqx2",
   "tax-refund-scam#fv-uk7m",
+  // ⭐ PR-B — 기관 사칭 고급 3통화: 통화 1의 안전계좌 이체 · 앱 안 대출 신청 + 통화 3의 대출금 보관 이체(다른 문자 · 다른 사기범 메시지).
+  "institutional-impersonation#fv-c5fj",
+  // 2026-11-07 앱 안 결말 — 검찰 고급 상품권형은 사건 조회 화면 뒤 상품권 구매 화면을 함께 선언한다(다른 문자 · 다른 사기범 메시지).
+  "prosecution-cooperation-call#fv-v2mk",
 ];
 
 /** 등재 단위를 뺀 단위 키 — 역검증들의 기준 입력(등재 단위 때문에 기대 배열이 흔들리지 않게). */
@@ -1350,7 +1362,7 @@ function findFieldConvergence(
 
 test("[AC-079] bodyLines·fields·successHeadline·issuerLabel이 **각각 단독으로** 수렴하지 않는다", (t) => {
   const items = Object.values(MOCK_SCREENS).flat();
-  assert.equal(items.length, 27, "현행 비교 대상은 도달 가능 랜딩 27종이다(§142 — 카드사 고급 재구성 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(items.length, 31, "현행 비교 대상은 도달 가능 랜딩 31종이다(PR-B — 기관 사칭 고급 앱 안 대출 신청 · 대출금 보관 이체 2종 추가 · 2026-11-07 앱 안 결말 2종 추가 · §142 — 카드사 고급 재구성 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
   const stats = fieldDivergenceStats(items);
   for (const { field, compared, excluded, converged } of stats) {
     t.diagnostic(
@@ -1634,6 +1646,21 @@ const BAIT_TO_LANDING: {
     headlineAnchors: ["이체"],
     ctaAnchors: ["이체"],
   },
+  // 2026-11-07 앱 안 결말 — 납치 협박 고급 계좌 문자 · 검찰 고급 상품권 문자가 여는 화면 2종.
+  {
+    landingId: "kidnap-ransom-transfer",
+    baitSource: "scenarios/inCallSms.ts:KIDNAPPING_THREAT (문자 본문·칩 — 2026-11-07)",
+    baitExcerpt: "아래 링크에서 바로 이체할 수 있습니다.",
+    headlineAnchors: ["이체"],
+    ctaAnchors: ["이체"],
+  },
+  {
+    landingId: "voucher-purchase",
+    baitSource: "scenarios/inCallSms.ts:PROSECUTION_COOPERATION_CALL (문자 본문·칩 — 2026-11-07)",
+    baitExcerpt: "검수 대상 자금은 아래 판매처에서 상품권으로 구매해 주세요.",
+    headlineAnchors: ["상품권", "구매"],
+    ctaAnchors: ["상품권", "구매"],
+  },
   // T194-c-1(§84.5.2) — Q2 통화 중 설치 화면 3종. 미끼 = 통화 중 설치 문자 본문 · 칩. CTA는 app-install 예외(권한 허용 버튼).
   {
     landingId: "card-delivery-app-install",
@@ -1691,6 +1718,21 @@ const BAIT_TO_LANDING: {
     baitSource: "scenarios/inCallSms.ts:CARD_COMPANY_IMPERSONATION card-safe-account (문자 본문·칩)",
     baitExcerpt: "아래에서 자산 보호 이체를 진행해 주세요.",
     headlineAnchors: ["자산 보호"],
+    ctaAnchors: ["이체"],
+  },
+  // ⭐ PR-B — 기관 사칭 고급 3통화.
+  {
+    landingId: "loan-apply",
+    baitSource: "scenarios/inCallSms.ts:INSTITUTIONAL_IMPERSONATION institution-loan-guide (문자 본문·칩)",
+    baitExcerpt: "[명의도용 입증 절차] 비대면 대출 신청 안내",
+    headlineAnchors: ["대출"],
+    ctaAnchors: ["신청"],
+  },
+  {
+    landingId: "loan-safe-transfer",
+    baitSource: "scenarios/inCallSms.ts:INSTITUTIONAL_IMPERSONATION institution-loan-safe-account (문자 본문·칩)",
+    baitExcerpt: "입금된 대출금 전액을 아래에서 이체해 주세요.",
+    headlineAnchors: ["대출금", "이체"],
     ctaAnchors: ["이체"],
   },
   {

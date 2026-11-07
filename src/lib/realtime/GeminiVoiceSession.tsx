@@ -23,7 +23,7 @@
 import { useEffect, useRef } from "react";
 import { GoogleGenAI, Modality } from "@google/genai";
 import type { CallLegEnd, CreateRealtimeCallResponse } from "@/lib/api";
-import { deliverInCallSms, deliverVerifyOffer, requestScammerHangup } from "@/lib/api";
+import { deliverInCallSms, deliverVerifyOffer, recordLoanReview, requestScammerHangup } from "@/lib/api";
 import {
   GEMINI_INPUT_SAMPLE_RATE,
   GEMINI_OUTPUT_SAMPLE_RATE,
@@ -43,6 +43,7 @@ import {
   collectToolResponses,
   endCallBatchHasOtherCalls,
   readEndCallReasonArg,
+  readLoanReviewOutcomeArg,
   readSmsPurposeArg,
   resolveToolCallKind,
   type LiveToolFunctionCall,
@@ -63,6 +64,7 @@ import { createEarlyMessageGate } from "./earlyMessageGate";
 import { INITIAL_UNHEARD_REPLY_STATE, UNHEARD_REPLY_TEXT, stepUnheardReply } from "./unheardReply";
 import { appendScammerChunk, shouldMarkToolBoundary } from "./toolTurnTranscript";
 import { INITIAL_THOUGHT_LEAK_GATE_STATE, pickLiveAudioData, stepThoughtLeakGate, stripLeakedThought, type LiveContentPart } from "./thoughtLeak";
+import { guardLiveScammerLine, guardLiveUserLine } from "./liveTranscriptGuard";
 import {
   AWAIT_RESPONSE_TIMEOUT_MS,
   INITIAL_CLIENT_TURN_QUEUE_STATE,
@@ -758,6 +760,23 @@ export default function GeminiVoiceSession({
         }
       }
 
+      // ⭐ PR-B — 정당한 제3자 레그(대출 실행 확인 상담원)의 결과 보고. 판정 · 문면은 서버(`recordLoanReview`) · 화면은 고정 enum 하나만 넘긴다.
+      if (kind === "report_loan_review") {
+        const outcome = readLoanReviewOutcomeArg(call.args);
+        const reportFailure = {
+          id: call.id,
+          name: call.name ?? "unknown",
+          response: { status: "unavailable", guidance: liveTools.reportLoanReviewFailureInstruction ?? liveTools.failureInstruction },
+        };
+        if (outcome === undefined) return reportFailure;
+        try {
+          const result = await recordLoanReview({ sessionId, outcome });
+          return { id: call.id, name: call.name ?? "unknown", response: { status: result.recorded ? "recorded" : "already_recorded", guidance: result.guidance } };
+        } catch {
+          return reportFailure;
+        }
+      }
+
       if (kind === "send_prepared_sms") {
         // ⭐ T191(문자 도달 조건 · AC-099 (b)) — 모델이 고른 목적을 그대로 넘기고 판정은 서버가 한다(선언 · 간격 ·
         // 이미 보냄 — `resolveSmsGate`). 화면은 smsId를 고르지 않는다(예전 `pickModelToolSmsId` 폐기).
@@ -856,10 +875,16 @@ export default function GeminiVoiceSession({
       reportTurnPhase();
     };
 
+    // 2026-11-07(Edge 시험 판 3 · 16 · 23) — 자막 · 전사 거르기(`liveTranscriptGuard.ts` S1 표식 · S2 실존 회사명 · U1 비밀번호 숫자).
+    // 참가자 줄 U1의 조건 = 바로 앞에 내보낸 사기범 줄(이 연결 안 — 재연결 뒤 첫 참가자 줄은 서버 저장 단계가 다시 거른다).
+    let lastEmittedScammerLine: string | undefined;
+    const guardScammer = (raw: string) => guardLiveScammerLine(stripLeakedThought(raw)).trim();
+
     const flushTranscript = () => {
-      const u = userBuffer.trim();
+      // ⛔ 참가자 줄은 원문이다 — 단, 바로 앞 사기범 줄이 비밀번호를 물었으면 숫자 묶음만 가린다(U1).
+      const u = guardLiveUserLine(userBuffer, lastEmittedScammerLine).trim();
       // §116 — 사기범 전사만 사고 문장을 지운다(판정표 행 1~4 · 참가자 발화는 원문).
-      const s = stripLeakedThought(scammerBuffer).trim();
+      const s = guardScammer(scammerBuffer);
       if (u) {
         handlersRef.current.onTranscriptTurn("user", u);
         noteEmittedTurn("user", u);
@@ -869,6 +894,7 @@ export default function GeminiVoiceSession({
         modelToolScammerTurns += 1;
         handlersRef.current.onTranscriptTurn("scammer", s);
         noteEmittedTurn("scammer", s);
+        lastEmittedScammerLine = s;
       }
       userBuffer = "";
       scammerBuffer = "";
@@ -889,12 +915,13 @@ export default function GeminiVoiceSession({
     // 사기범의 잘린 턴보다 **앞에** 기록돼 시간 순서가 뒤집힌다. 사용자 조각은 그대로 두고 다음
     // turnComplete에서 정상적으로 flush되게 한다.
     const flushScammerTurn = () => {
-      const s = stripLeakedThought(scammerBuffer).trim();
+      const s = guardScammer(scammerBuffer);
       if (s) {
         // §82.3.4 — 끊긴 조각 flush도 사기범 전사 턴이다(`messages`에 문서 1개로 남는다).
         modelToolScammerTurns += 1;
         handlersRef.current.onTranscriptTurn("scammer", s);
         noteEmittedTurn("scammer", s);
+        lastEmittedScammerLine = s;
       }
       scammerBuffer = "";
       scammerToolBoundary = false;

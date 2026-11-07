@@ -16,9 +16,13 @@ import { GoogleGenAI, Modality, EndSensitivity, StartSensitivity } from "@google
 import { asksIdentityCheck } from "../roleplay/personaAuthority";
 import { isL3Procedural } from "../roleplay/l3Depth";
 import { buildSystemPrompt } from "../roleplay/promptAssembly";
-import { resolveSessionScenarioPrompt, routeEndsWithoutAccount, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
+import { buildGenuineLegPrompt } from "../roleplay/genuineLegPrompt";
+import { genuineLegOf, resolveSessionScenarioPrompt, routeEndsWithoutAccount, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
 import { resolveRouteAccountNumber, sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
+import { callPhaseScenarioPrompt } from "../roleplay/escalatedCall";
 import {
+  buildGenuineLegToolDeclarations,
+  buildGenuineLegToolNames,
   buildLiveToolDeclarations,
   buildLiveToolNames,
   declaresEndCall,
@@ -147,10 +151,15 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // T191 S5(AC-096 (e)) — 세션에 배정된 흐름 변형을 합성한 프롬프트(sendMessage · 오프닝과 같은 단일
     // 해석 지점). flowVariantId 부재 = 원본(무소급).
     // §142 — 다통화 변형은 현재 레그 프롬프트(부재 = 종전).
-    const scenarioPrompt = resolveSessionScenarioPrompt(input.scenarioId, input.flowVariantId, input.callLeg?.legIndex);
-    if (!scenarioPrompt) {
+    const resolvedScenarioPrompt = resolveSessionScenarioPrompt(input.scenarioId, input.flowVariantId, input.callLeg?.legIndex);
+    if (!resolvedScenarioPrompt) {
       throw new Error(`시나리오 프롬프트가 없습니다: ${input.scenarioId}`);
     }
+    // Edge 판 23 · 24 — 메신저에서 넘어온 통화는 문자 단계의 통화 전환 지시를 뺀다(`roleplay/escalatedCall.ts` 판정표 C · 부재 = 같은 객체).
+    const scenarioPrompt = callPhaseScenarioPrompt(resolvedScenarioPrompt, {
+      escalatedCall: input.escalatedCall === true,
+      inCallSmsEnabled: sessionDeclaresInCallSms(input.scenarioId, input.flowVariantId),
+    });
     // sendMessage/generateOpeningLine과 **같은 조립 함수**를 쓴다 — 프롬프트를 두 곳에 손으로
     // 옮겨 적어 드리프트가 나는 것을 막는다.
     // T72(§15.3.3 호출부 3곳 중 "Gemini Live 토큰") — 난이도를 여기서도 넘겨야 "텍스트는 난이도가
@@ -178,17 +187,16 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // 빈 배열 = 오늘과 동일"은 C3부터 메신저 · 중간 leg에서만 참이다(아래 `tools` 주석).
     // T194-a(§84.4.3) — 층 1(음성 풀) · 층 2([화자] 블록)가 **같은 값**을 쓴다(§50.3.1).
     const speakerGender = input.speakerGender ?? speakerGenderFor(input.scenarioId);
+    // ⭐ PR-B — 정당한 제3자 레그(대출 실행 확인 상담원)는 사기범 조립 대신 전용 프롬프트 · 결과 보고 + 끊기 도구만(`roleplay/genuineLegPrompt.ts`).
+    const genuineLeg = genuineLegOf(input.flowVariantId, input.callLeg?.legIndex);
     const endCallScope: EndCallScope = {
       channel: input.channel,
       relay: input.hangupRelay,
       liveAvailable: this.endCallLiveAvailable,
     };
-    const liveToolDeclarations = buildLiveToolDeclarations(
-      input.scenarioId,
-      input.difficultyLevel,
-      input.flowVariantId,
-      endCallScope,
-    );
+    const liveToolDeclarations = genuineLeg
+      ? buildGenuineLegToolDeclarations()
+      : buildLiveToolDeclarations(input.scenarioId, input.difficultyLevel, input.flowVariantId, endCallScope);
     const familyAddressPrompt = resolveFamilyAddressPrompt(input.scenarioId, input.familyAddress);
     const systemPrompt = buildSystemPrompt(scenarioPrompt, {
       difficultyLevel: input.difficultyLevel,
@@ -251,7 +259,8 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
           model: GEMINI_LIVE_MODEL,
           config: {
             responseModalities: [Modality.AUDIO],
-            systemInstruction: systemPrompt,
+            // ⭐ PR-B — 정당한 제3자 레그(대출 실행 확인 상담원)는 사기범 조립 대신 전용 프롬프트(`roleplay/genuineLegPrompt.ts`).
+            systemInstruction: genuineLeg ? buildGenuineLegPrompt(genuineLeg, input.fictionalBankName) : systemPrompt,
             speechConfig: {
               languageCode: "ko-KR",
               voiceConfig: {
@@ -351,7 +360,9 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     if (!tokenName) {
       throw new Error("Gemini 단기 토큰 발급 응답에 name이 없습니다.");
     }
-    const liveTools = buildLiveToolNames(input.scenarioId, input.difficultyLevel, input.flowVariantId, endCallScope);
+    const liveTools = genuineLeg
+      ? buildGenuineLegToolNames()
+      : buildLiveToolNames(input.scenarioId, input.difficultyLevel, input.flowVariantId, endCallScope);
 
     return {
       provider: "gemini",

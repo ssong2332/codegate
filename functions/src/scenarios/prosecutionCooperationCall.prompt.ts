@@ -167,6 +167,14 @@ export function prosecutionRoutePersona(endingClause: string, endingRule: string
     .replace(CRYPTO_NO_DETAIL_LINE, endingRule);
 }
 
+// ⭐ 2026-11-07(Edge 시험 판 12 · 사용자 결정 "앱 안 화면 추가") — 상품권형(fv-v2mk)은 사건 조회 문자 뒤에 **상품권 구매 안내 문자**(`prosecution-voucher-link`
+// — 앱 안 구매 화면)가 하나 더 있다. 위 `prosecutionRoutePersona`의 화면 줄("사건 조회 안내 문자 말고는")을 두 문자 줄로 바꾼다. ⛔ 대출금형(fv-a6lq)은 그대로.
+const CASE_AND_VOUCHER_SCREEN_LINE =
+  "- 사건 조회 안내 문자와 상품권 구매 안내 문자 말고는 서류·사진·메신저 같은 다른 화면을 보내겠다고 하지 않는다. 그 밖에 필요한 것은 말로만 전한다.";
+export function prosecutionVoucherRoutePersona(endingClause: string, endingRule: string): string {
+  return prosecutionRoutePersona(endingClause, endingRule).replace(CASE_LINK_ONLY_SCREEN_LINE, CASE_AND_VOUCHER_SCREEN_LINE);
+}
+
 export const prosecutionCooperationCallPrompt: ScenarioPromptDoc = {
   personaPrompt,
   weakenedTactics,

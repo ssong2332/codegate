@@ -22,7 +22,13 @@
 
 import { isDifficultyLevel, type DifficultyLevel } from "@/lib/difficulty";
 import type { EndSessionReason } from "@/lib/api/types";
-import { END_REASON_HINT_DEFAULT, encodeEndReasonHint, readEndReasonHint } from "./endReasonHint";
+import {
+  END_REASON_HINT_DEFAULT,
+  encodeEndReasonHint,
+  encodeHangupButtonHint,
+  readEndReasonHint,
+  readHangupButtonHint,
+} from "./endReasonHint";
 
 const SESSION_ID_KEY = "onboarding.pendingSessionId";
 const IDENTITY_CONFIRMED_KEY = "onboarding.identityConfirmed";
@@ -74,6 +80,37 @@ export function peekPendingEndReason(sessionId: string): EndSessionReason {
     return readEndReasonHint(window.sessionStorage.getItem(END_REASON_HINT_KEY), sessionId);
   } catch {
     return END_REASON_HINT_DEFAULT;
+  }
+}
+
+// 2026-11-07 — 통화 종료 버튼 힌트(`endReasonHint.ts` B1 · B2). 저장소 오류는 삼킨다 — 유실 = 버튼 표식 없음(리포트 블록 0 · 보수적).
+const HANGUP_BUTTON_HINT_KEY = "session.pendingHangupButton";
+
+export function setPendingHangupButton(sessionId: string): void {
+  if (!hasSessionStorage()) return;
+  try {
+    window.sessionStorage.setItem(HANGUP_BUTTON_HINT_KEY, encodeHangupButtonHint(sessionId));
+  } catch {
+    // 유실 = 표식 없음.
+  }
+}
+
+/** 읽기만 한다. 없음 · 다른 세션 · 깨진 값 · 저장소 오류 = `false`. */
+export function peekPendingHangupButton(sessionId: string): boolean {
+  if (!hasSessionStorage()) return false;
+  try {
+    return readHangupButtonHint(window.sessionStorage.getItem(HANGUP_BUTTON_HINT_KEY), sessionId);
+  } catch {
+    return false;
+  }
+}
+
+export function clearPendingHangupButton(): void {
+  if (!hasSessionStorage()) return;
+  try {
+    window.sessionStorage.removeItem(HANGUP_BUTTON_HINT_KEY);
+  } catch {
+    // 지우기 실패 = 다음 세션에서 세션 id 불일치로 버려진다.
   }
 }
 
@@ -171,6 +208,7 @@ export function clearPendingSession(): void {
   window.sessionStorage.removeItem(ANSWERED_SESSION_KEY);
   // T192 C4 — 종료 사유 힌트도 같은 세션 단위로 비운다(종료 화면의 성공 경로 · 재시도 성공의 `clearPendingEndReason`과 겹쳐도 멱등).
   window.sessionStorage.removeItem(END_REASON_HINT_KEY);
+  window.sessionStorage.removeItem(HANGUP_BUTTON_HINT_KEY);
   // T187(§72 D2 · G450) — 메신저 시작 고지 확인 기록도 같은 세션 단위로 비운다.
   window.sessionStorage.removeItem(START_NOTICE_ACK_SESSION_KEY);
   // T190-8b(§74.22 (3)) — 통화 벨 직전 고지 확인 기록도 같은 세션 단위로 비운다.

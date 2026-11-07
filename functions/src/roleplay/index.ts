@@ -17,7 +17,9 @@ import { completeWithFallback, getLlmClient, LLM_FIRST_TURN_TIMEOUT_MS } from ".
 import { triggerReportGeneration } from "../report";
 import { findFlowVariant, resolveSessionScenarioPrompt, routeEndsWithoutAccount, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
 import {
+  buildLegLoanReviewContext,
   buildLegRejoinContext,
+  currentLegHoldsScreens,
   currentLegIndex,
   legHangupAdjustments,
   legStartUserTurns,
@@ -69,7 +71,7 @@ import {
 } from "../inCallSms/smsGate";
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms, readMockScreenRecords } from "../inCallSms/smsDelivery";
-import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, readMockScreenCompletion } from "../scammerHangup/goalAction";
+import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, isLegScreenHoldPending, readMockScreenCompletion } from "../scammerHangup/goalAction";
 import { FALLBACK_GOAL_WRAP_UP_INSTRUCTION } from "../scammerHangup/guidance";
 import type { SmsDeliveryInput } from "../inCallSms/smsDelivery";
 import { findVerifyInterceptItem } from "../scenarios/verifyIntercept";
@@ -97,10 +99,23 @@ import { wasTurnInstructionSpoken } from "./announceMarking";
 import { planOtpFollowUp } from "./otpFollowUp";
 import { OTP_HOLD_INSTRUCTION, claimMatchesPurpose, combineReplyGuards, otpDemandGuardFor, replyClaimsSmsSent } from "./smsClaim";
 import { extractEscalationSignal } from "./escalationSignal";
-import { callPhaseMockTacticHints, ESCALATED_CALL_CONTEXT_INSTRUCTION, isEscalatedVoiceCall, userTurnsSinceCallEntry } from "./escalatedCall";
+import {
+  callPhaseMockTacticHints,
+  callPhaseScenarioPrompt,
+  ESCALATED_CALL_CONTEXT_INSTRUCTION,
+  isEscalatedVoiceCall,
+  userTurnsSinceCallEntry,
+} from "./escalatedCall";
 import { isFirstUserTurn } from "./firstTurn";
 import { isL3Procedural } from "./l3Depth";
-import { demandAmountFrom, dropPrematureBankTransferChip, ensureBankTransferChip, extractLinkMarker, withBankTransferPrefill } from "./linkMarker";
+import {
+  demandAmountFrom,
+  dropPrematureBankTransferChip,
+  ensureBankTransferChip,
+  extractLinkMarker,
+  finalizeBankTransferChips,
+  withBankTransferPrefill,
+} from "./linkMarker";
 import { sessionReachableLandingIds } from "../scenarios/reachability";
 import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
@@ -225,13 +240,18 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // T191 S5(AC-096 (e)(f)) — 세션에 배정된 흐름 변형을 합성한 프롬프트(부재 = 원본 · 무소급).
     // §142(PR-3) — 다통화 변형은 현재 레그의 인물 · 단계로 합성한다(그 밖 = undefined = 종전 바이트 동일).
     const sessionCallLeg = resolveSessionCallLeg(findFlowVariant(session.flowVariantId), session);
-    const scenarioPrompt = resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId, sessionCallLeg?.legIndex);
-    if (!scenarioPrompt) {
+    const resolvedScenarioPrompt = resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId, sessionCallLeg?.legIndex);
+    if (!resolvedScenarioPrompt) {
       throw new HttpsError(
         "internal",
         `세션의 scenarioId에 해당하는 scenarioPrompts가 없습니다: ${session.scenarioId}`,
       );
     }
+    // Edge 판 23 · 24 — 메신저에서 넘어온 통화는 문자 단계의 통화 전환 지시를 뺀다(`escalatedCall.ts` 판정표 C · 그 밖 = 같은 객체).
+    const scenarioPrompt = callPhaseScenarioPrompt(resolvedScenarioPrompt, {
+      escalatedCall: isEscalatedVoiceCall(session.channel, session.channelHistory),
+      inCallSmsEnabled: sessionDeclaresInCallSms(session.scenarioId, session.flowVariantId),
+    });
     // §121.7 PR-3 — 통화 중 대화방 카톡(메인 결정 ⓑⓒ). 문자 · 끊기 · 전환 판정을 타지 않는 별도 경로(`chatDuringCall.ts` 판정표).
     if (request.data?.duringCall === true) {
       // D-k(P2 확인 실측 2026-11-01) — 통화 중 대화방 캡처도 종류를 넘긴다(빠지면 일반 사진 지시가 갔다).
@@ -359,7 +379,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const { declared: smsDeclared, reason: smsDeclaredReason } = resolveDeclaredSms(
       session.scenarioId,
       session.flowVariantId,
-      { relay: session.relay },
+      { relay: session.relay, loanReview: session.loanReview?.outcome },
     );
     const smsStore = firestoreSmsStore(db, sessionRef);
     const smsDeliveryBase: Omit<SmsDeliveryInput, "purpose" | "anchorScammerTurn" | "trigger" | "userTurns"> = {
@@ -510,7 +530,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const legVariant = sessionCallLeg ? findFlowVariant(session.flowVariantId) : undefined;
     const legAdj = legVariant ? legHangupAdjustments(legVariant, session.relay, userTurnsNow) : undefined;
     const legScope = legAdj?.nonLastLeg && legVariant
-      ? { legIndex: currentLegIndex(legVariant, session.relay), turnsSinceLegStart: legAdj.turnsSinceLegStart }
+      ? { legIndex: currentLegIndex(legVariant, session.relay), turnsSinceLegStart: legAdj.turnsSinceLegStart, holdUntilScreens: currentLegHoldsScreens(legVariant, session.relay) }
       : undefined;
     const hangupFacts: FallbackHangupFacts = {
       status: session.status,
@@ -540,7 +560,10 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         ? {
             // 실기기 신고 F2 — 다음 번호가 문자에만 있는 레그는 그 문자가 도착하기 전 끊기를 막는다(4-b · 실시간과 같은 판정).
             followUpPending: isLegDialSmsPending(legVariant, session.relay, smsDelivered.map((d) => d.smsId)),
-            decisionScreenPending: false,
+            // ⭐ PR-B — 화면 보류 레그는 그 레그 화면을 마치기 전 goal 끊기를 막는다(실시간과 같은 판정 · 도착 기록을 못 읽었으면 대기).
+            decisionScreenPending: legScope.holdUntilScreens
+              ? isLegScreenHoldPending({ scenarioId: session.scenarioId, declared: smsDeclared, delivered: smsDeliveredLoaded ? smsDelivered : [] })
+              : false,
             alreadyAccepted: session.relay?.legEnded === legScope.legIndex,
             turnsSinceCallEntry: legScope.turnsSinceLegStart,
           }
@@ -777,10 +800,17 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // §142(PR-3)의 앞 통화 인계 블록은 2026-11-07에 없앴다(위 `legHistory` 주석).
     // 2026-11-07(메인 승인 계약) — 참가자가 끊은 같은 레그를 다시 이은 뒤 첫 턴에만 상황 문장(이 레그 대화는 모델 이력에 이미 있다).
     const rejoin = session.relay?.rejoin;
-    const legRejoinNotice =
-      sessionCallLeg && rejoin && session.relay?.legIndex === sessionCallLeg.legIndex && turnCount === rejoin.atUserTurns + 1
-        ? buildLegRejoinContext(rejoin.kind, sessionCallLeg.legIndex)
+    // ⭐ PR-B — 정당한 제3자 통화 뒤 같은 인물이 다시 건 레그의 첫 턴에만 확인 결과 1줄(실시간 `realtime/index.ts`와 같은 문면 · 판정표 K).
+    // 재연결 상황 문장과 같은 자리(재연결이면 그쪽이 앞선다 — 재연결은 같은 레그 안이라 이 1줄이 이미 실린 뒤다).
+    const loanReviewVariant = sessionCallLeg ? findFlowVariant(session.flowVariantId) : undefined;
+    const legLoanReviewNotice =
+      sessionCallLeg && loanReviewVariant && !rejoin && turnCount === legStartUserTurns(session.relay, sessionCallLeg.legIndex) + 1
+        ? buildLegLoanReviewContext(loanReviewVariant, sessionCallLeg.legIndex, session.loanReview?.outcome)
         : undefined;
+    const legRejoinNotice =
+      (sessionCallLeg && rejoin && session.relay?.legIndex === sessionCallLeg.legIndex && turnCount === rejoin.atUserTurns + 1
+        ? buildLegRejoinContext(rejoin.kind, sessionCallLeg.legIndex)
+        : undefined) ?? legLoanReviewNotice;
     const turnInstructionWithSms =
       [legRejoinNotice, promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction, otpFollowUpInstruction, otpHoldInstruction]
         .filter(Boolean)
@@ -1157,12 +1187,19 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 2026-09-06 버그수정 — 사기범(LLM) 응답에는 maskPII를 적용하지 않는다(scammerReplyMasking.ts
     // 헤더 주석 참고 — 라이브 신고 "[계좌]" 리터럴 노출, 시나리오·난이도 무관 공통 재현).
     const finalReplyText = finalizeScammerReplyText(shapedReplyText);
+    // S2 · Edge 판 25 — 문장 상한 · 대사 교체 뒤 최종 대사로 이체 화면 칩을 한 번 더 판정한다(계좌 문장이 잘렸으면 칩도 뺀다 — `finalizeBankTransferChips` 표).
+    const savedReplyAttachments = finalizeBankTransferChips(replyAttachments, finalReplyText, {
+      accountNumber: routeAccountNumber,
+      bankName: fictionalBankName,
+      accountHolder: routeVariant?.scenarioId === session.scenarioId ? routeVariant.accountHolder : undefined,
+      history: storedHistory,
+    });
     await messagesRef.add({
       role: "scammer",
       textMasked: finalReplyText,
       turnIndex: nextIndex + 1,
       createdAt: Timestamp.now(),
-      ...(replyAttachments ? { attachments: replyAttachments } : {}),
+      ...(savedReplyAttachments ? { attachments: savedReplyAttachments } : {}),
       ...(session.channel ? { channel: session.channel } : {}),
       ...(sessionCallLeg ? { legIndex: sessionCallLeg.legIndex } : {}),
     } satisfies MessageDoc);
@@ -1378,7 +1415,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const reply: ScammerMessage = {
       role: "scammer",
       text: finalReplyText,
-      ...(replyAttachments ? { attachments: replyAttachments } : {}),
+      ...(savedReplyAttachments ? { attachments: savedReplyAttachments } : {}),
     };
     return {
       reply,

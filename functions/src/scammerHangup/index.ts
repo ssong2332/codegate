@@ -19,9 +19,9 @@ import { readDeliveredSms } from "../inCallSms/smsDelivery";
 import type { SessionDoc } from "../shared/types";
 import { decideAndMarkRealtimeHangup, isVerifyInterceptSession } from "./commit";
 import { findFlowVariant } from "../scenarios/flowVariants";
-import { currentLegIndex, legHangupAdjustments } from "../callLegs/legPlan";
+import { currentLegHoldsScreens, currentLegIndex, legHangupAdjustments } from "../callLegs/legPlan";
 import { LEG_DIAL_SMS_PENDING_GUIDANCE, isLegDialSmsPending } from "../callLegs/legHandoff";
-import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, readMockScreenCompletion } from "./goalAction";
+import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, isLegScreenHoldPending, readMockScreenCompletion } from "./goalAction";
 import { scammerHangupGuidance } from "./guidance";
 import { readScammerHangupRequest } from "./readRequest";
 import type { RequestScammerHangupRequest, RequestScammerHangupResponse } from "./types";
@@ -70,7 +70,7 @@ export const requestScammerHangup = onCall<
   const followUpUserTurns = goalFollowUpFor(session.scenarioId, session.flowVariantId);
   const verifySession = isVerifyInterceptSession(session);
   // §142 — 다통화 변형은 현재 레그 선언(마지막이 아닌 레그에는 결정 화면이 없다 — 4-c는 마지막 레그 안전계좌 화면).
-  const { declared, reason: declaredReason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId, { relay: session.relay });
+  const { declared, reason: declaredReason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId, { relay: session.relay, loanReview: session.loanReview?.outcome });
   const decisionScreenInput = {
     scenarioId: session.scenarioId,
     flowVariantId: session.flowVariantId,
@@ -106,6 +106,8 @@ export const requestScammerHangup = onCall<
         turnsSinceLegStart: legAdj.turnsSinceLegStart,
         // 실기기 신고 F2 — 다음 번호가 문자에만 있는 레그는 그 문자가 도착하기 전 끊기를 막는다(4-b).
         dialSmsPending: isLegDialSmsPending(variant, session.relay, delivered.map((d) => d.smsId)),
+        // ⭐ PR-B — 화면 보류 레그(기관 고급 통화 1)는 이체 · 대출 신청 화면을 마치기 전 goal 끊기를 막는다(4-c).
+        ...(currentLegHoldsScreens(variant!, session.relay) ? { screenHoldPending: isLegScreenHoldPending({ scenarioId: session.scenarioId, declared, delivered }) } : {}),
       }
     : undefined;
   const decision = await db.runTransaction((tx) =>

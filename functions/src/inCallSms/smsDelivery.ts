@@ -165,3 +165,22 @@ export async function deliverOpenerSms(
     .doc(item.smsId)
     .create({ ...buildInCallSmsDoc(item, now, 0, scenarioId, fictionalBankName), userTurnsAtArrival: 0 });
 }
+
+/**
+ * ⭐ PR-B(2026-11-07 · 기관 사칭 고급 3통화 — 설계 §6) — 사기범이 아닌 쪽이 보내는 **안내 문자**(대출 실행 확인 결과 = 실행 → 가상 캐피탈의 입금 안내)를
+ * 그 순간 도착시킨다. 게이트 밖(선언 밖 · 모델 도구 밖)이지만 문서를 만드는 지점은 이 파일 하나다(G537/X4 — `deliverOpenerSms`와 같은 꼴).
+ * 이미 있으면 덮어쓰지 않는다(`create` — 두 번 불러도 한 통).
+ */
+export async function deliverServerNoticeSms(
+  sessionRef: FirebaseFirestore.DocumentReference,
+  item: InCallSmsItem,
+  now: FirebaseFirestore.Timestamp,
+  scenarioId: string,
+  userTurns: number,
+  fictionalBankName?: string,
+): Promise<void> {
+  await sessionRef
+    .collection("inCallSms")
+    .doc(item.smsId)
+    .create({ ...buildInCallSmsDoc(item, now, 0, scenarioId, fictionalBankName), userTurnsAtArrival: Math.max(0, Math.floor(userTurns)) });
+}

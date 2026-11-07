@@ -70,14 +70,20 @@ test("[S2] 이체 화면 칩은 계좌가 대화에 나온 뒤에만 — 판정�
 
 test("[S2 배선] 칩이 생기는 5경로 — 오프닝 · sendMessage · 통화 중 카톡 · 화면 행동 뒤 · 통화 복귀", () => {
   const opening = read("openingLine.ts");
-  assert.ok(opening.includes("const attachments = dropPrematureBankTransferChip(markerAttachments, linkFreeText, resolveRouteAccountNumber(scenarioId, flowVariantId), []);"));
+  // Edge 판 25(2026-11-07) — 오프닝 · 통화 중 카톡 · 화면 행동 뒤 · 통화 복귀는 저장 직전 최종 대사로 판정하고 은행 · 계좌를 싣는다(`finalizeBankTransferChips`).
+  assert.ok(opening.includes("const attachments = finalizeBankTransferChips(openingAttachments, openingText, {"));
+  assert.ok(opening.includes("accountNumber: resolveRouteAccountNumber(scenarioId, flowVariantId),"));
   const index = read("index.ts");
   assert.ok(index.includes("ensureBankTransferChip(\n        // S2"), "보충(D-g) 앞에서 뺀다 — 계좌를 말하면 보충이 다시 붙인다");
   assert.ok(index.includes("dropPrematureBankTransferChip(\n          dropRepeatedLinkChips(markerAttachments, linkFreeReplyText, storedHistory),\n          linkFreeReplyText,\n          routeAccountNumber,\n          storedHistory,\n        ),"));
-  for (const [file, historyVar] of [["chatDuringCall.ts", "claim.history"], ["screenActionFollowUp.ts", "history"]] as const) {
+  for (const [file, historyVar, finalText] of [
+    ["chatDuringCall.ts", "claim.history", "finalReplyText"],
+    ["screenActionFollowUp.ts", "history", "text"],
+  ] as const) {
     const src = read(file);
-    assert.ok(src.includes(`dropRepeatedLinkChips(markerAttachments, linkFreeText, ${historyVar}),`), file);
-    assert.ok(src.includes(`resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),\n${file === "chatDuringCall.ts" ? "    " : "      "}${historyVar},`), file);
+    assert.ok(src.includes(`finalizeBankTransferChips(dropRepeatedLinkChips(markerAttachments, linkFreeText, ${historyVar}), ${finalText}, {`), file);
+    assert.ok(src.includes("accountNumber: resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),"), file);
   }
-  assert.ok(read("callReturnLine.ts").includes("dropPrematureBankTransferChip(markerAttachments, linkFreeText, resolveRouteAccountNumber(session.scenarioId, session.flowVariantId), history);"));
+  assert.ok(read("callReturnLine.ts").includes("const attachments = finalizeBankTransferChips(markerAttachments, text, {"));
+  assert.ok(index.includes("finalizeBankTransferChips(replyAttachments, finalReplyText, {"), "sendMessage — 저장 직전 한 번 더");
 });

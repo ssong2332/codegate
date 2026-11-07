@@ -21,7 +21,7 @@ import { findFlowVariant } from "../scenarios/flowVariants";
 import type { SessionDoc } from "../shared/types";
 import { planLegHangup, planLegStart } from "./legPlan";
 import type { LegStartAction } from "./legPlan";
-import { installLandingIds, readStartCallLegRequest, type StartCallLegRequest, type StartCallLegResponse } from "./request";
+import { installLandingIds, nextLegLandingIds, readStartCallLegRequest, type StartCallLegRequest, type StartCallLegResponse } from "./request";
 
 ensureFirebaseAdminApp();
 
@@ -63,6 +63,14 @@ export const startCallLeg = onCall<StartCallLegRequest, Promise<StartCallLegResp
     const screen = await sessionRef.collection("mockScreens").doc(landingId).get();
     if (screen.exists && (screen.data() as { consentedAt?: unknown }).consentedAt) installConsented = true;
   }
+  // ⭐ PR-B — 다음 통화 조건 화면(대출 신청) 제출 여부 = 그 화면을 연 통화 중 문자 문서의 `landingSubmittedAt`(`recordInCallSmsEvent` — 값 0 · 단계 표식만).
+  const submittedLandings: string[] = [];
+  for (const { landingId, smsIds } of nextLegLandingIds(variant)) {
+    for (const smsId of smsIds) {
+      const sms = await sessionRef.collection("inCallSms").doc(smsId).get();
+      if (sms.exists && sms.get("landingSubmittedAt")) submittedLandings.push(landingId);
+    }
+  }
   const userTurns = (await sessionRef.collection("messages").where("role", "==", "user").count().get()).data().count;
 
   const plan = await db.runTransaction(async (tx) => {
@@ -71,7 +79,7 @@ export const startCallLeg = onCall<StartCallLegRequest, Promise<StartCallLegResp
     if (!session || session.status !== "active") {
       throw new HttpsError("failed-precondition", "이미 종료되었거나 활성 상태가 아닌 세션입니다.");
     }
-    const result = planLegStart({ variant, relay: session.relay, action: action as LegStartAction, dialed, installConsented, userTurns });
+    const result = planLegStart({ variant, relay: session.relay, action: action as LegStartAction, dialed, installConsented, userTurns, submittedLandings });
     if (result.status === "connected") {
       tx.update(sessionRef, { relay: result.relay });
     } else if (result.status === "genuine") {

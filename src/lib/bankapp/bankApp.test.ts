@@ -187,7 +187,8 @@ test("[BA-1 A6] 통화 유지 — 형제 노드 · 라우팅 0 · 동시 열림 
   assert.ok(page.includes("inert={chatOpen || smsOverlayOpen || bankAppOpen ? true : undefined}"));
   // 통화 띠(탭 = 통화 복귀)가 오버레이에 있다(통화 중일 때만 — 메신저는 부재).
   assert.ok(overlayCode.includes("aria-label={COPY.callPill}") && BANK_APP_COPY.callPill === "눌러서 통화로 돌아가기");
-  assert.ok(page.includes("call={{ callerLabel, elapsedLabel: formatCallElapsed(elapsedSec) }}"));
+  // 2026-11-07 — 통화 표시줄 경과 = 지금 통화의 경과(`callDisplaySec` — `callClock.ts` `callElapsedSince`).
+  assert.ok(page.includes("call={{ callerLabel, elapsedLabel: formatCallElapsed(callDisplaySec) }}"));
 });
 
 test("[BA-1 A7] 간소화안 — 클립보드 · 홈 · 탐색 막대 0 · 계좌번호 누름 = '송금' 메뉴 · 링크 대체 · 인증번호 메뉴 0", () => {

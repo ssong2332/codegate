@@ -18,6 +18,7 @@ export { deliverVerifyOffer } from "./deliverVerifyOffer";
 export { deliverVerifyReconnect } from "./deliverVerifyReconnect";
 export { requestScammerHangup } from "./requestScammerHangup";
 export { startCallLeg } from "./startCallLeg";
+export { recordLoanReview } from "./recordLoanReview";
 export { getBeginnerBriefing } from "./getBeginnerBriefing";
 export { createChallenge } from "./createChallenge";
 export { deleteChallenge } from "./deleteChallenge";

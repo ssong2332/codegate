@@ -79,6 +79,8 @@ export const SMS_SENDER_NUMBER: Readonly<Record<string, string>> = {
   "reputation-blackmail-scam": "070-0438-9172",
   "bank-security-verify-scam": "02-0753-8264",
   "courier-customs-scam": "032-0617-4429",
+  // 2026-11-07(앱 밖 행동 유도 제거 · 사용자 결정 "앱 안 화면 추가") — 납치 협박 고급의 계좌 문자. 협박범 = 인터넷전화 070(위 규칙 · 국번 첫 자리 0).
+  "kidnapping-threat": "070-0457-2618",
 };
 
 // ⭐ 2026-11-07(카드사 고급 R1 축소 · 메인 지시 "문자 발신처 분리") — R1(fv-k3dn) 문자 3통은 **보낸 곳마다 다른 번호**이고 발신 표시는 **번호만**이다.
@@ -94,6 +96,14 @@ export const CARD_R1_SMS_SENDER: Readonly<Record<string, string>> = {
   "card-callback-number": "02-0767-3051",
   "card-remote-support-link": dialNumberOf("card-company-impersonation", CARD_FAKE_CALLBACK_NUMBER_ID),
   "card-safe-account": "070-0462-1593",
+};
+
+/**
+ * ⭐ PR-B(2026-11-07 · 기관 사칭 고급 3통화) — 시나리오 고정 번호(§104.10 표) 밖 발신처. 대출 실행 입금 안내는 사기범이 아니라 가상 캐피탈이 보낸다
+ * (사기범 번호와 같은 대화방에 묶이지 않게 · 저장 안 된 번호는 번호만 — 위 R1 표와 같은 규칙). 번호 = 대출 확인 상담원 번호(`flowVariants.ts` 통화 2).
+ */
+export const INSTITUTION_LOAN_SMS_SENDER: Readonly<Record<string, string>> = {
+  "institution-loan-disbursed": "02-0719-3300",
 };
 
 const LOAN_SCAM: InCallSmsItem[] = [
@@ -235,6 +245,23 @@ const PROSECUTION_COOPERATION_CALL: InCallSmsItem[] = [
     announceInstruction:
       "(참가자 휴대전화로 방금 자산 검수 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 들어가 본인 확인부터 하고 화면 안내대로 진행해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 화면의 순서·버튼·금액을 대신 불러 주지 말고, 실제 주소를 읽어 주지도 마라.)",
   },
+  // ⭐ 2026-11-07(Edge 시험 판 12 — 검찰 고급 상품권형 fv-v2mk가 "문화상품권을 구매하신 뒤 핀 번호를 불러 주시면"으로 앱 밖 구매를 요구 · 사용자 결정
+  // "앱 안 화면 추가") — 상품권 구매 안내 문자. 링크는 가상 판매처의 구매 화면(`voucher-purchase` — 권종 · 수량 → 결제 확인 → 결제 인증 → 핀 번호 표시)을 연다.
+  // ⛔ 실제 상품권 브랜드 · 판매처 · 핀 번호 0(핀은 화면이 만든다 — 서버 · 문자 · 통화에는 없다). afterScammerTurns=8: 이 시나리오의 2 · 6 · 7과 겹치지 않는 값.
+  {
+    smsId: "prosecution-voucher-link",
+    // 목적 `transfer`(결정 화면) ↔ 종류 `account` 짝 규칙(flowVariants.test) — 계좌 줄 없는 `account`는 자산 검수 사이트 문자와 같은 선례다.
+    // 화면 행동 판정은 이 종류가 아니라 랜딩으로 "입력 화면"이 된다(`screenAction.ts` `screenKindOf` — 상품권 구매 화면 행).
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["prosecution-cooperation-call"]} (자금검수 안내)`,
+    body: "[자금검수] 검수번호 발급 안내\n검수 대상 자금은 아래 판매처에서 상품권으로 구매해 주세요.\n구매 후 화면에 표시되는 핀 번호를 담당 수사관에게 알려 주시면 검수번호로 등록됩니다.\n검수가 끝나면 전액 반환됩니다.\n외부에 알리지 마십시오.",
+    linkDisplayText: "검수용 상품권 구매하기",
+    fakeLandingId: "voucher-purchase",
+    linkAddress: "hanol-gift-shop.invalid/buy/Gv3k",
+    afterScammerTurns: 8,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 자금 검수용 상품권 구매 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크의 판매처 화면에서 상품권을 사고 화면에 뜬 핀 번호를 불러 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 핀 번호 · 금액을 지어내 말하지 말고, 편의점이나 다른 곳에서 사라고 하지 말고, 실제 주소를 읽어 주지도 마라.)",
+  },
 ];
 
 const INSTITUTIONAL_IMPERSONATION: InCallSmsItem[] = [
@@ -279,6 +306,49 @@ const INSTITUTIONAL_IMPERSONATION: InCallSmsItem[] = [
     afterScammerTurns: 7,
     announceInstruction:
       "(참가자 휴대전화로 방금 안전계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 문자에 적힌 금액을 이체해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
+  },
+  // ⭐ PR-B(2026-11-07 · 사용자 결정 "앱 안 대출 체험" — docs/research/institution-advanced-loan-design-2026-11-07.md §6) — 기관 사칭 고급 3통화(fv-c5fj) 문자 3종.
+  // | smsId | 언제 · 누가 | 여는 화면 |
+  // |---|---|---|
+  // | `institution-loan-guide` | 통화 1 · 검사가 도구로 보낸다 | `loan-apply` — 앱 안 비대면 대출 신청(본인 확인 → 한도 조회 → 신청 · 금액 · 용도는 화면 밖으로 나가지 않는다) |
+  // | `institution-loan-disbursed` | 대출 실행 확인 결과 = 실행일 때 서버가 바로 보낸다(`recordLoanReview` — 게이트 밖 · 선언 밖) | 없음(입금 안내) |
+  // | `institution-loan-safe-account` | 통화 3 · 실행일 때만 선언(`whenLoanReview`) · 검사가 도구로 보낸다 | `loan-safe-transfer` — 대출금 보관 계좌 이체 화면 |
+  // ⛔ 금액 줄 0 — 대출 금액은 참가자가 화면에서 정한 값이라 서버가 모른다(G138). 이체 화면 요구액은 대사 · 같은 탭에 남은 신청 금액이 정한다.
+  // ⛔ 실제 금융회사 이름 0 — "○○캐피탈"은 세션 가상 캐피탈명으로 바뀐다(§83).
+  {
+    smsId: "institution-loan-guide",
+    kind: "link",
+    senderLabel: `${SMS_SENDER_NUMBER["institutional-impersonation"]} (자산보호 안내)`,
+    body: "[명의도용 입증 절차] 비대면 대출 신청 안내\n○○캐피탈 비대면 신용대출로 정상 거래 여부를 확인합니다.\n아래 링크에서 본인 확인 후 신청해 주세요.\n신청 후 담당자에게 바로 알려 주세요.",
+    linkDisplayText: "비대면 대출 신청하기",
+    fakeLandingId: "loan-apply",
+    linkAddress: "credit-loan-apply.invalid/apply/R4tw",
+    afterScammerTurns: 9,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 대출 신청 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크에서 비대면 대출을 신청해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 금융회사 이름 · 금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
+  },
+  {
+    smsId: "institution-loan-disbursed",
+    kind: "callback",
+    senderLabel: INSTITUTION_LOAN_SMS_SENDER["institution-loan-disbursed"]!,
+    body: "[○○캐피탈] 신청하신 비대면 신용대출금이 고객님 명의 입출금 계좌로 입금되었습니다.\n대출 계약은 14일 안에 철회를 신청할 수 있습니다.\n문의 02-0719-3300",
+    afterScammerTurns: 11,
+    // 본문 속 번호 = 가상 캐피탈 대출센터(번호부 — 참가자가 걸면 진짜 안내 · 방어 종료).
+    dialNumberId: "loan-capital-center",
+    announceInstruction:
+      "(참가자 휴대전화로 방금 금융회사의 대출금 입금 안내 문자가 도착했다. 이 문자는 네가 보낸 것이 아니다. 상대가 이 문자 이야기를 꺼내면, 상대의 말에 대답할 때 그 대답 안에서 한두 문장으로 받고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 금액 · 계좌번호를 새로 지어내 말하지 마라.)",
+  },
+  {
+    smsId: "institution-loan-safe-account",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["institutional-impersonation"]} (자산보호 안내)`,
+    body: "[자산보호절차] 대출금 보관 계좌 안내\n예금주: 노은채\nOO은행 318-0472-6619-05\n입금된 대출금 전액을 아래에서 이체해 주세요.\n이체 후 담당자에게 바로 알려 주세요.",
+    linkDisplayText: "대출금 보관 이체 진행하기",
+    fakeLandingId: "loan-safe-transfer",
+    linkAddress: "loan-keep-account.invalid/transfer/Lp3d",
+    afterScammerTurns: 2,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 대출금 보관 계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 입금된 대출금을 그대로 옮겨 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호를 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
   },
 ];
 
@@ -428,6 +498,27 @@ const REPUTATION_BLACKMAIL_SCAM: InCallSmsItem[] = [
   },
 ];
 
+// ⭐ 2026-11-07(Edge 시험 판 7 — 납치 협박 고급이 계좌를 말로만 부르고 "빨리 입금하고 다시 이야기해요"라며 끊어 참가자가 실제 은행 앱을 열 수밖에
+// 없었다 · 사용자 결정 "앱 안 화면 추가") — 납치 협박 카탈로그 신설(이 시나리오 첫 항목). 고급 변형(fv-k268 · fv-w7tb)만 선언한다(초 · 중급 선언 0 —
+// 세션 술어 `sessionDeclaresInCallSms`는 변형 선언을 본다 ⇒ 그 변형들의 조립 산출물은 그대로). 계좌는 말로 부른 것과 같은 세션 계좌가 문자 · 화면에 실린다.
+// ⚠️ 종전 G306(납치에는 문자를 넣지 않는다 — "이 통화 끊지 말고 그대로 있어요"와 충돌)은 이 앱의 통화 중 문자함이 통화를 끊지 않아 기술 전제가 성립하지 않고,
+// P2-b(2026-10-31)가 남긴 "실제 앱을 여는 위험"을 이번 사용자 결정으로 화면 쪽에서 닫는다. 실제 사례에서 계좌를 문자로도 보내는지는 **미확인**(P2-b 검색 범위).
+// 금액 500,000원 = 근거 S26 · C16(금감원 소비자경보 — 50만 원 안팎 즉시 이체).
+const KIDNAPPING_THREAT: InCallSmsItem[] = [
+  {
+    smsId: "kidnap-ransom-account",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["kidnapping-threat"]}`,
+    body: "예금주: 박정호\nOO은행 948-2716-5093-27\n금액: 500,000원\n지금 바로 넣어요.\n아래 링크에서 바로 이체할 수 있습니다.",
+    linkDisplayText: "바로 이체하기",
+    fakeLandingId: "kidnap-ransom-transfer",
+    linkAddress: "quick-send-now.invalid/send/Kd7r",
+    afterScammerTurns: 2,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 지금 바로 문자 속 링크로 넣으라는 말을 한두 문장으로 차갑게 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호·금액을 새로 지어내 말하지 말고, 은행 앱이나 다른 곳에서 보내라고 하지 말고, 실제 주소를 읽어 주지도 마라.)",
+  },
+];
+
 // §53(§51 커밋 D 집행 — UX-027 v1.24 (1) ㉰ / v1.25 정본, `docs/Architecture.md` §53.6/§53.8) —
 // `bank-security-verify-scam` 최초의 통화 중 문자 항목(OQ-A31 (b) 집행). `afterScammerTurns: 3`은
 // §53.6 (5)의 확정값(ⓐ ≠2 ∩ ⓓ >=2의 유일한 최솟값 — 하한 트립와이어는 inCallSms/__tests__/
@@ -511,9 +602,10 @@ export const IN_CALL_SMS: Record<string, InCallSmsItem[]> = {
   "card-company-impersonation": CARD_COMPANY_IMPERSONATION,
   "tax-refund-scam": TAX_REFUND_SCAM,
   "courier-customs-scam": COURIER_CUSTOMS_SCAM,
-  // §50.6 — 신고 ⑩ⓒ(계좌 전달 수단) 대응. ⚠️ `kidnapping-threat`에는 넣지 않는다(G306) —
-  // "이 통화 끊지 말고 그대로 있어요"(kidnappingThreat.prompt.ts)와 충돌한다.
+  // §50.6 — 신고 ⑩ⓒ(계좌 전달 수단) 대응.
   "reputation-blackmail-scam": REPUTATION_BLACKMAIL_SCAM,
+  // 2026-11-07 — 납치 협박 고급 계좌 문자(위 KIDNAPPING_THREAT 주석 · 종전 G306 대체).
+  "kidnapping-threat": KIDNAPPING_THREAT,
   // §53(§51 커밋 D) — 카탈로그 자체가 신설(이 시나리오 첫 항목). OQ-A31 (b) 집행.
   "bank-security-verify-scam": BANK_SECURITY_VERIFY_SCAM,
   // T194-c-1(§84.5.2) — 카탈로그 신설(이 시나리오 첫 항목 · Q2 설치 문자).

@@ -247,8 +247,9 @@ test("[C5 리뷰 M2 · UX D-112] 폴백 <audio> 재생 오류 = 거부와 같은
 test("[C5 리뷰 M3] 정지된 통화 시간 — <p aria-label> 0 · 시각 숫자는 aria-hidden · 읽을 문장은 sr-only", () => {
   const block = slice(pageCode, 'remoteHangup && deviceSkin.skin !== "ios" && (', "</p>");
   assert.equal(/<p[^>]*aria-label=/.test(block), false, "일반 <p>에 aria-label이 있다");
-  assert.match(block, /<span aria-hidden="true">\{formatCallElapsed\(elapsedSec\)\}<\/span>/);
-  assert.match(block, /<span className="sr-only">\{`통화 시간 \$\{Math\.floor\(elapsedSec \/ 60\)\}분 \$\{elapsedSec % 60\}초`\}<\/span>/);
+  // 2026-11-07 — 정지된 통화 시간 = 지금 통화의 경과(`callDisplaySec` — 다통화에서 세션 경과가 아니다).
+  assert.match(block, /<span aria-hidden="true">\{formatCallElapsed\(callDisplaySec\)\}<\/span>/);
+  assert.match(block, /<span className="sr-only">\{`통화 시간 \$\{Math\.floor\(callDisplaySec \/ 60\)\}분 \$\{callDisplaySec % 60\}초`\}<\/span>/);
 });
 
 test("[C5 리뷰 m1] remote-hangup 포커스 이동은 레이아웃 effect", () => {

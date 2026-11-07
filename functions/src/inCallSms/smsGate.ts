@@ -238,7 +238,11 @@ export function resolveDeclaredSms(
    * 미룬다(`notBeforeUserTurns + legStartUserTurns[leg]`) — 세션 누적 발화 수를 쓰는 판정 함수들을 그대로 쓸 수 있다.
    * 인자 부재(도달 랜딩 · 계좌 · 프롬프트 목적 등 변형 전체를 보는 지점) = 종전(전체 선언).
    */
-  legScope?: { relay: RelayState | undefined },
+  legScope?: {
+    relay: RelayState | undefined;
+    /** ⭐ PR-B — 세션 대출 실행 확인 결과(`session.loanReview.outcome`). `whenLoanReview` 선언은 이 값이 같을 때만 남는다(부재 = 그 선언 0). */
+    loanReview?: "approved" | "held";
+  },
 ): { declared: FlowVariantSms[]; reason?: "no_variant" | "unknown_variant" | "scenario_mismatch" } {
   if (!flowVariantId) return { declared: [], reason: "no_variant" };
   const variant = findFlowVariant(flowVariantId);
@@ -251,6 +255,7 @@ export function resolveDeclaredSms(
   return {
     declared: declared
       .filter((item) => (item.leg ?? 0) === leg)
+      .filter((item) => item.whenLoanReview === undefined || item.whenLoanReview === legScope.loanReview)
       .map((item) => ({ ...item, notBeforeUserTurns: item.notBeforeUserTurns + offset })),
   };
 }

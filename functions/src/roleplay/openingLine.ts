@@ -11,10 +11,10 @@ import { completeWithFallback, getLlmClient } from "../llm";
 import { resolveSessionScenarioPrompt, routeEndsWithoutAccount } from "../scenarios/flowVariants";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { fixMessengerCallWording, personaAnchorInstruction, personaGuardFor } from "./personaGuard";
-import { resolveRouteAccountNumber, sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
+import { resolveRouteAccountHolder, resolveRouteAccountNumber, sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
 import { isL3Procedural } from "./l3Depth";
 import { extractEscalationSignal } from "./escalationSignal";
-import { dropPrematureBankTransferChip, extractLinkMarker } from "./linkMarker";
+import { extractLinkMarker, finalizeBankTransferChips, linkChipFor } from "./linkMarker";
 import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt } from "./promptAssembly";
 import { limitReplySentences } from "./replyLength";
@@ -24,7 +24,9 @@ import { extractSmsMarker } from "./smsMarker";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { ScammerMessage } from "./types";
-import type { PersonaCardItem } from "../shared/types";
+import type { MessengerAttachment, PersonaCardItem } from "../shared/types";
+import { sessionReachableLandingIds } from "../scenarios/reachability";
+import { findMockScreenItem } from "../scenarios/mockScreens";
 import { applyFictionalBank } from "../shared/fictionalBank";
 import { applyFamilyAddressText, resolveFamilyAddressPrompt, type FamilyAddressTerm } from "../scenarios/familyAddress";
 
@@ -56,6 +58,36 @@ export const OPENING_TURN_INSTRUCTION =
  */
 export const MESSENGER_OPENING_TURN_INSTRUCTION =
   "[오프닝 지침] 지금이 이 메시지 대화의 첫 메시지다. 전화가 아니라 글로 보내는 메시지이므로 전화 인사말(여보세요 등)로 시작하지 않는다. 다짜고짜 요구나 압박부터 하지 말고, 먼저 신분(사칭 기관·관계)과 연락한 이유(어떤 사건·문제 때문인지)를 1~2문장으로 밝혀 상황을 설명한 뒤에 이어간다.";
+
+/**
+ * ⭐ Edge 시험 판 22 · 23 · 24(2026-11-07 · 택배 배송 실패 · 정부지원금 스미싱) — 첫 문자가 *"안녕하세요, 고객님. 택배사 배송 안내 담당입니다."* 같은
+ * 인사뿐이고 링크는 참가자가 두 번 답한 뒤에야 왔다(그때 "문자로 보내드린 링크"라고 말했다 — 아직 보낸 적 없다). 실제 스미싱 문자는 첫 한 통에
+ * 사유 · 기한 · 링크가 다 들어 있다. 원인: 메신저 공통 오프닝 지시(O1)가 "먼저 신분과 이유를 1~2문장으로 밝혀 상황을 설명한 뒤에 이어간다"라
+ * 문자 스미싱에서도 첫 메시지를 소개 인사로 끝내게 했다. 판정표 O(이어서 — 시나리오 공개 메타 `surface`):
+ * | # | If | Then |
+ * |---|---|---|
+ * | O1s | `channel === "messenger"` ∧ `surface === "sms"` | `SMS_SMISHING_OPENING_TURN_INSTRUCTION`(O1의 전화 인사말 삭제는 그대로) + 링크 칩이 없으면 `smsOpeningLinkBackstop` |
+ * | O1 | 그 밖 메신저 | 종전 `MESSENGER_OPENING_TURN_INSTRUCTION`(바이트 동일) |
+ * export — 턴 지시 스캔 게이트 대상(T113).
+ */
+export const SMS_SMISHING_OPENING_TURN_INSTRUCTION =
+  "[오프닝 지침] 지금이 이 문자 대화의 첫 문자다. 실제 스미싱 문자처럼 이 한 통 안에 누가 보낸 안내인지, 무슨 일이 생겼는지, 언제까지 처리해야 하는지를 짧게 담고, 페르소나의 [링크 표현 규칙]대로 링크 마커를 이 문자에 붙인다. 인사만 보내고 답을 기다리지 않는다. 이 링크는 지금 처음 보내는 것이므로 앞서 보낸 링크라고 말하지 않는다. 전화 인사말(여보세요 등)로 시작하지 않는다.";
+
+/**
+ * O1s 백스톱 — 모델이 첫 문자에 링크 마커를 빠뜨리면 이 세션이 메신저 링크로 열 수 있는 화면이 **딱 1개**일 때 그 칩을 붙인다
+ * (2개 이상 = 고르지 않는다 · 0개 = 없음). 칩은 마커 경로(`extractLinkMarker`)로 만들어 라벨 · 종류 · 무해 표시가 같다.
+ */
+export function smsOpeningLinkBackstop(
+  scenarioId: string,
+  flowVariantId: string | undefined,
+  session: Parameters<typeof extractLinkMarker>[2],
+): MessengerAttachment[] | undefined {
+  const linkIds = sessionReachableLandingIds(scenarioId, flowVariantId).filter(
+    (id) => findMockScreenItem(scenarioId, id)?.entrySurface === "messenger-link",
+  );
+  if (linkIds.length !== 1) return undefined;
+  return linkChipFor(linkIds[0]!, scenarioId, session);
+}
 
 /** O1 — 첫 문장 앞머리의 전화 인사말("여보세요?" · "여보세요," …)을 지운다. 남는 글이 없으면 원문 그대로(빈 첫 메시지 0). */
 const PHONE_GREETING_PREFIX = /^\s*여보세요\s*[?？!.,~…]*\s*/;
@@ -155,6 +187,8 @@ export async function generateOpeningLine(
   const scenarioPrompt = resolveSessionScenarioPrompt(scenarioId, flowVariantId);
   // §131(4) 판정표 O — 메신저로 시작하는 시나리오의 첫 메시지(통화 · 부재 = 종전).
   const isMessengerOpening = PUBLIC_SCENARIOS[scenarioId]?.channel === "messenger";
+  // Edge 판 22 · 23 · 24 판정표 O1s — 문자(SMS) 스미싱의 첫 문자는 사유 · 기한 · 링크를 한 통에.
+  const isSmsSmishingOpening = isMessengerOpening && PUBLIC_SCENARIOS[scenarioId]?.surface === "sms";
   if (!scenarioPrompt) {
     throw new HttpsError("invalid-argument", `존재하지 않는 scenarioId입니다: ${scenarioId}`);
   }
@@ -184,7 +218,14 @@ export async function generateOpeningLine(
       // T194-a(§84.4.3) — 세션 단위 해석(표 값이 있으면 그대로 · parcel 고급만 변형 leg 성별).
       speakerGender: resolveSessionSpeakerGender(sessionView),
       // §131(7) 판정표 P — 지인 · 자녀 사칭 메신저는 역할 고정 1줄을 덧붙인다(그 밖 = 종전 문면 바이트 동일).
-      turnInstruction: [isMessengerOpening ? MESSENGER_OPENING_TURN_INSTRUCTION : OPENING_TURN_INSTRUCTION, personaAnchorInstruction(scenarioId)]
+      turnInstruction: [
+        isSmsSmishingOpening
+          ? SMS_SMISHING_OPENING_TURN_INSTRUCTION
+          : isMessengerOpening
+            ? MESSENGER_OPENING_TURN_INSTRUCTION
+            : OPENING_TURN_INSTRUCTION,
+        personaAnchorInstruction(scenarioId),
+      ]
         .filter(Boolean)
         .join("\n"),
       ...(fictionalBankName ? { fictionalBankName } : {}),
@@ -216,8 +257,6 @@ export async function generateOpeningLine(
   // 갈라지면 "오프닝 링크만 kind가 없는" 비대칭이 생긴다 — §15.6 G5와 같은 이유).
   // T194-a(§84.4.4 · G582) — 세션 술어 입력을 넘겨 이 세션에서 도달 불가한 설치 마커를 강등한다.
   const { text: linkFreeText, attachments: markerAttachments } = extractLinkMarker(completion.text, scenarioId, sessionView);
-  // S2 — 이체 화면 칩은 계좌가 대화에 나온 뒤에만(`linkMarker.ts` `dropPrematureBankTransferChip` 표). 첫 메시지라 앞선 대사가 없다.
-  const attachments = dropPrematureBankTransferChip(markerAttachments, linkFreeText, resolveRouteAccountNumber(scenarioId, flowVariantId), []);
   // §122(7) 실기 신고 2026-10-23 — 자녀 사칭 카톡 첫 말풍선이 "[[SIGNAL:ESCALATE_VOICE]] 아빠, 나야. …"로 나갔다.
   // 이 경로만 신호 · 문자 마커 추출이 빠져 있었다(sendMessage · callReturnLine은 이미 지운다). ⛔ 오프닝은 지우기만 한다 —
   // 첫 마디는 통화 전환 · 끊기 · 문자 발송을 일으키지 않는다(전환 하한 — 신호 판정은 `signalConsistency.ts` A0).
@@ -246,12 +285,25 @@ export async function generateOpeningLine(
       keptSentences: lengthLimited.keptSentences,
     });
   }
+  const openingText = finalizeScammerReplyText(lengthLimited.text);
+  // S2 · Edge 판 25 — 이체 화면 칩은 최종 대사에 계좌가 있을 때만 · 세션 은행 · 계좌를 싣는다(`linkMarker.ts` `finalizeBankTransferChips` 표). 첫 메시지라 앞선 대사가 없다.
+  // O1s 백스톱 — 문자 스미싱 첫 문자에 링크 칩이 없으면 세션 링크 화면 1개를 붙인다.
+  const openingAttachments =
+    isSmsSmishingOpening && (markerAttachments ?? []).length === 0
+      ? smsOpeningLinkBackstop(scenarioId, flowVariantId, sessionView)
+      : markerAttachments;
+  const attachments = finalizeBankTransferChips(openingAttachments, openingText, {
+    accountNumber: resolveRouteAccountNumber(scenarioId, flowVariantId),
+    bankName: fictionalBankName,
+    accountHolder: resolveRouteAccountHolder(scenarioId, flowVariantId),
+    history: [],
+  });
   // 2026-09-06 버그수정 — 사기범(LLM) 응답에는 maskPII를 적용하지 않는다(scammerReplyMasking.ts
   // 헤더 주석 참고 — 라이브 신고 "[계좌]" 리터럴 노출, 시나리오·난이도 무관 공통 재현).
   return {
     message: {
       role: "scammer",
-      text: finalizeScammerReplyText(lengthLimited.text),
+      text: openingText,
       ...(attachments ? { attachments } : {}),
     },
     isMock: completion.isMock,

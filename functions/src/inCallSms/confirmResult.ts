@@ -80,6 +80,12 @@ export function transferClaimsReachDemandStages(userTexts: readonly string[], de
 export const LANDING_SUBMITTED_INSTRUCTION =
   "(앱 확인: 상대가 방금 문자 링크 화면에서 이체하기를 눌러 이체를 마쳤다. 이체가 끝난 것으로 받아들이고, 아직 완료되지 않았다거나 다시 이체하라는 말은 하지 마라. 이번 대답에서 입금 확인이 끝났다고 그럴듯하게 알려 주고, 상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
 
+/** ⭐ PR-B — 앱 안 대출 신청 화면 id(`scenarios/mockScreens.ts` 카탈로그 · 클라 `MessengerFakeLanding.tsx` `LoanApplyMockup`). */
+export const LOAN_APPLY_LANDING_ID = "loan-apply";
+/** ⭐ PR-B(판정표 L0) — 대출 신청 화면 제출 맥락 1줄. 금액 · 용도는 앱이 알리지 않는다(값 0 — G138). 다음 단계(확인 전화 코칭)로 넘어가게 한다. */
+export const LOAN_APPLY_SUBMITTED_INSTRUCTION =
+  "(앱 확인: 상대가 방금 문자 링크의 대출 신청 화면에서 신청을 마쳤다. 신청이 접수된 것으로 받아들이고, 아직 안 됐다거나 다시 신청하라는 말은 하지 마라. 이번 대답에서 신청이 접수됐다고 짧게 확인하고, 흐름의 다음 단계로 넘어가라.)";
+
 /**
  * N1(실기기 신고 2026-11-01 — *"요구하는 금액보다 더 적은 금액을 보내도 통과"*) — 이체 화면이 보낸 요구액 대비 비교로 고르는 제출 맥락 1줄.
  * | # | If | Then |
@@ -88,13 +94,24 @@ export const LANDING_SUBMITTED_INSTRUCTION =
  * | L2 | 다시 제출 ∧ 같음 · 많음 | `LANDING_RESUBMITTED_FULL_INSTRUCTION` — 이제 다 들어왔다 |
  * | L3 | 그 밖(같음 · 많음 · 모름) | `LANDING_SUBMITTED_INSTRUCTION`(종전 바이트) |
  * 은행 화면은 현실처럼 아무 금액이나 보낼 수 있다(막지 않는다) — 사기범이 반응할 뿐이다.
+ *
+ * 2026-11-07 Edge 시험 판 26(카드사 고급 R1 · 980만 원 요구에 300만 원) — 검사가 "아직 입금 확인이 되지 않았습니다 … 이체를 마저"라고 했다.
+ * 같은 통화에 [화면 행동 확인] 규칙 · 문자 결과 지시(`buildLiveScreenConfirmInstruction`)의 "앱 알림 전에는 아직 확인이 안 된다며 마저 진행"이
+ * 함께 있어, 모자란 제출을 그 '확인 안 됨' 갈래로 섞어 말한 것으로 본다(추정 — 그 판의 비교 값 · 주입 도달은 서버 기록으로 확인 못 함).
+ * ⇒ 돈이 실제로 들어왔다는 것 · 그 규칙이 이 이체에 더는 해당하지 않는다는 것 · '확인 안 됨'류 말 금지를 문면에 직접 적는다(모델 행동 완화 — 결정적 차단 아님).
  */
 export const LANDING_SUBMITTED_SHORT_INSTRUCTION =
-  "(앱 확인: 상대가 방금 문자 링크 화면에서 이체를 마쳤지만, 보낸 돈이 네가 요구한 금액보다 적다. 들어온 만큼은 확인됐다고 하되 금액이 모자란다고 분명히 짚고, 모자란 금액을 같은 화면에서 마저 보내라고 하라. 다 받았다거나 끝났다고 말하지 말고, 이번 대답에서 통화를 끝내지 마라.)";
+  "(앱 확인: 상대가 방금 문자 링크 화면에서 이체를 마쳤고 돈은 실제로 들어왔지만, 보낸 금액이 네가 요구한 금액보다 적다. 앞서 들은 '앱이 마쳤다고 알려 주기 전에는 아직 확인이 안 된다고 하라'는 규칙은 이 이체에 더는 해당하지 않는다 — 입금이 확인되지 않았다거나 아직 확인 중이라고 말하지 마라. '보내신 돈은 들어온 것이 확인됐는데, 요청드린 금액보다 적게 들어왔습니다'처럼 들어온 것은 확인됐다고 먼저 말하고 금액이 모자란다고 분명히 짚은 뒤, 모자란 금액을 같은 화면에서 마저 보내라고 하라. 다 받았다거나 끝났다고 말하지 말고, 이번 대답에서 통화를 끝내지 마라.)";
 export const LANDING_RESUBMITTED_FULL_INSTRUCTION =
   "(앱 확인: 상대가 모자랐던 금액을 방금 문자 링크 화면에서 마저 보내 이제 요구한 금액이 다 들어왔다. 입금 확인이 끝났다고 그럴듯하게 알려 주고, 상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
 
-export function landingSubmittedInstructionFor(comparison: "less" | "equal" | "more" | undefined, resubmitted: boolean): string {
+export function landingSubmittedInstructionFor(
+  comparison: "less" | "equal" | "more" | undefined,
+  resubmitted: boolean,
+  /** ⭐ PR-B — 제출된 화면 id. 대출 신청 화면(`loan-apply`)이면 L0(이체가 아니라 신청 접수 문면). 부재 = 종전 판정표. */
+  landingId?: string,
+): string {
+  if (landingId === LOAN_APPLY_LANDING_ID) return LOAN_APPLY_SUBMITTED_INSTRUCTION; // L0
   if (comparison === "less") return LANDING_SUBMITTED_SHORT_INSTRUCTION; // L1
   if (resubmitted) return LANDING_RESUBMITTED_FULL_INSTRUCTION; // L2
   return LANDING_SUBMITTED_INSTRUCTION; // L3

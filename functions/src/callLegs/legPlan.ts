@@ -13,6 +13,7 @@
 // | `rejoin` | 2026-11-07 — 참가자가 끊은 레그가 같은 인물로 다시 연결됐다(재다이얼 · 상대 재발신)와 그때의 사용자 발화 수 |
 import type { FlowVariant, FlowVariantLeg } from "../scenarios/flowVariants";
 import { findDialEntry, lookupDialedNumber, normalizeDialedNumber, type DialEntry } from "../scenarios/dialDirectory";
+import { IN_CALL_SMS } from "../scenarios/inCallSms";
 
 export type RelayState = {
   legIndex: number;
@@ -66,7 +67,15 @@ export type LegStartPlan =
     }
   | { status: "genuine"; entry: DialEntry }
   | { status: "unknown_number" }
-  | { status: "not_ready"; reason: "not_multi_call" | "leg_in_progress" | "no_next_leg" | "wrong_action" };
+  | { status: "not_ready"; reason: LegNotReadyReason };
+
+/** ⭐ PR-B — `screen_pending` = 나감 `incoming` 레그의 다음 통화 조건 화면(`opensNextAfterLanding`)을 아직 제출하지 않았다(대출을 신청하지 않았으면 확인 전화는 오지 않는다). */
+export type LegNotReadyReason = "not_multi_call" | "leg_in_progress" | "no_next_leg" | "wrong_action" | "screen_pending";
+
+/** ⭐ PR-B — 레그의 다음 통화 조건 화면을 제출했는가(조건 없음 = 참). */
+export function legNextReady(leg: Pick<FlowVariantLeg, "opensNextAfterLanding">, submittedLandings: readonly string[] | undefined): boolean {
+  return leg.opensNextAfterLanding === undefined || (submittedLandings ?? []).includes(leg.opensNextAfterLanding);
+}
 
 /**
  * 다음 레그를 열 수 있는가 · 연다면 무엇으로 이어지는가(Architecture.md §142.4 다이얼 판정표 — 이 순서대로만).
@@ -76,7 +85,9 @@ export type LegStartPlan =
  * | 2 | 아직 연결 전인 첫 레그(R2 — entry dial) | 대상 = 레그 0 |
  * | 3 | 현재 레그가 끝나지 않았다(`legEnded !== legIndex`) | not_ready(leg_in_progress) |
  * | 4 | 다음 레그 없음 | not_ready(no_next_leg) |
- * | 5 | 행동이 그 레그의 나가는 방식과 맞지 않는다(callback은 dial 자리에서만 — D4) | not_ready(wrong_action) |
+ * | 4-b | ⭐ PR-B — dial · 현재 레그 나감이 incoming · 건 번호에 진짜 안내가 있다 | genuine(기다리는 사이 진짜 번호 확인 = 방어 종료) |
+ * | 5 | 행동이 그 레그의 나가는 방식과 맞지 않는다(callback은 dial · incoming 자리에서만 — D4 · PR-B) | not_ready(wrong_action) |
+ * | 5-b | ⭐ PR-B — 나감 `incoming`인데 조건 화면(`opensNextAfterLanding`)을 제출하지 않았다 | not_ready(screen_pending) |
  * | 6 | callback · transfer | 연결(가로채기 판정 없음 — 상대가 건다 · 넘긴다) |
  * | 7 | dial — 건 번호가 번호부에 없다 | unknown_number |
  * | 8 | dial — 대상 레그 번호이고 가로채기 조건(원격 지원 앱 응낙) 충족 또는 조건 없음 | 연결 |
@@ -86,6 +97,7 @@ export type LegStartPlan =
  * 2026-11-07(메인 승인 계약 — 참가자가 먼저 끊기) — 3행 앞에 아래 행을 먼저 본다(현재 레그를 **참가자가** 끊었을 때만 · `hungUpBy`):
  * | # | If | Then |
  * |---|---|---|
+ * | P0 | ⭐ PR-B — callback · 그 레그 나감이 `incoming` · 조건 화면 제출됨 · 다음 레그 있음 | 아래 3행부터(= 다음 레그 — 확인 전화가 걸려 온다) |
  * | P1 | callback | 같은 레그를 다시 연결(entry incoming · 같은 인물 · rejoin callback) |
  * | P2 | dial — 그 레그 상대 번호(`legCounterpartNumber`) | 같은 레그를 다시 연결(entry dial · rejoin redial) |
  * | P3 | dial · 마지막 레그 — 그 밖 번호 | 9 · 10행과 같은 판정(진짜 안내 / unknown_number — 다음 레그가 없다) |
@@ -100,12 +112,16 @@ export function planLegStart(input: {
   /** 원격 지원 앱 설치 응낙(화면 행동 — `mockScreens/{landingId}.consentedAt`). */
   installConsented: boolean;
   userTurns: number;
+  /** ⭐ PR-B — 제출된 모의 화면 landingId(`mockScreens/{id}.submittedAt`). 부재 = 없음. */
+  submittedLandings?: readonly string[];
 }): LegStartPlan {
   const { variant, relay, action } = input;
   if (!variant.multiCall) return { status: "not_ready", reason: "not_multi_call" };
   const connected = isLegConnected(variant, relay);
   const current = currentLegIndex(variant, relay);
-  if (relay?.hungUpBy === "participant" && relay.legEnded === current) {
+  const opensNext = (index: number): boolean =>
+    variant.legs[index]?.exit === "incoming" && index < variant.legs.length - 1 && legNextReady(variant.legs[index], input.submittedLandings);
+  if (relay?.hungUpBy === "participant" && relay.legEnded === current && !(action === "callback" && opensNext(current))) {
     const leg = variant.legs[current];
     const rejoinRelay = (entry: "dial" | "incoming", kind: LegRejoinKind): LegStartPlan => ({
       status: "connected",
@@ -140,8 +156,15 @@ export function planLegStart(input: {
     if (relay?.legEnded !== current) return { status: "not_ready", reason: "leg_in_progress" };
     if (current >= variant.legs.length - 1) return { status: "not_ready", reason: "no_next_leg" };
     const exit = variant.legs[current].exit;
-    const ok = action === exit || (action === "callback" && exit === "dial");
+    // ⭐ PR-B(행 4-b) — 다음 사람이 걸어 오기를 기다리는 레그(나감 incoming)에서 참가자가 진짜 안내가 있는 번호(입금 안내 문자 속 캐피탈 대출센터 등)를
+    // 걸면 진짜 안내(방어 종료). 나감이 dial · transfer인 레그는 종전 판정 그대로(아래 5 · 7 ~ 10행).
+    if (action === "dial" && exit === "incoming") {
+      const dialedEntry = lookupDialedNumber(variant.scenarioId, input.dialed ?? "");
+      if (dialedEntry?.genuineNotice) return { status: "genuine", entry: dialedEntry };
+    }
+    const ok = action === exit || (action === "callback" && (exit === "dial" || exit === "incoming"));
     if (!ok) return { status: "not_ready", reason: "wrong_action" };
+    if (exit === "incoming" && !opensNext(current)) return { status: "not_ready", reason: "screen_pending" };
     target = current + 1;
   }
   const leg = variant.legs[target];
@@ -227,10 +250,21 @@ const REJOIN_OPENING: Record<LegRejoinKind, string> = {
  * (앞 통화 대화는 여전히 싣지 않는다 — `messages` 중 `legIndex`가 이 레그인 줄만 · 부재 = 레그 0). 결정적(추가 LLM 호출 0).
  * `messages`를 안 넘기면(폴백 — 모델 이력에 이미 이 레그 대화가 있다) 상황 문장만.
  */
-export function buildLegRejoinContext(kind: LegRejoinKind, legIndex: number, messages?: readonly LegRejoinMessage[]): string {
+export function buildLegRejoinContext(
+  kind: LegRejoinKind,
+  legIndex: number,
+  messages?: readonly LegRejoinMessage[],
+  /** 2026-11-07(Edge 시험 판 26) — 끊기기 전 이 통화에서 이미 도착한 문자의 설명(`legSentSmsDescriptions`). 부재 · 빈 목록 = 줄 0(종전 바이트). */
+  sentSms?: readonly string[],
+): string {
   const head = [
     `[끊겼던 통화 다시 연결] ${REJOIN_SITUATION[kind]} 너는 끊기기 전과 같은 사람이다.`,
     `위 [이 통화 전 상황]의 '본인 확인부터'는 처음 연결됐을 때의 규칙이다 — 끊기기 전에 이미 한 본인 확인 · 설명은 처음부터 다시 하지 않는다. ${REJOIN_OPENING[kind]} 끊기기 전 단계에서 이어 간다. 상대가 왜 끊었는지 따지거나 화내지 않는다.`,
+    ...(sentSms && sentSms.length > 0
+      ? [
+          `끊기기 전 이 통화에서 네가 이미 보낸 문자(상대 휴대전화에 이미 도착해 있다): ${sentSms.join(" · ")}. 이 문자를 다시 보내 주겠다거나 곧 보내겠다고 하지 말고, 필요하면 '아까 보내 드린 문자'로 가리킨다.`,
+        ]
+      : []),
   ];
   if (!messages) return head.join("\n");
   const lines = messages
@@ -241,6 +275,59 @@ export function buildLegRejoinContext(kind: LegRejoinKind, legIndex: number, mes
     .map((m) => `${m.user ? "상대" : "너"}: ${clipLine(m.text)}`);
   if (lines.length === 0) return head.join("\n");
   return [...head, "끊기기 전 이 통화에서 오간 말(끝부분):", ...lines].join("\n");
+}
+
+/**
+ * ⭐ PR-B(기관 사칭 고급 3통화 — 설계 §3 F8) — 정당한 제3자 통화(`genuine` 레그 — 대출 실행 확인 상담원) **뒤에** 같은 인물이 다시 건 레그의 맥락.
+ * 너는 앞 통화의 그 사람이다(같은 `speakerId`) — 앞 통화 대화 원문은 싣지 않고, 앱이 아는 확인 결과(서버 `loanReview`)만 1줄 싣는다.
+ * | # | If | Then |
+ * |---|---|---|
+ * | K1 | 이 레그가 첫 레그 · 정당한 제3자 레그이거나, 이 레그 앞에 정당한 제3자 레그가 없다 | undefined(종전) |
+ * | K2 | 앞 레그 중 같은 `speakerId` 레그가 없다 | undefined(새 인물 — 종전 `caseBrief` 규칙) |
+ * | K3 | 결과 = 실행 | 다시 건 같은 사람 + "대출이 실행돼 대출금이 입금됐다" |
+ * | K4 | 그 밖(보류 · 결과 없음) | 다시 건 같은 사람 + "대출 실행이 보류됐다 — 대출금은 들어오지 않았다" |
+ */
+export function buildLegLoanReviewContext(
+  variant: Pick<FlowVariant, "legs">,
+  legIndex: number,
+  outcome: "approved" | "held" | undefined,
+): string | undefined {
+  const leg = variant.legs[legIndex];
+  if (!leg || legIndex <= 0 || leg.genuine) return undefined;
+  const prior = variant.legs.slice(0, legIndex);
+  if (!prior.some((p) => p.genuine)) return undefined;
+  if (leg.speakerId === undefined || !prior.some((p) => !p.genuine && p.speakerId === leg.speakerId)) return undefined;
+  const result =
+    outcome === "approved"
+      ? "금융회사의 대출 실행 확인 전화가 끝났고, 대출이 실행돼 대출금이 상대 계좌에 입금됐다(앱 확인)."
+      : "금융회사의 대출 실행 확인 전화가 끝났고, 대출 실행이 보류됐다 — 대출금은 들어오지 않았다(앱 확인).";
+  return [
+    "[이 통화 전 상황 — 다시 건 통화]",
+    "- 너는 앞서 이 사람과 통화한 바로 그 사람이다. 앞 통화에서 안전계좌 이체와 비대면 대출 신청을 시켰고, 금융회사 확인 전화가 끝나면 다시 연락하겠다고 했다. 이번 통화는 네가 같은 번호로 다시 건 것이라 본인 확인 · 사건 설명을 처음부터 다시 하지 않는다.",
+    `- ${result}`,
+  ].join("\n");
+}
+
+/**
+ * 2026-11-07(Edge 시험 판 26 — 다시 걸려 온 배송원이 이미 보낸 반송 문자를 "보내 드릴 테니"라고 다시 말했다) — 이 레그에 선언된 문자 중 이미 도착한 것의 설명
+ * (카탈로그 본문 첫 줄 · 발신 번호 — 서버 고정 문면 · 추가 LLM 호출 0). 순서 = 레그 선언 순서. 다른 레그 문자 · 도착 안 한 문자 · 카탈로그 밖 = 제외.
+ */
+export function legSentSmsDescriptions(
+  variant: Pick<FlowVariant, "scenarioId" | "sms">,
+  legIndex: number,
+  deliveredSmsIds: readonly string[],
+): string[] {
+  const delivered = new Set(deliveredSmsIds);
+  const catalog = IN_CALL_SMS[variant.scenarioId] ?? [];
+  const out: string[] = [];
+  for (const declared of variant.sms) {
+    if ((declared.leg ?? 0) !== legIndex || !delivered.has(declared.smsId)) continue;
+    const item = catalog.find((sms) => sms.smsId === declared.smsId);
+    if (!item) continue;
+    const firstLine = item.body.split("\n")[0]?.trim() ?? "";
+    out.push(`'${clipLine(firstLine)}'(${item.senderLabel}에서 보냄)`);
+  }
+  return out;
 }
 
 const clipLine = (text: string): string =>
@@ -258,6 +345,11 @@ export function legHangupAdjustments(
   if (!variant.multiCall) return undefined;
   const leg = currentLegIndex(variant, relay);
   return { nonLastLeg: leg < variant.legs.length - 1, turnsSinceLegStart: userTurns - legStartUserTurns(relay, leg) };
+}
+
+/** ⭐ PR-B — 현재 레그가 화면 보류 레그인가(마지막이 아닌 레그라도 이 레그 화면을 마치기 전 goal 끊기를 막는다 — `goalAction.ts` `isLegScreenHoldPending`). */
+export function currentLegHoldsScreens(variant: Pick<FlowVariant, "legs" | "multiCall">, relay: RelayState | undefined): boolean {
+  return variant.multiCall === true && variant.legs[currentLegIndex(variant, relay)]?.holdUntilScreens === true;
 }
 
 /**

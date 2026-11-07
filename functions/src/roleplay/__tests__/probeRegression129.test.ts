@@ -359,7 +359,8 @@ test("[§129 C4 · C5 경계] 앞 대사에 요구가 있으면 방법 질문 ·
   const tactics = G2LD_TACTICS();
   const ask = (scammer: string, user: string) => analyzeConversation(dialogue([["scammer", scammer], ["user", user]]), 0, tactics).wasDeceived;
   assert.equal(ask("고객님 명의 계좌가 범죄에 이용된 정황이 확인됐습니다.", "어떻게 해야 하나요?"), false); // C4
-  assert.equal(ask("잔액 전액을 안전계좌로 이체해 주십시오.", "어떻게 해야 하나요?"), true); // 요구 있음
+  // 2026-11-07 사용자 결정("위험 신호로 바꾸기") — 요구 뒤 일반 방법 질문도 속음이 아니다(위험 신호 how_to_question · `analyzeConversation.ts` C6c · RS4). 종전 true.
+  assert.equal(ask("잔액 전액을 안전계좌로 이체해 주십시오.", "어떻게 해야 하나요?"), false); // 요구 있음 → 위험 신호
   assert.equal(ask("명의가 도용돼 개설된 것으로 보입니다.", "알겠어요. 시키는 대로 할게요"), false); // C5
   assert.equal(ask("자산 보호를 위해 안전계좌로 옮기셔야 합니다. 협조하시겠습니까?", "네 말씀하신 대로 할게요"), true); // 요구 있음
   assert.equal(ask("문자 안내 확인하셨습니까?", "네, 알려주신 대로 했어요."), true, "이행 보고는 약속이 아니다");
@@ -611,7 +612,9 @@ test("[§129.12] '당신 자녀분이 지금 저희 쪽에 있어요' · '… �
     ["scammer", "가온은행 948-2716-5093-27, 예금주는 박정호입니다. 지금 바로 천만 원 이체하세요. 끊지 말고 대기하세요."],
     ["user", "보냈어요"],
   ]), 0, tactics);
-  assert.deepEqual(live.deceivedMoments.map((m) => [m.turnIndex, m.tactic]), [[3, "자녀 인질 협박"], [5, "냉담한 반응"], [7, "즉시 송금 요구"]]);
+  // 2026-11-07 사용자 결정 — 3번 답 "네? 우리 애가요? 어떻게 해야 돼요?"는 요구 뒤 방법 질문 = 위험 신호(종전 [3, "자녀 인질 협박"] 순간).
+  assert.deepEqual(live.deceivedMoments.map((m) => [m.turnIndex, m.tactic]), [[5, "냉담한 반응"], [7, "즉시 송금 요구"]]);
+  assert.deepEqual(live.riskSignals.map((r) => [r.turnIndex, r.kind]), [[3, "how_to_question"]]);
   assert.ok(live.tacticsUsed.includes("자녀 인질 협박"));
 });
 
@@ -660,7 +663,8 @@ test("[§129.13 (a)(b)] 금 구매형 — 요구 없는 대사 뒤 방법 질문
   const moments = result.deceivedMoments.map((m) => [m.turnIndex, m.tactic]);
   assert.ok(!moments.some(([turn]) => turn === 3), "(a) 2번 답 '어떻게 해야 하나요?'는 C4");
   // (b) 종전: [13, "비밀 유지 요구"] — 7번 대사의 문구 키는 '비밀 유지 요구'만 걸린다.
-  assert.deepEqual(moments.find(([turn]) => turn === 13), [13, "신원정보 직접 요구"]);
+  // 2026-11-07 Edge 시험 판 1 — 인증번호를 불러 준 순간은 목록에 '인증번호 요구'가 있으면 그 라벨(L3의 '개인정보 범주 첫 라벨'보다 앞선다 · `attemptedTactics.ts`).
+  assert.deepEqual(moments.find(([turn]) => turn === 13), [13, "인증번호 요구"]);
   assert.deepEqual(moments.find(([turn]) => turn === 5), [5, "신원정보 직접 요구"]);
 });
 
@@ -714,7 +718,8 @@ test("[§129.13 (c) C5] '그렇게 할게요'는 따름 약속 — 요구 없는
 });
 
 test("[§129.13 (e)] 안전계좌 이체형 — 화면 제출 직후 '이체 완료했어요'는 송금 범주 이행 보고 → 화면 순간 하나(T1 · ㉠) · (a) 부인 + 방법 질문은 속음 아님", () => {
-  const tactics = resolveSessionScenarioPrompt("institutional-impersonation", "fv-c5fj")!.weakenedTactics;
+  // PR-B — fv-c5fj는 3통화(대출 신청 링크 수법 포함)로 바뀌었다 ⇒ 단일 통화 안전계좌 이체형 판정은 같은 루트의 종전 변형 fv-pgqt로 본다.
+  const tactics = resolveSessionScenarioPrompt("institutional-impersonation", "fv-pgqt")!.weakenedTactics;
   const lines: [role: "scammer" | "user", text: string][] = [
     ["scammer", "여보세요, 고객님 맞으시죠? 저는 한빛지방검찰청 금융범죄수사팀 수사관입니다."],
     ["user", "네 맞는데요, 무슨 일이세요?"],

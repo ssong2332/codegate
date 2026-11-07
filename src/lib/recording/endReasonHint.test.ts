@@ -9,7 +9,9 @@ import { fileURLToPath } from "node:url";
 import {
   END_REASON_HINT_ALLOWED,
   encodeEndReasonHint,
+  encodeHangupButtonHint,
   readEndReasonHint,
+  readHangupButtonHint,
   resolveEndReasonHint,
 } from "./endReasonHint.ts";
 
@@ -77,7 +79,7 @@ test("[G512 · C4-2 · Minor-2] 종료 화면 — 힌트를 읽어 endSession에
   assert.ok(retryThen > 0 && retryClear > retryThen && retryClear < retryCatch, "재시도 경로의 힌트 삭제가 성공 콜백(.then) 안이 아니다");
   assert.equal(src.split("clearPendingEndReason(").length - 1, 1, "힌트 삭제 호출은 재시도 성공 콜백 1곳뿐이어야 한다");
   // 2026-11-06 요청 2 — 같은 요청에 통화 진단 요약(`diag`)을 함께 싣는다.
-  assert.ok(src.includes("endSession({ sessionId: sid, endReason, ...(diag ? { diag } : {}) })"), "endSession 요청에 힌트 값이 실리지 않는다");
+  assert.ok(src.includes("endSession({ sessionId: sid, endReason, ...(diag ? { diag } : {}), ...(hangupButton ? { hangupButton: true as const } : {}) })"), "endSession 요청에 힌트 값이 실리지 않는다");
   assert.equal(src.includes('endReason: "user_ended"'), false, "옛 고정값 요청이 남았다");
   // C4-2 주석 정정 — 옛 문장(C1 허용목록 뒤 거짓)이 원문 그대로 남아 있지 않다.
   assert.equal(src.includes("endSession 서버는 이미 어떤 endReason이든 멱등하게 처리한다"), false, "옛 거짓 주석이 그대로 남았다");
@@ -114,7 +116,36 @@ test("[G512 역검증] 힌트 줄을 지운 사본 · 고정값으로 되돌린 
   assert.notEqual(playPoisoned, play, "주입 앵커가 없다");
   assert.equal((playPoisoned.match(/setPendingEndReason\(/g) ?? []).length, 0);
   const end = read("src/app/session/end/page.tsx");
-  const endPoisoned = end.replace("endSession({ sessionId: sid, endReason, ...(diag ? { diag } : {}) })", 'endSession({ sessionId: sid, endReason: "user_ended" })');
+  const endPoisoned = end.replace("endSession({ sessionId: sid, endReason, ...(diag ? { diag } : {}), ...(hangupButton ? { hangupButton: true as const } : {}) })", 'endSession({ sessionId: sid, endReason: "user_ended" })');
   assert.notEqual(endPoisoned, end, "주입 앵커가 없다");
   assert.equal(endPoisoned.includes('endReason: "user_ended"'), true);
+});
+
+test("[2026-11-07 B1 · B2] 통화 종료 버튼 힌트 — 같은 세션 · true일 때만", () => {
+  assert.equal(readHangupButtonHint(encodeHangupButtonHint("s1"), "s1"), true);
+  assert.equal(readHangupButtonHint(encodeHangupButtonHint("s0"), "s1"), false, "다른 세션의 힌트");
+  for (const stored of [null, "", "{", "null", JSON.stringify({ sessionId: "s1", hangupButton: "true" }), JSON.stringify({ sessionId: "s1" })]) {
+    assert.equal(readHangupButtonHint(stored, "s1"), false, String(stored));
+  }
+});
+
+test("[2026-11-07 배선] 버튼 힌트는 통화 종료 버튼 1곳에서만 · 사유 user_ended 래치일 때만 · 종료 화면은 user_ended일 때만 싣는다", () => {
+  const play = read("src/app/session/play/page.tsx").replace(/\r\n/g, "\n");
+  // 통화 화면: hangupButton: true 를 넘기는 호출은 handleHangup의 종료 1곳뿐.
+  const calls = play.match(/endCall\([^)]*hangupButton: true[^)]*\)/g) ?? [];
+  assert.deepEqual(calls, ['endCall("user", { hangupButton: true })']);
+  const hangupStart = play.indexOf("const handleHangup = async () => {");
+  const hangupEnd = play.indexOf("\n  };", hangupStart);
+  const callAt = play.indexOf('endCall("user", { hangupButton: true })');
+  assert.ok(hangupStart >= 0 && callAt > hangupStart && callAt < hangupEnd, "그 호출은 handleHangup 안");
+  // 통화 종료 버튼의 onClick이 handleHangup이다(단일 통화 aria "통화 종료 — 훈련 종료").
+  assert.match(play, /onClick=\{\(\) => void handleHangup\(\)\}/);
+  // 저장은 1곳 · 조건 = 버튼으로 시작 ∧ 참가자 사유.
+  assert.equal((play.match(/setPendingHangupButton\(/g) ?? []).length, 1);
+  assert.ok(play.includes('opts?.hangupButton && ending.endedBy === "user" && ending.reason === "user_ended") setPendingHangupButton(sessionId)'));
+  // 훈련 종료 버튼 경로는 플래그 없이 부른다.
+  assert.ok(play.includes('const handleEndTraining = async () => {\n    await endCall("user");\n  };'));
+  const end = read("src/app/session/end/page.tsx");
+  assert.ok(end.includes('const hangupButton = endReason === "user_ended" && peekPendingHangupButton(sid);'));
+  assert.ok(end.includes("...(hangupButton ? { hangupButton: true as const } : {})"));
 });

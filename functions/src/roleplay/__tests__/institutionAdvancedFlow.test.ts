@@ -73,7 +73,8 @@ test("[신고①] 기관 사칭 고급 변형은 전부 인증번호(필수) →
     assert.equal(transfer?.required, true, `${v.variantId}: 계좌 백스톱 강제`);
     assert.ok(identity!.notBeforeUserTurns < transfer!.notBeforeUserTurns, `${v.variantId}: 인증번호가 먼저 열린다`);
     assert.ok(v.channels.includes("sms"), `${v.variantId}: 채널 메타`);
-    assert.equal(resolveDeclaredSms(INSTITUTION, v.variantId).declared.length, 2, `${v.variantId}: 카탈로그 정합`);
+    // PR-B — fv-c5fj 3통화는 통화 1 대출 안내 · 통화 3 대출금 보관 계좌 문자를 더 선언한다(4통 · 통화 3 문자는 확인 결과 = 실행일 때만).
+    assert.equal(resolveDeclaredSms(INSTITUTION, v.variantId).declared.length, v.multiCall ? 4 : 2, `${v.variantId}: 카탈로그 정합`);
   }
 });
 
@@ -84,6 +85,20 @@ test("[신고①] 고급 변형 수법 — 인증번호 요구 · 이체 화면 
       assert.ok(labels.includes(need), `${v.variantId}: ${need}`);
     }
     for (const gone of ["인출·전달 요구", "코인 구매·송금 요구"]) assert.ok(!labels.includes(gone), `${v.variantId}: ${gone} 제거`);
+    if (v.multiCall) {
+      // ⭐ PR-B — 3통화: 통화 1(안전계좌 이체 화면 → 앱 안 대출 신청 → 확인 전화 코칭) · 통화 3(대출금 보관 이체 화면). 단계는 레그 단계를 이어 붙인 값이다.
+      const leg0 = v.legs[0].stages ?? [];
+      const safeStage = leg0.find((s) => s.includes("980만 원"))!;
+      assert.match(safeStage, /링크/, `${v.variantId}: 안전계좌 = 링크 이체 화면`);
+      assert.match(safeStage, /은행 앱이나 창구에서 따로 이체하라고 하지 않는다/, `${v.variantId}: "알아서 이체" 차단`);
+      const loanStage = leg0.find((s) => s.includes("대출 신청 화면"))!;
+      assert.match(loanStage, /은행 · 금융회사 창구나 다른 앱에서 따로 대출을 받으라고 하지 않는다/, `${v.variantId}: 앱 안 대출만`);
+      assert.match(loanStage, /더 조르지 않고 마무리한다/, `${v.variantId}: 거절 뒤 마무리`);
+      assert.ok((v.legs[2].stages ?? []).some((s) => /이체 화면에서 들어온 대출금을 옮기게 한다/.test(s)), `${v.variantId}: 통화 3 = 대출금 보관 이체 화면`);
+      assert.ok(labels.includes("대출금 이체 요구"), `${v.variantId}: 대출금 이체 요구 수법`);
+      assert.match(v.decisionMoment ?? "", /이체 화면/, `${v.variantId}: 결정 순간`);
+      continue;
+    }
     // §115 — 링크 이체 화면 뒤에 대출 실행 유도 단계가 하나 더 있다(마지막 단계).
     const transfer = v.stages[v.stages.length - 2]!.summary;
     assert.match(transfer, /링크/, `${v.variantId}: 끝에서 둘째 단계 = 링크 이체 화면`);
@@ -102,7 +117,8 @@ test("[신고①] 자가 · 챌린지 배정 풀 모두 새 선언 변형만 나
     assert.ok(pool.length >= 1, `${challengeId ?? "self"}: 풀`); // §119 D-11 — fv-pgqt 은퇴 뒤 1벌
     // §124 — 안전계좌 루트는 두 문자 · 다른 루트도 인증번호 문자(필수)는 선언한다(문자 선언 0 변형 0은 그대로).
     for (const v of pool) {
-      if (v.routeKey === "safe-account") assert.ok(v.sms.length === 2, `${challengeId ?? "self"}/${v.variantId}`);
+      // PR-B — 안전계좌 루트(fv-c5fj)는 3통화 4문자(인증번호 · 안전계좌 · 대출 안내 · 대출금 보관 계좌).
+      if (v.routeKey === "safe-account") assert.ok(v.sms.length === (v.multiCall ? 4 : 2), `${challengeId ?? "self"}/${v.variantId}`);
       else assert.ok(v.sms.some((s) => s.smsId === "institution-otp" && s.required), `${challengeId ?? "self"}/${v.variantId}`);
     }
   }
@@ -110,7 +126,10 @@ test("[신고①] 자가 · 챌린지 배정 풀 모두 새 선언 변형만 나
 
 test("[신고①] 백스톱 — 모델이 안 불러도 인증번호 → 계좌 문자 순서로 강제 발송된다", () => {
   for (const v of ADVANCED) {
-    const { declared } = resolveDeclaredSms(INSTITUTION, v.variantId);
+    // PR-B — 다통화(fv-c5fj)는 통화 1 선언(레그 범위)으로 본다 — 인증번호 → 안전계좌 → 대출 안내 순서.
+    const { declared } = v.multiCall
+      ? resolveDeclaredSms(INSTITUTION, v.variantId, { relay: { legIndex: 0, legStartUserTurns: [0] } })
+      : resolveDeclaredSms(INSTITUTION, v.variantId);
     assert.deepEqual(planSmsBackstop({ declared, delivered: [], userTurns: 1 }), { action: "wait" });
     // §115 B안 — 하한 3 · 6. §124(#239) — 현행 fv-c5fj는 백스톱 간격 1(넛지 4 · 강제 5 → 계좌는 도착 5 + 간격 2 = 7에서 열려 강제 9),
     // 은퇴 fv-pgqt는 종전 2(넛지 5 · 강제 7 → 계좌 9에서 열려 강제 13).
@@ -129,10 +148,11 @@ test("[신고①] 백스톱 — 모델이 안 불러도 인증번호 → 계좌 
     assert.equal(planSmsBackstop({ declared, delivered, userTurns: accountAt - 1 }).action === "deliver", false, `${v.variantId}: 계좌 강제 직전`);
     const second = planSmsBackstop({ declared, delivered, userTurns: accountAt });
     assert.equal(second.action === "deliver" && second.item.smsId, safeSmsOf(v.variantId), `${v.variantId}: 둘째 = 계좌`);
-    assert.equal(
-      planSmsBackstop({ declared, delivered: [...delivered, { smsId: safeSmsOf(v.variantId), userTurnsAtArrival: accountAt }], userTurns: 20 }).action,
-      "none_pending",
-    );
+    const afterSafe = [...delivered, { smsId: safeSmsOf(v.variantId), userTurnsAtArrival: accountAt }];
+    // PR-B — 통화 1은 대출 안내 문자가 하나 더 남는다(그것까지 도착하면 남은 문자 0).
+    const allDelivered = v.multiCall ? [...afterSafe, { smsId: "institution-loan-guide", userTurnsAtArrival: accountAt + 3 }] : afterSafe;
+    if (v.multiCall) assert.notEqual(planSmsBackstop({ declared, delivered: afterSafe, userTurns: 30 }).action, "none_pending", `${v.variantId}: 대출 안내 남음`);
+    assert.equal(planSmsBackstop({ declared, delivered: allDelivered, userTurns: 40 }).action, "none_pending");
   }
 });
 
@@ -155,7 +175,9 @@ test("[신고①] Live 조립 — 계좌 예시가 링크 이체 화면 기준�
     assert.ok(text.includes("문자로 보낸 계좌 안내의 링크를 열어 그 화면에서 금액을 넣고 이체해 달라"), `${v.variantId}: 예시`);
     assert.ok(text.includes(TRANSFER_VIA_LINK_ONLY_SENTENCE.trim()), `${v.variantId}: 링크 화면에서만`);
     assert.ok(!text.includes("링크 문자는 보낸 적이 없으니"), `${v.variantId}: 모순 문장 0`);
-    assert.ok(text.includes(TRANSFER_LINK_IS_ONLY_LINK_SENTENCE.trim()), `${v.variantId}: 다른 링크 문자 지어내기 차단(리뷰 M2)`);
+    // PR-B — 3통화 통화 1은 이체 링크 말고 대출 신청 링크 문자도 선언한다 ⇒ "이체 링크가 유일한 링크" 문장은 거짓이라 싣지 않는다(종전 변형은 그대로).
+    if (v.multiCall) assert.ok(!text.includes(TRANSFER_LINK_IS_ONLY_LINK_SENTENCE.trim()), `${v.variantId}: 링크 문자 2종 — 유일 링크 문장 0`);
+    else assert.ok(text.includes(TRANSFER_LINK_IS_ONLY_LINK_SENTENCE.trim()), `${v.variantId}: 다른 링크 문자 지어내기 차단(리뷰 M2)`);
     assert.ok(!text.includes(`"문자로 보낸 계좌로 보내 달라"`), `${v.variantId}: "알아서 보내라" 예시 0`);
     assert.ok(text.includes(`"방금 문자로 간 인증번호를 불러 달라"`), `${v.variantId}: 인증번호 예시`);
   }

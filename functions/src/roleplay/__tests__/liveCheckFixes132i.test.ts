@@ -31,7 +31,7 @@ test("[§132.19] 판정표 A — 금 구매형 프롬프트에 예시 계좌 · 
   assert.ok(!transfer.includes(NO_ACCOUNT_ENDING_SENTENCE));
 });
 
-test("[§132.19] 판정표 A 대상 — 고급 다중 루트 중 현금 · 금 · 상품권 · 대출금 전달 · 현금 상환 결말만(현행 8루트 · 은퇴 fv-bmiq는 목록 밖) · 변형 부재 · 다른 시나리오 ID = 거짓", () => {
+test("[§132.19] 판정표 A 대상 — 현금 · 금 · 상품권 · 대출금 전달 · 현금 상환 결말(고급 8루트 · 은퇴 fv-bmiq는 목록 밖) + 문자 스미싱 앱 설치 · 재배송 링크 루트 7 · 변형 부재 · 다른 시나리오 ID = 거짓", () => {
   const targets: string[] = [];
   for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
     for (const level of ["beginner", "intermediate", "advanced"] as const) {
@@ -40,7 +40,11 @@ test("[§132.19] 판정표 A 대상 — 고급 다중 루트 중 현금 · 금 �
   }
   assert.deepEqual(
     targets.sort(),
-    ["fv-a6lq", "fv-e5mv", "fv-g2ld", "fv-k9ra", "fv-q7cn", "fv-r4hc", "fv-t8ga", "fv-v2mk"].sort(),
+    [
+      "fv-a6lq", "fv-e5mv", "fv-g2ld", "fv-k9ra", "fv-q7cn", "fv-r4hc", "fv-t8ga", "fv-v2mk",
+      // Edge 판 31(2026-11-07) — 문자 스미싱 앱 설치 · 재배송 링크 루트(이체 수단 0).
+      "fv-rizf", "fv-afbr", "fv-hu8w", "fv-prr3", "fv-tvq2", "fv-k7qm", "fv-g454",
+    ].sort(),
   );
   // 이체 결말 루트는 그대로(계좌 문자 · 말로 부르는 송금).
   for (const id of ["fv-c5fj", "fv-p3jx", "fv-m3hd", "fv-d8pw", "fv-k268", "fv-66hh"]) {

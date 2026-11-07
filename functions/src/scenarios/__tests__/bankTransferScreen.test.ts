@@ -30,6 +30,8 @@ const CONVERTED: readonly [string, string, string][] = [
   ["courier-customs-scam", "courier-safe-account", "courier-safe-transfer"],
   // P2-d — 환급 처리 수수료(새 계좌 문자 · 말로 부르던 계좌를 문자 · 화면으로).
   ["tax-refund-scam", "tax-refund-fee", "tax-refund-fee-transfer"],
+  // 2026-11-07(Edge 시험 판 7 · 사용자 결정 "앱 안 화면 추가") — 납치 고급(말로만 부르던 계좌를 문자 · 화면으로).
+  ["kidnapping-threat", "kidnap-ransom-account", "kidnap-ransom-transfer"],
 ];
 
 test("[P2 B1] 계좌 문자는 전부 이체 화면 링크를 갖는다 · 바뀐 5종은 각자 훈련용 이체 화면을 연다", () => {
@@ -56,7 +58,9 @@ test("[P2 B1] 계좌 문자는 전부 이체 화면 링크를 갖는다 · 바�
     [...BANK_TRANSFER_LANDINGS].sort(),
     [...CONVERTED.map(([, , l]) => l), "child-bank-transfer", "friend-bank-transfer", "card-relief-transfer", "safe-account-transfer", "protect-account-transfer",
       // §142 — 카드사 고급 재구성 안전계좌 이체(처음부터 훈련용 이체 화면).
-      "card-safe-transfer"].sort(),
+      "card-safe-transfer",
+      // ⭐ PR-B — 기관 사칭 고급 3통화 대출금 보관 이체(처음부터 훈련용 이체 화면).
+      "loan-safe-transfer"].sort(),
   );
 });
 

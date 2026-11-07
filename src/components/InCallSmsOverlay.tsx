@@ -28,6 +28,7 @@
 // 않고 **즉시 언마운트**된다(§23.6 A5).
 import { useCallback, useEffect, useRef, useState } from "react";
 import MessengerFakeLanding, { type LandingProgressEvent } from "./MessengerFakeLanding";
+import { lenderNameFromSmsBody } from "@/lib/bankapp/loanFlow";
 import PhoneIcon from "./PhoneIcon";
 import {
   MIXED_THREAD_HEADER_LABEL,
@@ -121,7 +122,7 @@ type InCallSmsOverlayProps = {
    * ⭐ PR-A(2026-11-07 · 기관 사칭 고급 · 택배 통관 고급 — 적은 금액이 통과) — 이체 화면을 여는 순간의 요구액(판정표 R1: 통화에서 사기범이 마지막으로 말한
    * 금액). 없으면 문자 금액(R2) · 둘 다 없으면 비교 0(R3). 금액 값은 이 화면 안의 비교에만 쓰이고 콜백 · 네트워크로 나가지 않는다(G138). 부재 = R2 · R3만.
    */
-  demandAmountNow?: () => string | undefined;
+  demandAmountNow?: (landingId?: string) => string | undefined;
   /**
    * 2026-11-07 실기기 신고("문자 발신처는 다른데 한 곳에서 오는 걸로 되어 있다") — 열 때 바로 보일 **대화방**(발신 라벨 또는 번호).
    * 도착 배너를 눌러 열면 그 문자를 보낸 번호의 대화방이 바로 열린다(실제 휴대폰 알림). 부재 · 없는 번호 = 받은 문자 목록(메시지 앱 첫 화면).
@@ -382,7 +383,7 @@ export default function InCallSmsOverlay({
     returnFocusSmsIdRef.current = sms.smsId;
     // D-94 — 같은 문자의 랜딩이 이미 있으면 그대로 다시 보인다(입력값 유지). 다르면 교체(새 마운트).
     // ⭐ PR-A — 요구액(판정표 R1)은 열 때마다 다시 잰다(사기범이 그사이 금액을 말했을 수 있다). 같은 문자의 랜딩은 그대로 두고 요구액만 바꾼다(입력값 유지 — D-94).
-    const spoken = demandAmountNow?.();
+    const spoken = demandAmountNow?.(sms.fakeLandingId);
     const withDemand = (transfer: ReturnType<typeof prefilledTransferOf>): (NonNullable<typeof transfer> & { requestedAmount?: string }) | undefined =>
       transfer && spoken ? { ...transfer, requestedAmount: spoken } : transfer;
     setLanding((current) =>
@@ -798,7 +799,7 @@ export default function InCallSmsOverlay({
                                 // 구조화 필드가 없는 옛 계좌 문자는 문자에 보이는 예금주 · 금액 줄로 맞춘다(화면이 문자와 어긋나지 않게).
                                 const holder = sms.accountHolder ?? holderFromSmsBody(sms.body);
                                 const amount = sms.transferAmount ?? amountFromSmsBody(sms.body);
-                                const spoken = demandAmountNow?.();
+                                const spoken = demandAmountNow?.(sms.fakeLandingId);
                                 onSendToAccount?.(sms.smsId, {
                                   bankName: sms.bankName!,
                                   accountNumber: sms.accountNumber!,
@@ -859,6 +860,14 @@ export default function InCallSmsOverlay({
                 prefilledAccount={landing.prefilledAccount}
                 // ⭐ P2(X6) — 훈련용 이체 화면의 받는 분 · 금액 · 은행 미리 채움(참가자 입력 아님 — 어떤 콜백에도 싣지 않는다).
                 prefilledTransfer={landing.prefilledTransfer && bankIdentity ? { ...landing.prefilledTransfer, ...bankIdentity } : landing.prefilledTransfer}
+                // ⭐ PR-B — 앱 안 대출 신청 화면: 장부 열쇠(세션) · 가상 캐피탈 이름(이 문자 본문 — 서버가 세션 이름으로 바꿔 저장).
+                loanContext={
+                  landing.landingId === "loan-apply" && bankIdentity
+                    ? { ledgerKey: bankIdentity.ledgerKey, lenderName: lenderNameFromSmsBody(messages.find((m) => m.smsId === landing.smsId)?.body) }
+                    : undefined
+                }
+                // ⭐ 2026-11-07(Edge 시험 판 12) — 상품권 구매 화면의 결제 계좌 · 핀 발급 열쇠(계좌 문자가 아니라 `prefilledTransfer`가 없다).
+                bankIdentity={bankIdentity}
                 // T194-c-1(Q2) — 가짜 "권한 허용" 응낙 **사실 하나**를 페이지로 중계한다(인자 = 랜딩 id뿐 · 이 파일은 콜러블을 부르지 않는다).
                 onInstallConsent={() => {
                   if (landing.landingKind === "app-install" && landing.landingId) onInstallConsent?.(landing.landingId);

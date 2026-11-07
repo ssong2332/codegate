@@ -18,24 +18,26 @@ import type { DeliveredSmsRecord } from "../../inCallSms/smsGate";
 
 const SCENARIO = "institutional-impersonation";
 const c5fj = findFlowVariant("fv-c5fj")!;
+// ⭐ PR-B — fv-c5fj가 3통화(후속 단계 값 없음)로 바뀌어 P1 · P2(후속 단계 변형의 판정)는 같은 구조의 은퇴 fv-pgqt로 고정한다.
+const pgqt = findFlowVariant("fv-pgqt")!;
 
 function screenInput(delivered: DeliveredSmsRecord[]) {
   return {
     scenarioId: SCENARIO,
-    flowVariantId: "fv-c5fj",
+    flowVariantId: "fv-pgqt",
     delivered,
     mockScreens: [],
-    declared: c5fj.sms,
+    declared: pgqt.sms,
     declaredKnown: true,
     verifyEnabled: true,
-    followUpUserTurns: c5fj.goalFollowUpUserTurns,
+    followUpUserTurns: pgqt.goalFollowUpUserTurns,
   };
 }
 const otp: DeliveredSmsRecord = { smsId: "institution-otp", userTurnsAtArrival: 5 };
-const safe = (extra: Partial<DeliveredSmsRecord> = {}): DeliveredSmsRecord => ({ smsId: "institution-asset-safe-account", userTurnsAtArrival: 7, ...extra });
+const safe = (extra: Partial<DeliveredSmsRecord> = {}): DeliveredSmsRecord => ({ smsId: "institution-safe-account", userTurnsAtArrival: 7, ...extra });
 
 test("[P1] 후속 단계 변형도 4-c 결정 화면 판정 — 미제출 · 적게 보냄 = 대기 · 다 보냄 = 완료", () => {
-  assert.ok(c5fj.goalFollowUpUserTurns !== undefined, "전제: fv-c5fj는 후속 단계 변형");
+  assert.ok(pgqt.goalFollowUpUserTurns !== undefined, "전제: fv-pgqt는 후속 단계 변형");
   assert.equal(isDecisionScreenPending(screenInput([otp, safe()])), true, "문자만 도착 · 미제출");
   assert.equal(isDecisionScreenPending(screenInput([otp, safe({ landingSubmitted: true, landingAmountComparison: "less" })])), true, "적게 보냄(D-4a)");
   assert.equal(isDecisionScreenPending(screenInput([otp, safe({ landingSubmitted: true, landingAmountComparison: "equal" })])), false, "다 보냄");
@@ -43,7 +45,7 @@ test("[P1] 후속 단계 변형도 4-c 결정 화면 판정 — 미제출 · 적
 });
 
 test("[P2] 마무리 지시 — 이체 전 · 적게 보냄 = pending · 다 보낸 뒤 C-5 = wrap_up · scenarioId 없으면 종전", () => {
-  const base = { declared: c5fj.sms, declaredKnown: true, userTurns: 12, followUpUserTurns: c5fj.goalFollowUpUserTurns, placed: false };
+  const base = { declared: pgqt.sms, declaredKnown: true, userTurns: 12, followUpUserTurns: pgqt.goalFollowUpUserTurns, placed: false };
   assert.equal(planGoalWrapUp({ ...base, delivered: [otp, safe()], scenarioId: SCENARIO }), "pending", "도착 + 5발화여도 미제출이면 지시 0");
   assert.equal(
     planGoalWrapUp({ ...base, delivered: [otp, safe({ landingSubmitted: true, landingAmountComparison: "less" })], scenarioId: SCENARIO }),

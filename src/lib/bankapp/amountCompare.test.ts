@@ -135,10 +135,11 @@ test("[PR-A R] 통화 중 문자 이체 화면 — 요구액 = 통화에서 마�
   assert.equal(recordTransferAndCompare("pa2", sms, "100,000"), "less", "R2 문자 금액");
   assert.equal(recordTransferAndCompare("pa3", { accountNumber: "1" }, "100,000"), undefined, "R3");
   // 배선 — 페이지가 올린 대사 + 아직 올리지 않은 실시간 전사를 넘기고, 오버레이는 열 때마다 다시 잰다(링크 · 은행 앱 '송금' 두 길).
-  assert.ok(page.includes("demandAmountNow={() =>"));
+  // PR-B — 오버레이가 연 화면 id를 넘긴다(대출금 보관 이체 화면은 대사가 없으면 입금된 대출금).
+  assert.ok(page.includes("demandAmountNow={(landingId) =>"));
   assert.ok(page.includes('...messages.filter((m) => m.role === "scammer").map((m) => m.text),'));
   assert.ok(page.includes('...transcriptRef.current.filter((t) => t.role === "scammer").map((t) => t.text),'));
-  assert.ok(smsOverlay.includes("const spoken = demandAmountNow?.();"));
+  assert.ok(smsOverlay.includes("const spoken = demandAmountNow?.(sms.fakeLandingId);"));
   assert.ok(smsOverlay.includes("transfer && spoken ? { ...transfer, requestedAmount: spoken } : transfer;"));
   assert.ok(smsOverlay.includes("? { ...current, prefilledTransfer: withDemand(prefilledTransferOf(sms)) }"), "같은 문자 랜딩을 다시 열어도 요구액 갱신");
   assert.ok(smsOverlay.includes("...(spoken ? { requestedAmount: spoken } : {}),"), "은행 앱 '송금' 길");

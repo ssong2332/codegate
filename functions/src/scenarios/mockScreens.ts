@@ -298,9 +298,13 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `courier-safe-transfer` | `scenarios/inCallSms.ts` COURIER_CUSTOMS_SCAM(문자 본문·칩 — P2 X6) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "안전계좌 이체 정보를 확인해 주세요" | "안전계좌로 이체하기" |
 // | `card-remote-support-install` | `scenarios/inCallSms.ts` CARD_COMPANY_IMPERSONATION(문자 본문·칩 — §142) | "아래에서 원격 지원 도우미를 설치해 주세요." | 링크에서 원격 지원 앱 설치 | "원격 지원 도우미를 설치해야 보안 점검이 시작됩니다" | "설치하고 권한 허용하기" |
 // | `card-safe-transfer` | `scenarios/inCallSms.ts` CARD_COMPANY_IMPERSONATION(문자 본문·칩 — §142) | "아래에서 자산 보호 이체를 진행해 주세요." | 링크에서 안전계좌 이체 | "자산 보호 조치가 완료되지 않았습니다" | "자산 보호 이체하기" |
+// | `loan-apply` | `scenarios/inCallSms.ts` INSTITUTIONAL_IMPERSONATION(문자 본문·칩 — PR-B) | "[명의도용 입증 절차] 비대면 대출 신청 안내" | 링크에서 비대면 대출 신청 | "비대면 신용대출 신청" | "대출 신청하기" |
+// | `loan-safe-transfer` | `scenarios/inCallSms.ts` INSTITUTIONAL_IMPERSONATION(문자 본문·칩 — PR-B) | "입금된 대출금 전액을 아래에서 이체해 주세요." | 링크에서 대출금 보관 이체 | "대출금 보관 이체가 아직 완료되지 않았습니다" | "보관 계좌로 이체하기" |
 // | `child-bank-transfer` | `roleplay/linkMarker.ts` LINK_LABELS(칩 라벨 — P2-c) | "이체하기" | 링크에서 이체 | "이체 금액을 입력해 주세요" | "이체하기" |
 // | `friend-bank-transfer` | `roleplay/linkMarker.ts` LINK_LABELS(칩 라벨 — P2-c) | "송금하기" | 링크에서 송금 | "송금할 금액을 입력해 주세요" | "송금하기" |
 // | `tax-refund-fee-transfer` | `scenarios/inCallSms.ts` TAX_REFUND_SCAM(문자 본문·칩 — P2-d) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "수수료 이체 정보를 확인해 주세요" | "수수료 이체하기" |
+// | `kidnap-ransom-transfer` | `scenarios/inCallSms.ts` KIDNAPPING_THREAT(문자 본문·칩 — 2026-11-07 앱 안 결말) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "지금 이체할 금액을 확인해 주세요" | "지금 이체하기" |
+// | `voucher-purchase` | `scenarios/inCallSms.ts` PROSECUTION_COOPERATION_CALL(문자 본문·칩 — 2026-11-07 앱 안 결말) | "검수 대상 자금은 아래 판매처에서 상품권으로 구매해 주세요." | 판매처에서 상품권 구매 | "다솜 문화상품권 구매" | "상품권 구매하기" |
 // | `loan-check-app-install` | `scenarios/inCallSms.ts` LOAN_SCAM(문자 본문·칩 — T194-c-1 Q2) | "아래에서 심사용 보안 점검 앱을 설치해 주세요." | 심사용 보안 점검 앱 설치 | "심사용 보안 점검 앱을 설치해야 대출 심사가 진행됩니다" | "권한 허용하고 계속하기" |
 //
 // ⚠️ **이 표가 조용히 낡지 않게 하는 장치(주석은 강제가 아니다).** 위 **줄 번호는 스냅샷일 뿐이며
@@ -383,7 +387,33 @@ export const BANK_TRANSFER_LANDINGS: readonly string[] = [
   "protect-account-transfer",
   // §142 — 카드사 고급 재구성(다통화) 결말 안전계좌 이체.
   "card-safe-transfer",
+  // 2026-11-07(Edge 시험 판 7 · 사용자 결정 "앱 안 화면 추가") — 납치 협박 고급 계좌 문자.
+  "kidnap-ransom-transfer",
+  // ⭐ PR-B — 기관 사칭 고급 3통화 결말 대출금 보관 이체.
+  "loan-safe-transfer",
 ];
+
+// ── ⭐ 2026-11-07(Edge 시험 판 12 · 사용자 결정 "앱 안 화면 추가") — 상품권 구매 화면 ─────────────────────────────────────────────
+// 검찰 고급 상품권형(fv-v2mk)의 결말 "문화상품권을 사서 핀 번호를 불러 달라"를 앱 안에서 끝까지 체험하게 한다. 흐름(클라 `MessengerFakeLanding.tsx`
+// `VoucherPurchaseMockup`): ① 권종 · 수량(가상 상품권 "다솜 문화상품권" · 가상 판매처 "한올기프트") → ② 결제 정보 확인(결제 계좌 · 금액 · 판매처 주의 문구)
+// → ③ 결제 인증(생체 인증 시트 — 이체 화면과 같은 `BankAuthSheet`) → ④ 구매 완료 + 핀 번호 카드. 핀은 클라가 탭 메모리에서 만들고(실제 상품권 핀 형식
+// 16 · 18자리와 다른 12자리 4-4-4) 서버 · 저장소로 보내지 않는다(간편 비밀번호 키패드와 같은 원칙 — G138). 기록은 결제 버튼을 눌렀다는 사실 하나(`landing_submitted`).
+// 핀 낭독은 통화 전사로 리포트가 따로 잡는다(`report/analyzeConversation.ts` 핀 낭독 행).
+/** 상품권 구매 화면 landingId. 클라 `VOUCHER_LANDINGS`와 같은 목록(드리프트 테스트). */
+export const VOUCHER_LANDINGS: readonly string[] = ["voucher-purchase"];
+
+/** 이 랜딩이 상품권 구매 화면인가(제출 뒤 실시간 지시 · 화면 행동 판정의 단일 판별자). */
+export function isVoucherLanding(landingId: string | undefined): boolean {
+  return landingId !== undefined && VOUCHER_LANDINGS.includes(landingId);
+}
+
+/**
+ * ⭐ 2026-11-07(Edge 시험 판 12 · 사용자 결정 "앱 안 화면 추가") — 상품권 구매 화면(`VOUCHER_LANDINGS`) 결제 기록 순간의 실시간 맥락 1줄(`inCallSms/index.ts` `recordInCallSmsEvent`). 루트 전용 문면이라 공통 블록(`confirmResult.ts`)이 아니라 이 카탈로그에 둔다(서비스 밖 유도 판정 ① 공통 표면 0). 이체가 아니라
+ * 구매다 — 위 이체 문면("입금 확인")을 쓰면 사기범이 받은 돈을 확인했다고 말한다. 핀 번호는 서버도 모른다(화면이 만든다 · G138) ⇒ 지어내지 말고 불러 달라고 한다.
+ * ⛔ 횟수 · 턴 번호 0 · 따옴표 대사 예시 0.
+ */
+export const VOUCHER_PURCHASED_INSTRUCTION =
+  "(앱 확인: 상대가 방금 문자 링크의 구매 화면에서 상품권 결제를 마쳤다. 구매가 끝난 것으로 받아들이고, 다시 사라는 말은 하지 마라. 이번 대답에서 화면에 뜬 핀 번호를 지금 불러 달라고 하라. 핀 번호는 너에게 전달되지 않으니 지어내 말하지 말고, 상대가 번호를 불러 주면 검수번호로 등록됐다고 짧게 말한 뒤 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라. 상대가 번호를 불러 주기 전에는 원하던 것을 얻었다고 통화를 끝내지 마라.)";
 
 /** P2 — 이 랜딩이 훈련용 이체 화면인가(문자 문서의 받는 분 · 금액 미리 채움 필드를 싣는 단일 판별자 — `inCallSms/buildDoc.ts`). */
 export function isBankTransferLanding(landingId: string): boolean {
@@ -573,6 +603,47 @@ const INSTITUTIONAL_IMPERSONATION: MockScreenItem[] = [
     correctAction:
       "'안전계좌로 옮기라'며 계좌번호와 금액을 입력하라고 하면 그 자리에서 멈추세요 — 어떤 수사·금융기관도 돈을 다른 계좌로 옮기라고 하지 않습니다. ① 통화를 끊고 이미 알고 있는 은행 대표번호로 직접 확인하기 ② 계좌번호·금액을 문자 링크에 넣지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
   },
+  // ⭐ PR-B(2026-11-07 — 설계 docs/research/institution-advanced-loan-design-2026-11-07.md §6) — 앱 안 비대면 대출 신청(`institution-loan-guide` 문자).
+  // 렌더 정본 = 클라 `src/components/MessengerFakeLanding.tsx` `LoanApplyMockup`(본인 확인 → 한도 조회 → 금액 · 용도 → 약정 확인 → 전자서명 → 신청 완료).
+  // 기록은 마지막 신청 버튼을 눌렀다는 사실 하나(`landing_submitted`) — 금액 · 용도 · 인증 값은 서버로 가지 않는다(AC-045 · G138).
+  // ⛔ 실제 금융회사 이름 0(화면의 캐피탈명은 세션 가상 캐피탈 — 문자 본문에서 읽는다) · 실제 대출 0.
+  {
+    landingId: "loan-apply",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "비대면 신용대출 신청",
+    bodyLines: [
+      "본인 확인 후 대출 한도를 조회하고 바로 신청할 수 있습니다.",
+      "신청 내용은 실행 전 확인 절차를 거칩니다.",
+    ],
+    issuerLabel: "ⓒ 비대면 대출센터",
+    mockHost: "credit-loan-apply.invalid",
+    fields: ["대출 신청 금액", "대출 용도"],
+    submitLabel: "대출 신청하기",
+    successHeadline: "대출 신청이 접수되었습니다.",
+    momentTactic: "명의 도용 입증을 빌미로 한 비대면 대출 신청 유도",
+    correctAction:
+      "'명의 도용을 입증하려면 대출을 받아 보라'고 하면 그 자리에서 멈추세요 — 검찰 · 경찰 · 금융감독원은 대출을 받으라고 하지 않습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 금융회사 확인 전화에는 누가 시켰는지 사실대로 말하기 ③ 이미 대출을 받았다면 그 금융회사에 바로 알리고 14일 안에 대출계약 철회를 신청하기 ④ 112(경찰) · 1332(금융감독원)에 신고하기.",
+  },
+  // ⭐ PR-B — 대출금 보관 계좌 이체(`institution-loan-safe-account` 문자 · 통화 3). 훈련용 이체 화면(`BANK_TRANSFER_LANDINGS`)과 같은 흐름.
+  {
+    landingId: "loan-safe-transfer",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "대출금 보관 이체가 아직 완료되지 않았습니다",
+    bodyLines: [
+      "명의 도용 입증이 끝날 때까지 대출금을 보관 계좌에 두셔야 합니다.",
+      "보내실 금액을 적고 아래 버튼을 눌러 주세요.",
+    ],
+    issuerLabel: "ⓒ 대출금 보관 안내센터",
+    mockHost: "loan-keep-account.invalid",
+    fields: ["보관 계좌 번호", "이체 금액"],
+    submitLabel: "보관 계좌로 이체하기",
+    successHeadline: "보관 계좌로 이체가 완료되었습니다.",
+    momentTactic: "대출 실행 뒤 명의 도용 입증을 빌미로 한 대출금 이체 유도",
+    correctAction:
+      "'대출금을 보관 계좌로 옮기라'고 하면 100% 사기입니다 — 어떤 수사 · 금융기관도 대출금을 다른 계좌로 옮기라고 하지 않습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 문자 속 링크로 이체하지 않기 ③ 이미 보냈다면 112(경찰)와 그 은행 · 대출 금융회사에 바로 지급정지를 요청하기 ④ 대출 14일 안이면 대출계약 철회를 신청하기.",
+  },
 ];
 
 // UF-008 — `card-relief-account` 문자(§51.3 F1 해소 후속)에서 열린다. §51.6 R10 — 신규
@@ -696,7 +767,7 @@ const ASSET_PROTECTION_NOTICE_CALL: MockScreenItem[] = [
     ],
     issuerLabel: "ⓒ 자산보호 보관접수 안내",
     mockHost: "asset-custody-desk.invalid",
-    fields: ["보관 신청 금액", "돈을 찾을 은행", "찾는 방법(현금 또는 수표)"],
+    fields: ["보관 신청 금액", "돈을 찾을 은행", "보관 방법(현금 · 수표 · 금 실물)"],
     submitLabel: "보관 신청하기",
     successHeadline: "보관 신청이 접수되었습니다.",
     momentTactic: "자산 보호를 빌미로 한 현금 인출 · 전달 약속 유도",
@@ -862,6 +933,22 @@ const PROSECUTION_COOPERATION_CALL: MockScreenItem[] = [
     correctAction:
       "'문자로 보낸 사이트에서 자산을 코인으로 전환해 보관 지갑으로 옮기라'고 하면 그 자리에서 멈추세요 — 검찰 · 경찰 · 금융감독원은 어떤 경우에도 돈을 코인으로 바꾸라고 하거나 '보관 지갑' · '안전계좌'로 옮기라고 하지 않습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 문자 속 사이트의 전환 · 이체 버튼을 누르지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 보냈다면 112(경찰) · 1332(금융감독원)에 바로 신고하고 이용한 거래소에도 알리기.",
   },
+  // ⭐ 2026-11-07 — 검찰 고급 상품권형 결말(위 `VOUCHER_LANDINGS` 주석). ⛔ 실제 상품권 브랜드 · 판매처 0(가상명 — 웹 검색 2026-11-07 "다솜 문화상품권" · "한올기프트" 겹침 0).
+  {
+    landingId: "voucher-purchase",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "다솜 문화상품권 구매",
+    bodyLines: ["구매 즉시 모바일 상품권 핀 번호가 발급됩니다."],
+    issuerLabel: "ⓒ 한올기프트",
+    mockHost: "hanol-gift-shop.invalid",
+    fields: ["권종", "수량"],
+    submitLabel: "상품권 구매하기",
+    successHeadline: "상품권 구매가 완료되었습니다.",
+    momentTactic: "자금 검수 명목의 상품권 구매 · 핀 번호 요구",
+    correctAction:
+      "수사기관 · 금융기관은 수사나 검수를 이유로 상품권을 사라고 하거나 핀 번호를 불러 달라고 하지 않습니다 — 핀 번호를 알려 주는 순간 그 금액은 바로 빠져나갑니다. ① 상품권을 사지 말고 전화를 끊기 ② 이미 샀다면 핀 번호를 누구에게도 알려 주지 않기 ③ 이미 알려 줬다면 바로 그 상품권 발행사 고객센터에 사용 정지를 요청하고 112(경찰) · 1332(금융감독원)에 알리기.",
+  },
 ];
 
 // UF-008 — `bank-protect-account` 문자(§53/§51 커밋 D)에서 열린다. §51.6 R10 — 신규
@@ -1001,6 +1088,25 @@ const MESSENGER_FRIEND_LOAN_KAKAO: MockScreenItem[] = [
   },
 ];
 
+// ⭐ 2026-11-07(Edge 시험 판 7 · 사용자 결정 "앱 안 화면 추가") — 납치 협박 카탈로그 신설(계좌 문자 `kidnap-ransom-account`가 여는 이체 화면 1건).
+const KIDNAPPING_THREAT: MockScreenItem[] = [
+  {
+    landingId: "kidnap-ransom-transfer",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "지금 이체할 금액을 확인해 주세요",
+    bodyLines: ["받는 분 통장에는 보내는 분 실명으로 표시됩니다."],
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 즉시",
+    mockHost: "quick-send-now.invalid",
+    fields: ["입금받을 계좌", "보낼 금액"],
+    submitLabel: "지금 이체하기",
+    successHeadline: "즉시 이체가 완료되었습니다.",
+    momentTactic: "자녀를 데리고 있다는 협박에 따른 즉시 이체",
+    correctAction:
+      "자녀를 데리고 있다며 돈을 보내라고 하면 보내기 전에 자녀가 정말 위험한지부터 확인하세요 — 대부분은 자녀가 아무 일 없이 학교 · 학원에 있습니다. ① 통화는 이어 두더라도 다른 전화나 옆 사람을 통해 자녀 · 학교 · 학원에 바로 연락하기 ② 112(경찰)에 곧바로 알리기 ③ 상대가 부르거나 문자로 보낸 계좌로 송금하지 않기 ④ 이미 이체했다면 바로 112(경찰)나 그 은행 대표번호로 지급정지를 요청하고 1332(금융감독원)에도 알리기.",
+  },
+];
+
 export const MOCK_SCREENS: Record<string, MockScreenItem[]> = {
   "messenger-subsidy-smishing-sms": MESSENGER_SUBSIDY_SMISHING_SMS,
   "messenger-parcel-smishing-sms": MESSENGER_PARCEL_SMISHING_SMS,
@@ -1021,6 +1127,8 @@ export const MOCK_SCREENS: Record<string, MockScreenItem[]> = {
   // §92.3(DECISIONS #206) — 고급 전용 2종 카탈로그 신설(각 `credential-form` 1건).
   "asset-protection-notice-call": ASSET_PROTECTION_NOTICE_CALL,
   "prosecution-cooperation-call": PROSECUTION_COOPERATION_CALL,
+  // 2026-11-07 — 납치 협박 고급 계좌 문자가 여는 이체 화면.
+  "kidnapping-threat": KIDNAPPING_THREAT,
 };
 
 /**

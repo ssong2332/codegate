@@ -91,7 +91,7 @@ const INTERMEDIATE_EXISTING_TACTIC_EXEMPT: Readonly<Record<string, readonly Axis
 const INTERMEDIATE_SMS_EXEMPT = [
   "family-accident-deepvoice",
   "grandchild-impersonation",
-  "kidnapping-threat",
+  "kidnapping-threat", // 2026-11-07 — 카탈로그는 고급 계좌 문자 1건뿐(중급 = "현행" 문자 0)
   "messenger-child-impersonation-kakao",
   "messenger-friend-loan-kakao",
   "messenger-parcel-smishing-sms",
@@ -107,12 +107,21 @@ function peopleCount(v: FlowVariant): number {
   return v.multiCall ? new Set(v.legs.map((leg, i) => leg.speakerId ?? `#${i}`)).size : v.legs.length;
 }
 
+/**
+ * ⭐ D-L8(2026-11-07 사용자 결정 "통화별로 세기 (권장)" — PRD AC-096 (b) · DECISIONS) — 다통화(`multiCall`) 변형의 문자 수 = **통화(레그)별**
+ * 선언 수의 최대값. `leg` 부재 문자는 모든 통화에 센다(게이트가 레그 구분 없이 허용하는 문자). 단일 통화 변형 = 종전(세션 전체 선언 수).
+ */
+function smsPerCall(v: FlowVariant): number {
+  if (!v.multiCall) return v.sms.length;
+  return Math.max(0, ...v.legs.map((_, legIndex) => v.sms.filter((item) => item.leg === undefined || item.leg === legIndex).length));
+}
+
 /** PRD AC-096 (b) 자동 검증표(78.2.3). 위반 목록을 돌려준다(빈 배열 = 범위 안). */
 function rangeViolations(v: FlowVariant): string[] {
   const out: string[] = [];
   const d = effectiveExitBlock(v).filter((x) => x !== "D0_none");
-  // §142 — 다통화 변형의 문자 수 = 레그별 선언 합(레그마다 다른 문자). 범위표는 세션 전체 문자 수 기준이라 그대로 센다.
-  const sms = v.sms.length;
+  // §142 · D-L8 — 다통화 변형은 통화(레그)별로 센다(`smsPerCall`).
+  const sms = smsPerCall(v);
   const legs = ADVANCED_MULTI_CALL_PEOPLE_EXEMPT[v.variantId] === peopleCount(v) ? 3 : peopleCount(v);
   if (v.level === "beginner") {
     if (sms > 1) out.push(`초급 문자 ${sms}통(0~1)`);
@@ -191,8 +200,14 @@ test("[T191 S5 범위표 대조 · AC-096 (b) — 명시 예외 3종 제외 · �
   // 예외 집합은 손으로 적었지만 데이터에서 다시 계산해 **정확히 같아야** 한다(늘지도 줄지도 않게).
   const reduced = Object.keys(PUBLIC_SCENARIOS).filter((id) => l3DepthMode(id) === "reduced").sort();
   assert.deepEqual([...ADVANCED_D34_EXEMPT].sort(), reduced, "고급 D3/D4 예외 = L3 reduced 집합");
+  // 2026-11-07(Edge 시험 판 7 · 사용자 결정 "앱 안 화면 추가") — 납치 협박에 카탈로그가 생겼지만 그 문자를 선언하는 것은 고급 변형뿐이다(중급 fv-dxwu = "현행"
+  // 그대로 — 예외 사유 ② §2.6.3 "현행"). 근사식을 "카탈로그가 없거나, 카탈로그 문자를 고급 변형만 선언한다"로 좁혔다(중급 · 초급이 쓰는 문자가 생기면 다시 실패한다).
+  const advancedOnlyCatalog = (id: string) =>
+    (IN_CALL_SMS[id] ?? []).every((item) =>
+      FLOW_VARIANTS.filter((v) => v.scenarioId === id && v.sms.some((d) => d.smsId === item.smsId)).every((v) => v.level === "advanced"),
+    );
   const noSmsCatalog = Object.keys(PUBLIC_SCENARIOS)
-    .filter((id) => !isAdvancedOnlyScenario(id) && (IN_CALL_SMS[id] ?? []).length === 0)
+    .filter((id) => !isAdvancedOnlyScenario(id) && ((IN_CALL_SMS[id] ?? []).length === 0 || advancedOnlyCatalog(id)))
     .sort();
   assert.deepEqual([...INTERMEDIATE_SMS_EXEMPT].sort(), noSmsCatalog, "중급 문자 예외(선언값) = 통화 중 문자 카탈로그가 없는 시나리오");
   // 중급 기존 수법 예외 — 데이터에서 재계산(중급 축 D 범위 밖 값)해 상수와 정확히 같아야 한다.
@@ -216,6 +231,18 @@ test("[T191 S5 범위표 대조 · AC-096 (b) — 명시 예외 3종 제외 · �
   t.diagnostic(`정상 초급 ${beginner.variantId}: 위반 ${JSON.stringify(ok)} / D3 샘플: 위반 ${JSON.stringify(bad)}`);
   assert.deepEqual(ok, []);
   assert.ok(bad.some((m) => m.startsWith("초급 축 D")), "D3를 넣은 초급 샘플이 범위 검사에 걸려야 한다");
+
+  // ⭐ D-L8 — 다통화 문자는 통화별로 센다: fv-c5fj = 세션 4통 · 통화별 최대 3통(통과). 역방향 — 한 통화에 4통을 몰면 걸린다.
+  const c5fj = FLOW_VARIANTS.find((x) => x.variantId === "fv-c5fj")!;
+  assert.equal(c5fj.sms.length, 4, "세션 전체 선언 4통");
+  assert.equal(smsPerCall(c5fj), 3, "통화별 최대 3통");
+  const crowded: FlowVariant = { ...c5fj, sms: c5fj.sms.map((item) => ({ ...item, leg: 0 })) };
+  assert.ok(rangeViolations(crowded).some((m) => m.startsWith("고급 문자 4통")), "한 통화 4통 샘플은 범위 검사에 걸려야 한다");
+  // 카드사 고급 R1(다통화)도 같은 규칙으로 범위 안이다(위 전수 대조와 같은 판정 — 값만 드러낸다).
+  for (const v of FLOW_VARIANTS.filter((x) => x.multiCall && x.level === "advanced")) {
+    t.diagnostic(`[D-L8] ${v.variantId}: 세션 ${v.sms.length}통 · 통화별 최대 ${smsPerCall(v)}통`);
+    assert.ok(smsPerCall(v) <= 3, v.variantId);
+  }
 });
 
 test("[T191 S5 초급 이탈 차단 0 · AC-096 (d)] 초급 변형 수법에 D2~D6 라벨 0건(D1은 1개까지)", () => {
@@ -540,7 +567,8 @@ test("[§142 레그 합성] 다통화 변형 — 레그마다 그 레그 페르�
     v.legs.forEach((leg, i) => {
       const resolved = resolveVariantPrompt(base, v, i);
       assert.equal(resolved.guardrailPreamble, base.guardrailPreamble, `${v.variantId}#${i}: 가드레일 변형 금지`);
-      assert.ok(leg.personaPrompt && resolved.personaPrompt.startsWith(leg.personaPrompt), `${v.variantId}#${i}: 레그 페르소나`);
+      // PR-B — 레그 페르소나 부재 = 시나리오 페르소나 재사용(기관 고급 검사 통화 1 · 3).
+      assert.ok(resolved.personaPrompt.startsWith(leg.personaPrompt ?? base.personaPrompt), `${v.variantId}#${i}: 레그 페르소나`);
       for (const stage of leg.stages ?? []) assert.ok(resolved.personaPrompt.includes(stage), `${v.variantId}#${i}: 레그 단계`);
       // 다른 레그 고유 단계는 싣지 않는다.
       for (const other of v.legs) {
@@ -548,10 +576,13 @@ test("[§142 레그 합성] 다통화 변형 — 레그마다 그 레그 페르�
         for (const stage of other.stages ?? []) assert.equal(resolved.personaPrompt.includes(stage), false, `${v.variantId}#${i}: 다른 레그 단계 누출`);
       }
       assert.equal(resolved.personaPrompt.includes("처음부터 끝까지 너 혼자 맡는다"), false);
-      const endRule = leg.exit === "dial" ? "짧게 인사하고 통화를 끝낸다" : leg.exit === "transfer" ? "통화를 넘긴다" : "마지막 통화다";
+      const endRule =
+        leg.exit === "dial" ? "짧게 인사하고 통화를 끝낸다" : leg.exit === "transfer" ? "통화를 넘긴다" : leg.exit === "incoming" ? "다른 사람이 따로 걸어 오는 것" : "마지막 통화다";
       assert.ok(resolved.personaPrompt.includes(endRule), `${v.variantId}#${i}: 레그 끝 규칙`);
       assert.deepEqual(resolved.weakenedTactics.map(extractTacticLabel), [...(leg.tacticLabels ?? [])].filter((l) => v.tactics.some((t) => extractTacticLabel(t) === l)));
-      assert.ok(resolved.weakenedTactics.length >= 1, `${v.variantId}#${i}: 레그 수법 0`);
+      // PR-B — 정당한 제3자 레그(대출 실행 확인 상담원)는 수법 0이 정답(사기 대사 아님 · 프롬프트도 `genuineLegPrompt.ts`).
+      if (leg.genuine) assert.equal(resolved.weakenedTactics.length, 0, `${v.variantId}#${i}: 정당한 제3자 수법 0`);
+      else assert.ok(resolved.weakenedTactics.length >= 1, `${v.variantId}#${i}: 레그 수법 0`);
       for (const level of DIFFICULTY_LEVELS as readonly DifficultyLevel[]) {
         const assembled = buildSystemPrompt(resolved, { difficultyLevel: level });
         assert.ok(assembled.lastIndexOf(base.guardrailPreamble) > assembled.lastIndexOf("[이번 통화의 흐름]"), `${v.variantId}#${i}/${level}: 가드레일 최후미`);
@@ -760,7 +791,13 @@ test("[T194-a §84.13.3 ② · 리뷰 M2] 플래그만 더한 child-kakao · sub
             .filter((tactic) => !(v.accountHolder && tactic === accountHolderTactic(row.scenarioId, v.accountHolder)))
             .map((tactic) => (tactic === CHILD_INSTALL_TACTIC_110 ? CHILD_INSTALL_TACTIC_BEFORE_110 : tactic)),
         }
-      : currentPrompt;
+      : row.scenarioId === "messenger-subsidy-smishing-sms"
+        ? {
+            ...currentPrompt,
+            // 2026-11-07 Edge 시험 판 31(메인 지시) — 개인정보 요구 수법 1줄은 의도된 추가다 — 그 줄만 뺀다.
+            weakenedTactics: currentPrompt.weakenedTactics.filter((tactic) => !tactic.startsWith("개인정보 요구 — ")),
+          }
+        : currentPrompt;
     const assembled = buildSystemPrompt(prompt, {
       difficultyLevel: row.level,
       inCallSmsEnabled: sessionDeclaresInCallSms(row.scenarioId, row.variantId),

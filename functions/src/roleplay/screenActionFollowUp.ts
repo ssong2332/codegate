@@ -39,14 +39,14 @@ import { transitionChannel } from "../session/channelTransition";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { LLM_TEXT_SECRETS } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
-import { resolveRouteAccountNumber } from "../inCallSms/smsGate";
+import { resolveRouteAccountHolder, resolveRouteAccountNumber } from "../inCallSms/smsGate";
 import { applyFictionalBank, resolveFictionalBankName } from "../shared/fictionalBank";
 import type { MessageDoc, MockScreenDoc, SessionDoc } from "../shared/types";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { decideCallAnnouncement } from "./callAnnouncement";
 import { extractEscalationSignal } from "./escalationSignal";
 import { isL3Procedural } from "./l3Depth";
-import { dropPrematureBankTransferChip, extractLinkMarker } from "./linkMarker";
+import { extractLinkMarker, finalizeBankTransferChips } from "./linkMarker";
 import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { asksIdentityCheck } from "./personaAuthority";
@@ -194,13 +194,6 @@ export const requestScreenActionFollowUp = onCall<RequestScreenActionFollowUpReq
     if (completion.isMock) return {}; // S4 — 문맥 없는 Mock 대사는 저장하지 않는다.
 
     const { text: linkFreeText, attachments: markerAttachments } = extractLinkMarker(completion.text, session.scenarioId, session);
-    // S2 — 이체 화면 칩은 계좌가 대화에 나온 뒤에만(`linkMarker.ts` `dropPrematureBankTransferChip` 표).
-    const attachments = dropPrematureBankTransferChip(
-      dropRepeatedLinkChips(markerAttachments, linkFreeText, history),
-      linkFreeText,
-      resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
-      history,
-    );
     const { text: smsFreeText } = extractSmsMarker(linkFreeText);
     const { text: signalFreeText, escalate: signalEscalate } = extractEscalationSignal(smsFreeText);
     // §128(1) 같은 규칙 — 신호든 대사든 전화를 예고했으면 지금 전환할 수 있을 때만 전환하고, 아니면 예고 문장을 지운다.
@@ -222,6 +215,13 @@ export const requestScreenActionFollowUp = onCall<RequestScreenActionFollowUpReq
     // R9 — 화면에 없는 비밀번호 입력 요구 문장 제거(sendMessage와 같은 판정표 P).
     const text = finalizeScammerReplyText(stripPasswordRequests(factChecked).text).trim();
     if (!text) return {}; // S4
+    // S2 · Edge 판 25 — 이체 화면 칩은 최종 대사 · 앞선 대사에 계좌가 있을 때만 · 세션 은행 · 계좌를 싣는다(`linkMarker.ts` `finalizeBankTransferChips` 표).
+    const attachments = finalizeBankTransferChips(dropRepeatedLinkChips(markerAttachments, linkFreeText, history), text, {
+      accountNumber: resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
+      bankName: fictionalBankName,
+      accountHolder: resolveRouteAccountHolder(session.scenarioId, session.flowVariantId),
+      history,
+    });
 
     const turnIndex = await db.runTransaction(async (tx) => {
       const fresh = (await tx.get(sessionRef)).data() as SessionDoc | undefined;

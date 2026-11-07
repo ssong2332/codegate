@@ -129,6 +129,10 @@ test("[§131(4) 판정표 O] 메신저 첫 메시지 — 전용 지시(전화 �
   const src = readSrc("roleplay/openingLine.ts");
   assert.ok(src.includes('const isMessengerOpening = PUBLIC_SCENARIOS[scenarioId]?.channel === "messenger";'));
   // §131(7)(11) — 역할 고정 줄을 잇고 · 메신저 첫 메시지 본문 통화 표현도 고친다.
-  assert.ok(src.includes("turnInstruction: [isMessengerOpening ? MESSENGER_OPENING_TURN_INSTRUCTION : OPENING_TURN_INSTRUCTION, personaAnchorInstruction(scenarioId)]"));
+  // Edge 판 22 · 23 · 24(2026-11-07) — 문자(SMS) 스미싱은 전용 지시(O1s)가 앞선다(그 밖 메신저 · 통화 = 종전 두 갈래).
+  assert.match(
+    src,
+    /turnInstruction: \[\s*isSmsSmishingOpening\s*\? SMS_SMISHING_OPENING_TURN_INSTRUCTION\s*: isMessengerOpening\s*\? MESSENGER_OPENING_TURN_INSTRUCTION\s*: OPENING_TURN_INSTRUCTION,\s*personaAnchorInstruction\(scenarioId\),\s*\]/,
+  );
   assert.ok(src.includes("const lengthLimited = limitReplySentences(isMessengerOpening ? fixMessengerCallWording(stripPhoneGreeting(realNameFreeText)) : realNameFreeText);"));
 });

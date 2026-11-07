@@ -40,7 +40,7 @@ import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddres
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { MAX_SESSION_MS, MAX_USER_TURNS } from "../shared/constants";
 import { isSessionLimitReached } from "./sessionLimits";
-import { resolveDeclaredSms, resolveRouteAccountNumber } from "../inCallSms/smsGate";
+import { resolveDeclaredSms, resolveRouteAccountHolder, resolveRouteAccountNumber } from "../inCallSms/smsGate";
 import { routeEndsWithoutAccount, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
 import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending } from "../scammerHangup/goalAction";
 import { applyFictionalBank, resolveFictionalBankName } from "../shared/fictionalBank";
@@ -54,7 +54,7 @@ import { resolveHangupRelay } from "../scammerHangup/relayContext";
 import { extractEscalationSignal } from "./escalationSignal";
 import { callPhaseMockTacticHints, isEscalatedVoiceCall } from "./escalatedCall";
 import { isL3Procedural } from "./l3Depth";
-import { dropPrematureBankTransferChip, extractLinkMarker } from "./linkMarker";
+import { extractLinkMarker, finalizeBankTransferChips } from "./linkMarker";
 import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { asksIdentityCheck } from "./personaAuthority";
 import { photoTurnInstruction } from "./photoTurn";
@@ -226,13 +226,6 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
 
   // 마커 정리 — 링크 칩은 살리고(대화방이 그린다), 문자 · 신호 마커는 지우기만 한다(효과 0 — 위 표).
   const { text: linkFreeText, attachments: markerAttachments } = extractLinkMarker(completion.text, session.scenarioId, session);
-  // S2 — 이체 화면 칩은 계좌가 대화에 나온 뒤에만(`linkMarker.ts` `dropPrematureBankTransferChip` 표).
-  const attachments = dropPrematureBankTransferChip(
-    dropRepeatedLinkChips(markerAttachments, linkFreeText, claim.history),
-    linkFreeText,
-    resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
-    claim.history,
-  );
   const { text: smsFreeText } = extractSmsMarker(linkFreeText);
   const { text: signalFreeText, endCall } = extractEscalationSignal(smsFreeText);
   const { text: tidyText } = tidyScammerReplyMarkup(signalFreeText);
@@ -240,6 +233,13 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
   const shaped = limitReplySentences(applyFictionalBank(realNameFree, fictionalBankName), MAX_SCAMMER_REPLY_SENTENCES, DEMAND_SENTENCE).text;
   // §131(12) 판정표 A — 하지 않은 송금 · 사진 확인 문장 삭제(통화 중 대화방은 "통화" 표현을 고치지 않는다 — 실제 통화가 있다).
   const finalReplyText = finalizeScammerReplyText(stripUnperformedAcknowledgement(shaped, turnFacts));
+  // S2 · Edge 판 25 — 이체 화면 칩은 최종 대사 · 앞선 대사에 계좌가 있을 때만 · 세션 은행 · 계좌를 싣는다(`linkMarker.ts` `finalizeBankTransferChips` 표).
+  const attachments = finalizeBankTransferChips(dropRepeatedLinkChips(markerAttachments, linkFreeText, claim.history), finalReplyText, {
+    accountNumber: resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
+    bankName: fictionalBankName,
+    accountHolder: resolveRouteAccountHolder(session.scenarioId, session.flowVariantId),
+    history: claim.history,
+  });
   await messagesRef.add({
     role: "scammer",
     textMasked: finalReplyText,
@@ -307,7 +307,7 @@ function chatFollowUpPending(
 /** P1 M1 — 4-c행 입력(화면 기록 read 0 — 설치 화면 응낙은 보지 않는다 · 이 경로는 `give_up`만 받는다). */
 function chatDecisionScreenPending(session: SessionDoc, delivered: readonly DeliveredSmsRecord[]): boolean {
   // §142 — 다통화 변형은 현재 레그 선언으로(마지막 레그가 아니면 결정 화면이 없다).
-  const { declared, reason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId, { relay: session.relay });
+  const { declared, reason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId, { relay: session.relay, loanReview: session.loanReview?.outcome });
   return isDecisionScreenPending({
     scenarioId: session.scenarioId,
     flowVariantId: session.flowVariantId,

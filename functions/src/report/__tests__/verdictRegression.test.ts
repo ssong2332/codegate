@@ -418,9 +418,10 @@ test("[채널] 속은 순간의 대처법은 그 답변이 오간 채널을 따�
   const result = analyzeConversation(
     [
       { role: "scammer", textMasked: "엄마 지금 당장 도와줘", turnIndex: 0, createdAtMs: SESSION_START_MS, channel: "messenger" },
-      { role: "user", textMasked: "어떻게 하면 되니?", turnIndex: 1, createdAtMs: SESSION_START_MS + 5_000, channel: "messenger" },
+      // 2026-11-07 사용자 결정 — 요구 뒤 일반 방법 질문("어떻게 하면 되니?")은 이제 위험 신호라, 채널 대조용 답을 실제 응낙으로 바꿨다(이 테스트의 주제는 채널이다).
+      { role: "user", textMasked: "알았어 보낼게", turnIndex: 1, createdAtMs: SESSION_START_MS + 5_000, channel: "messenger" },
       { role: "scammer", textMasked: "지금 당장 보내줘", turnIndex: 2, createdAtMs: SESSION_START_MS + 9_000, channel: "voice" },
-      { role: "user", textMasked: "어떻게 하면 되니?", turnIndex: 3, createdAtMs: SESSION_START_MS + 12_000, channel: "voice" },
+      { role: "user", textMasked: "알았어 보낼게", turnIndex: 3, createdAtMs: SESSION_START_MS + 12_000, channel: "voice" },
     ],
     SESSION_START_MS,
     ["다급함 조성 — '지금 당장'"],
