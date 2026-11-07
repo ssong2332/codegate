@@ -98,7 +98,20 @@ export function decideScreenFollowUp(
   return doc.submittedAt ? "submit" : undefined; // S2 · S3
 }
 
-/** 응낙 · 제출에 실을 지시(위 전화 예고 표). */
+/**
+ * ⭐ Edge 재시험 2(2026-11-07 · 정부지원금 스미싱 고급 · 세션 로그 `[§128] 화면 행동 뒤 먼저 보내는 메시지 생성` kind=consent · 주 모델) — 설치 · 권한 허용 직후
+ * 먼저 보낸 메시지가 "아직 제 쪽 시스템에서는 설치가 확인되지 않은 상태라서 '확인' 버튼을 눌러 주세요"(그런 버튼 0)였다. 원인(추정 — 모델 입력 문면 기준):
+ * [화면 행동 확인]은 "앱이 마쳤다고 알려 준 뒤에만 끝난 것으로 본다"고 하는데, 이 경로의 응낙 지시에는 그 "앱 확인" 표지가 없어(일반 턴은 화면 기록 줄 ·
+ * 이체 확인 지시가 "(앱 확인: …)"으로 시작한다) 모델이 상대의 말로만 읽었다. 판정표 C(응낙 지시 앞줄):
+ * | # | If | Then |
+ * |---|---|---|
+ * | C1 | 응낙(consent) | 접두 뒤에 `SCREEN_CONSENT_APP_CONFIRM_LINE`(앱이 권한 허용까지 마쳤다고 알림 · 다시 확인 · 없는 버튼 · 단계 요구 금지) |
+ * | C2 | 제출(submit) | 없음(종전 바이트 동일) |
+ */
+export const SCREEN_CONSENT_APP_CONFIRM_LINE =
+  "(앱 확인: 상대가 네가 보낸 설치 화면에서 설치와 권한 허용까지 마쳤다고 앱이 알려 왔다. 이 단계는 끝났다 — 아직 확인이 안 된다고 하거나, 다시 해 달라고 하거나, 화면에 없는 버튼 · 단계를 눌러 달라고 하지 않는다.)";
+
+/** 응낙 · 제출에 실을 지시(위 전화 예고 표 · 판정표 C). */
 export function screenFollowUpInstruction(
   kind: ScreenFollowUpKind,
   landingId: string,
@@ -117,7 +130,9 @@ export function screenFollowUpInstruction(
       : canEscalateNow && !MESSENGER_INSTALL_WITHOUT_CALL_LANDINGS.includes(landingId)
         ? MOCK_INSTALL_CONSENT_INSTRUCTION
         : MOCK_INSTALL_CONSENT_INSTRUCTION_NO_CALL;
-  return `${SCREEN_ACTION_FOLLOW_UP_PREFIX}\n${body}`;
+  return kind === "consent"
+    ? `${SCREEN_ACTION_FOLLOW_UP_PREFIX}\n${SCREEN_CONSENT_APP_CONFIRM_LINE}\n${body}` // C1
+    : `${SCREEN_ACTION_FOLLOW_UP_PREFIX}\n${body}`; // C2
 }
 
 export type RequestScreenActionFollowUpRequest = { sessionId: string; landingId: string };

@@ -10,6 +10,7 @@ import { CHAT_DURING_CALL_GIVEUP_INSTRUCTION, CHAT_DURING_CALL_INSTRUCTION } fro
 import {
   decideScreenFollowUp,
   SCREEN_ACTION_FOLLOW_UP_PREFIX,
+  SCREEN_CONSENT_APP_CONFIRM_LINE,
   SCREEN_SUBMIT_FOLLOW_UP_INSTRUCTION,
   screenFollowUpInstruction,
 } from "../screenActionFollowUp";
@@ -125,15 +126,16 @@ test("[§128(7) 표 S] 화면 행동 뒤 먼저 보내기 — 응낙 · 제출�
 test("[§128(7) 지시] 설치 뒤 통화가 설계인 항목만 · 지금 전환할 수 있을 때만 전화 예고형", () => {
   assert.equal(
     screenFollowUpInstruction("consent", "subsidy-install", true),
-    `${SCREEN_ACTION_FOLLOW_UP_PREFIX}\n${MOCK_INSTALL_CONSENT_INSTRUCTION}`,
+    // Edge 재시험 2(2026-11-07) 판정표 C1 — 응낙은 접두 뒤에 "앱 확인" 줄.
+    `${SCREEN_ACTION_FOLLOW_UP_PREFIX}\n${SCREEN_CONSENT_APP_CONFIRM_LINE}\n${MOCK_INSTALL_CONSENT_INSTRUCTION}`,
   );
   assert.equal(
     screenFollowUpInstruction("consent", "subsidy-install", false),
-    `${SCREEN_ACTION_FOLLOW_UP_PREFIX}\n${MOCK_INSTALL_CONSENT_INSTRUCTION_NO_CALL}`,
+    `${SCREEN_ACTION_FOLLOW_UP_PREFIX}\n${SCREEN_CONSENT_APP_CONFIRM_LINE}\n${MOCK_INSTALL_CONSENT_INSTRUCTION_NO_CALL}`,
   );
   assert.equal(
     screenFollowUpInstruction("consent", "child-insurance-install", true),
-    `${SCREEN_ACTION_FOLLOW_UP_PREFIX}\n${MOCK_INSTALL_CONSENT_INSTRUCTION_NO_CALL}`,
+    `${SCREEN_ACTION_FOLLOW_UP_PREFIX}\n${SCREEN_CONSENT_APP_CONFIRM_LINE}\n${MOCK_INSTALL_CONSENT_INSTRUCTION_NO_CALL}`,
   );
   assert.equal(
     screenFollowUpInstruction("submit", "child-insurance-install", true),

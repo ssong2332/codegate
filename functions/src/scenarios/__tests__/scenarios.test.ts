@@ -34,6 +34,7 @@ import { CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION, CALL_RETURN_INSTRUCTION }
 import { CALL_AFTER_EXCUSE_INSTRUCTION } from "../../roleplay/callAnnouncement";
 import { TRANSFER_REPORTED_INSTRUCTION } from "../../roleplay/actionAcknowledgement";
 import { personaAnchorInstruction } from "../../roleplay/personaGuard";
+import { BEGINNER_RETREAT_INSTRUCTION, BEGINNER_WRAP_UP_INSTRUCTION } from "../../roleplay/beginnerRetreat";
 import { OTP_HOLD_INSTRUCTION } from "../../roleplay/smsClaim";
 import { buildPriorChatContext } from "../../realtime/priorChatContext";
 import { applyFictionalBank, FICTIONAL_BANK_NAMES, resolveSessionAccountNumber } from "../../shared/fictionalBank";
@@ -1323,6 +1324,9 @@ function turnInstructionSources(): Array<{ scenarioId?: string; label: string; v
     { label: "송금보고뒤", value: TRANSFER_REPORTED_INSTRUCTION },
     { label: "역할고정(지인)", value: personaAnchorInstruction("messenger-friend-loan-kakao")! },
     { label: "역할고정(자녀)", value: personaAnchorInstruction("messenger-child-impersonation-kakao")! },
+    // D4 2차(Edge 재시험 2) — 초급 거절 · 의심 턴의 물러섬 · 마무리 1줄(`roleplay/beginnerRetreat.ts` 판정표 B).
+    { label: "초급물러섬", value: BEGINNER_RETREAT_INSTRUCTION },
+    { label: "초급마무리", value: BEGINNER_WRAP_UP_INSTRUCTION },
     // §132.19 판정표 B — 인증번호 문자 하한 전 앞 단계 붙잡기.
     { scenarioId: "institutional-impersonation", label: "인증번호전붙잡기", value: OTP_HOLD_INSTRUCTION },
     // §110.3 — 메신저에서 넘어온 Live 통화의 앞선 대화 블록(머리 지시 — 대화 줄은 참가자 데이터라 표본 2줄만).

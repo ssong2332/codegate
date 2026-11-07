@@ -1,6 +1,7 @@
 // 서버 조립 프롬프트 + 사용자 입력 구분자 감싸기 (Track A, T7, ADR-0004/AC-013/AC-024).
 // 이 파일이 하는 일은 오직 "문자열 조립"이며 부수효과(Firestore/LLM 호출)는 없다 — sendMessage/
 // generateOpeningLine(index.ts)이 이 함수들의 결과를 LLM 어댑터에 전달한다.
+import { explainMaskedTokens } from "../shared/maskedTokens";
 import type { PersonaCardItem, ScenarioPromptDoc } from "../shared/types";
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { LlmMessage } from "../llm";
@@ -1288,13 +1289,14 @@ function escapeDelimiterLookalikes(text: string): string {
  * 참가자가 보낸 데이터"임을 문자열 레벨에서도 명확히 표시한다.
  */
 export function wrapUserInputAsData(text: string): string {
-  const safeText = escapeDelimiterLookalikes(text);
+  // Edge 재시험 2 판정표 M — 가림 표지에 "상대가 실제로 말한 값" 설명(`shared/maskedTokens.ts`).
+  const safeText = explainMaskedTokens(escapeDelimiterLookalikes(text));
   return `${USER_INPUT_OPEN}\n${safeText}\n${USER_INPUT_CLOSE}`;
 }
 
 /**
  * Firestore에 저장된 대화 이력(마스킹된 텍스트, 시간순)을 LLM 어댑터 입력 형식으로 변환한다.
- * 사용자 턴은 wrapUserInputAsData로 감싸 매 턴 반복적으로 데이터임을 표시한다.
+ * 사용자 턴은 wrapUserInputAsData로 감싸 매 턴 반복적으로 데이터임을 표시한다(가림 표지 설명 — 판정표 M — 도 거기서 붙는다).
  */
 export function toLlmHistory(
   storedMessages: { role: "user" | "scammer"; textMasked: string }[],

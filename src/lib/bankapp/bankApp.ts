@@ -204,10 +204,50 @@ export function lastAmountIn(text: string): string | undefined {
   return last === undefined ? undefined : last.toLocaleString("en-US");
 }
 
-/** 대화방 사기범 메시지(오래된 순) 중 가장 최근 금액. 없으면 undefined. */
+// ⭐ 2026-11-07(Edge 재시험 2 — 국세청 환급 고급: 사기범이 *"미수령 환급금이 오만 원 정도 조회"* 라고 말한 뒤 문자 수수료 99,000원을 그대로 보냈는데
+// "요구받은 금액보다 많이 보냈습니다"로 나왔다) — 사기범이 **주겠다는** 돈(환급금 · 지원금 · 조회 금액)은 요구액이 아니다. 금액마다 판정한다(대사 안 뒤 금액부터):
+// | # | If | Then |
+// |---|---|---|
+// | D1 | 같은 문장 안 금액 앞쪽 가장 가까운 열쇠말 = 주는 돈 말(`DEMAND_GIVE_WORDS`) | 요구액 아님 — 건너뜀 |
+// | D2 | 앞쪽 가장 가까운 열쇠말 = 요구 말(`DEMAND_ASK_WORDS`) | 요구액 |
+// | D3 | 앞쪽에 열쇠말 없음 | 뒤쪽(같은 문장) 가장 가까운 열쇠말로 D1 · D2 |
+// | D4 | 앞뒤 모두 없음 | 요구액(종전 — "300만 원 필요해") |
+// | D5 | 모든 대사에 요구액 없음 | 없음 → 호출부가 문자 금액(미리 채운 값)을 쓴다(종전 R2 · M3) |
+// ⚠️ 서버 `functions/src/roleplay/linkMarker.ts`에 같은 줄이 있다(드리프트 테스트 — 두 상수와 `lastDemandAmountIn` 원문이 같아야 한다).
+const DEMAND_GIVE_WORDS = /환급|지원금|보상금|지급|받으실|받으시|받을|수령|돌려\s?드|조회|입금해\s?드|입금(?:됩|되|돼)/g;
+const DEMAND_ASK_WORDS = /수수료|보내|이체|송금|옮기|옮겨|납부|결제|선입금|입금하|입금해\s?주|보증금|공탁금|예치금|상환/g;
+
+/** 한 대사에서 요구액으로 볼 마지막 금액(판정표 D1 ~ D4). 없으면 undefined. */
+function lastDemandAmountIn(text: string): string | undefined {
+  const converted = hangulAmountsToDigits(text);
+  const amounts = [...converted.matchAll(AMOUNT_PATTERN)];
+  for (const match of amounts.reverse()) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    const sentenceStart = Math.max(...[".", "?", "!", "\n"].map((mark) => converted.lastIndexOf(mark, start - 1))) + 1;
+    const after = converted.slice(end);
+    const stop = after.search(/[.?!\n]/);
+    const before = converted.slice(sentenceStart, start);
+    const following = stop < 0 ? after : after.slice(0, stop);
+    const lastEnd = (re: RegExp) => Math.max(-1, ...[...before.matchAll(re)].map((m) => (m.index ?? 0) + m[0].length));
+    const firstAt = (re: RegExp) => Math.min(Infinity, ...[...following.matchAll(re)].map((m) => m.index ?? 0));
+    const give = lastEnd(DEMAND_GIVE_WORDS);
+    const ask = lastEnd(DEMAND_ASK_WORDS);
+    const kind = give >= 0 || ask >= 0 ? (give > ask ? "give" : "ask") : firstAt(DEMAND_GIVE_WORDS) < firstAt(DEMAND_ASK_WORDS) ? "give" : "ask";
+    if (kind === "give") continue; // D1 · D3
+    let total = 0;
+    for (const token of match[1]!.matchAll(AMOUNT_TOKEN)) {
+      total += Number(token[1]!.replace(/,/g, "")) * (token[2] ? AMOUNT_UNITS[token[2]]! : 1);
+    }
+    if (Number.isSafeInteger(total) && total > 0) return total.toLocaleString("en-US"); // D2 · D4
+  }
+  return undefined;
+}
+
+/** 사기범 대사(오래된 순) 중 가장 최근 요구액(판정표 D1 ~ D5 — 주겠다는 돈은 건너뜀). 없으면 undefined. */
 export function latestDemandAmount(scammerTexts: readonly string[]): string | undefined {
   for (const text of [...scammerTexts].reverse()) {
-    const amount = lastAmountIn(text);
+    const amount = lastDemandAmountIn(text);
     if (amount) return amount;
   }
   return undefined;
