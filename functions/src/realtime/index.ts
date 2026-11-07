@@ -16,7 +16,7 @@ import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { getVerifyOfferTrigger } from "../scenarios/verifyIntercept";
 import { findFlowVariant, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
-import { buildLegRejoinContext, resolveSessionCallLeg } from "../callLegs/legPlan";
+import { buildLegRejoinContext, legSentSmsDescriptions, resolveSessionCallLeg } from "../callLegs/legPlan";
 import type { VoiceMode } from "../scenarios/publicMeta";
 import type { ChallengeDoc, MessageDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
 import { getRealtimeProvider, requiresServerPromptProvider } from "./provider";
@@ -165,8 +165,14 @@ export const createRealtimeCall = onCall<
   if (callLeg && rejoin) {
     // 2026-11-07(메인 승인 계약 — 참가자가 먼저 끊기) — 참가자가 끊은 같은 레그를 같은 인물로 다시 잇는다. 같은 사람이 들은 **이 통화**의 말만 싣는다
     // (앞 통화 대화 0 — `buildLegRejoinContext`가 `legIndex`로 거른다). 읽기 실패 = 상황 문장만(통화는 막지 않는다).
+    // 2026-11-07(Edge 시험 판 26) — 끊기기 전 이 통화에서 이미 도착한 문자도 싣는다(문서 id만 읽는다 · 본문은 카탈로그 — `legSentSmsDescriptions`).
     try {
-      const messagesSnap = await db.collection("sessions").doc(sessionId).collection("messages").orderBy("turnIndex", "asc").get();
+      const rejoinRef = db.collection("sessions").doc(sessionId);
+      const [messagesSnap, smsSnap] = await Promise.all([
+        rejoinRef.collection("messages").orderBy("turnIndex", "asc").get(),
+        rejoinRef.collection("inCallSms").get(),
+      ]);
+      const rejoinVariant = findFlowVariant(session.flowVariantId);
       priorChatContext = buildLegRejoinContext(
         rejoin.kind,
         callLeg.legIndex,
@@ -174,6 +180,7 @@ export const createRealtimeCall = onCall<
           const m = d.data() as Pick<MessageDoc, "role" | "textMasked" | "legIndex" | "notSpoken">;
           return { role: m.role, text: m.textMasked, legIndex: m.legIndex, notSpoken: m.notSpoken === true };
         }),
+        rejoinVariant ? legSentSmsDescriptions(rejoinVariant, callLeg.legIndex, smsSnap.docs.map((d) => d.id)) : undefined,
       );
     } catch {
       priorChatContext = buildLegRejoinContext(rejoin.kind, callLeg.legIndex);

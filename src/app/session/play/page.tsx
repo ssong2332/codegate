@@ -90,7 +90,7 @@ import {
   shouldRunBannerTimer,
   visibleBannerSmsId,
 } from "@/lib/phone/bannerState";
-import { formatCallElapsed, spokenCallElapsed } from "@/lib/phone/callClock";
+import { callElapsedSince, formatCallElapsed, spokenCallElapsed } from "@/lib/phone/callClock";
 import {
   primeIncomingAlertAudio,
   startIncomingAlert,
@@ -391,6 +391,10 @@ export default function SessionCallPage() {
   // Action Item 1 — `drainInstructionQueue`(deps `[]`)가 `elapsedSec` state를 리렌더 없이
   // 최신값으로 읽기 위한 사본. 갱신 지점은 아래 통화 경과 타이머 effect **한 곳**뿐이다.
   const elapsedSecRef = useRef(0);
+  // 2026-11-07 Edge 시험 판 1 · 26 — 통화 화면에 보이는 경과(`callElapsedSince` 표). 지금 통화가 연결된 시각(받기 · 새 통화 연결 — 넘김은 같은 통화라 유지)부터의
+  // 벽시계 경과다. 위 `elapsedSec`(세션 경과 — 한도 종료 · 지시 큐 · 녹음 표시가 읽는다)는 바꾸지 않는다. 갱신은 같은 타이머 effect에서.
+  const callStartMsRef = useRef<number | null>(null);
+  const [callDisplaySec, setCallDisplaySec] = useState(0);
   const [muted, setMuted] = useState(false);
   // 2026-10-27 — One UI 9 통화 화면(`samsung` 스킨)의 시트(더 보기 · 오디오 기기 · 연락처 · 통화 어시스트).
   const [callPanel, setCallPanel] = useState<CallExtraPanel | null>(null);
@@ -564,6 +568,8 @@ export default function SessionCallPage() {
   const [legDialing, setLegDialing] = useState(false);
   // 새 통화의 첫 연결은 이어받기 맥락이 아니라 오프닝으로 시작한다(다른 인물 · 새 통화 — D5).
   const [legOpening, setLegOpening] = useState(false);
+  // 2026-11-07 Edge 시험 판 26 — 참가자가 끊은 같은 통화를 같은 인물로 다시 이었다(서버 `startCallLeg` 응답 `rejoin`). 첫 신호를 "끊겼던 통화 잇기"로 고른다(`legOpeningTurnFor` 0행).
+  const [legRejoin, setLegRejoin] = useState<"redial" | "callback" | null>(null);
   const legEndRef = useRef<CallLegEnd | null>(null);
   const legSwitchingRef = useRef(false);
   const legTimersRef = useRef<number[]>([]);
@@ -981,6 +987,9 @@ export default function SessionCallPage() {
             (data.answeredAt as { toMillis?: () => number } | undefined)?.toMillis?.() ?? null;
           if (answeredAtMs) {
             setElapsedSec(Math.max(0, Math.floor((Date.now() - answeredAtMs) / 1000)));
+            // 새로고침 복원 — 통화(레그) 연결 시각은 모른다 · 받은 시각부터(다통화 뒤 통화는 세션 경과가 보인다 — 한계).
+            callStartMsRef.current = answeredAtMs;
+            setCallDisplaySec(callElapsedSince(Date.now(), answeredAtMs, 0));
           }
           // ⭐ §99 — 통화 중 새로고침(백그라운드에서 탭이 정리된 경우 포함) — 이 탭에 적어 둔 실시간 전사를 되살린다(종료 때 함께 제출).
           try {
@@ -1541,6 +1550,7 @@ export default function SessionCallPage() {
     const interval = setInterval(() => {
       elapsedSecRef.current += 1;
       setElapsedSec(elapsedSecRef.current);
+      setCallDisplaySec(callElapsedSince(Date.now(), callStartMsRef.current, elapsedSecRef.current));
     }, 1000);
     return () => clearInterval(interval);
   }, [phase]);
@@ -1808,6 +1818,11 @@ export default function SessionCallPage() {
     clearLegTimers({ keepHoldTone: via === "transfer" && callMode === "realtime" && Boolean(sessionId) });
     // 최근 기록 — 넘김은 같은 통화(시작 기록 유지) · 그 밖은 새 통화의 시작.
     if (via !== "transfer") currentCallRef.current = { number: callerLabelForLeg, direction: direction ?? "in", atMs: callLogNowMs() };
+    // 2026-11-07 Edge 시험 판 26 — 새 통화 = 통화 화면 경과 00:00부터(넘김은 같은 통화 — 경과 유지).
+    if (via !== "transfer") {
+      callStartMsRef.current = callLogNowMs();
+      setCallDisplaySec(0);
+    }
     callbackAfterHangupRef.current = true;
     setLegCallerLabel(callerLabelForLeg);
     setLegScreen({ kind: "none" });
@@ -1835,6 +1850,7 @@ export default function SessionCallPage() {
       const result = await startCallLeg({ sessionId, action, ...(dialed ? { dialed } : {}) });
       if (!endCallMountedRef.current) return;
       if (result.status === "connected") {
+        setLegRejoin(result.rejoin ?? null);
         // 2026-11-07 — 연락처가 없으니 화면에는 번호가 보인다(`callDisplayNumber` 표 — 건 통화 = 건 번호).
         const shownNumber = callDisplayNumber({
           label: result.callerLabel,
@@ -2557,6 +2573,9 @@ export default function SessionCallPage() {
     // §57.2 (6) 처방 D1 — 통화 타이머(`elapsedSec`)가 0이 되는 바로 이 지점의 시각을 참가자 시계
     // 기준으로 래치한다. 이후 모든 전사 턴의 `atMs`는 이 값 기준 상대 ms다(T-1 처방).
     answeredAtMsRef.current = Date.now();
+    // 2026-11-07 — 통화 화면 경과의 기점(첫 통화 = 받은 순간).
+    callStartMsRef.current = answeredAtMsRef.current;
+    setCallDisplaySec(0);
     // ⭐ 수정안 A — **이 탭 핸들러 안에서 동기로** 통화 오디오 컨텍스트를 만들고 resume한다(벨 primed 컨텍스트와 같은
     // 패턴). 예전엔 받기 뒤 비동기 effect에서 만들어, 탭과의 간격이 길면 일부 Android 브라우저에서 suspended로 남았다
     // (가설 — 실기 확인 대상). ⛔ 이 줄 앞에 await를 두지 않는다.
@@ -3088,7 +3107,7 @@ export default function SessionCallPage() {
   // 결함 ① — 받기 전(토큰 전)에는 세션 문서의 첫 레그 라벨(벨 화면 = 받은 뒤 통화 화면).
   const callerLabel = legCallerLabelOr(legCallerLabel ?? realtime.credentials?.callLeg?.callerLabel ?? startCallerLabel, baseCallerLabel);
   // §142 D2 — 참가자가 건 통화면 받는 쪽 첫 신호(서버 `callLeg.entry` · `legTransition.ts` 표). `undefined` = 종전 판정.
-  const legOpeningTurn = legOpeningTurnFor({ legOpening, connectionSeq: realtime.connectionSeq, entry: realtime.credentials?.callLeg?.entry });
+  const legOpeningTurn = legOpeningTurnFor({ legOpening, connectionSeq: realtime.connectionSeq, entry: realtime.credentials?.callLeg?.entry, rejoin: legRejoin });
   // T72(§15.6 G6) — 자격증명을 아직 못 받았으면(수신 대기 중) 기본은 true다. 실제로 난이도를
   // 반영하지 못하는 경로(ElevenLabs)만 서버가 false로 명시해 내려준다.
   const difficultyApplied = realtime.credentials?.difficultyApplied !== false;
@@ -3308,7 +3327,7 @@ export default function SessionCallPage() {
       {chatOpen && phase !== "ended" && !switchingToMessenger && !localHangup && (
         <MessengerChatRoom
           duringCall={{
-            elapsedLabel: formatCallElapsed(elapsedSec),
+            elapsedLabel: formatCallElapsed(callDisplaySec),
             onBackToCall: () => setChatOpen(false),
             beforeSend: handleChatBeforeSend,
             onChatTurn: handleChatTurnDuringCall,
@@ -3617,7 +3636,7 @@ export default function SessionCallPage() {
           {(phase === "opening" || phase === "live") && !localHangup ? (
             <p
               role="timer"
-              aria-label={spokenCallElapsed(elapsedSec)}
+              aria-label={spokenCallElapsed(callDisplaySec)}
               className={
                 oneUi9
                   ? `order-first ${recordingStartedAt !== null ? "mb-1" : "mb-7"} inline-flex min-h-[28px] items-center gap-2 text-[20px] font-medium tabular-nums`
@@ -3627,7 +3646,7 @@ export default function SessionCallPage() {
               style={{ color: oneUi9 ? callTokens.textPrimary : callTokens.textSecondary }}
             >
               {oneUi9 && <PhoneIcon name="accept-call" size={20} />}
-              {formatCallElapsed(elapsedSec)}
+              {formatCallElapsed(callDisplaySec)}
             </p>
           ) : (
             <p
@@ -3661,8 +3680,8 @@ export default function SessionCallPage() {
           {remoteHangup && deviceSkin.skin !== "ios" && (
             // C5 리뷰 M3 — 일반 `<p>`에 aria-label을 달지 않는다(무시되는 이름). 시각 숫자는 숨기고 읽을 문장을 따로 둔다.
             <p className="mt-1 text-[15px] tabular-nums" style={{ color: callTokens.textSecondary }}>
-              <span aria-hidden="true">{formatCallElapsed(elapsedSec)}</span>
-              <span className="sr-only">{`통화 시간 ${Math.floor(elapsedSec / 60)}분 ${elapsedSec % 60}초`}</span>
+              <span aria-hidden="true">{formatCallElapsed(callDisplaySec)}</span>
+              <span className="sr-only">{`통화 시간 ${Math.floor(callDisplaySec / 60)}분 ${callDisplaySec % 60}초`}</span>
             </p>
           )}
           {/* §49.5(2026-08-02, 사용자 신고 7ⓐ) — D-15 계보 4회째 요청으로 상시 "난이도 X" 배지를
@@ -4407,7 +4426,7 @@ export default function SessionCallPage() {
           // T190-5(§74.5 (2) · AC-092 (b)) — 통화 셸과 같은 스킨(한 세션 = 한 스킨).
           skin={deviceSkin.skin}
           callerLabel={callerLabel}
-          elapsedLabel={formatCallElapsed(elapsedSec)}
+          elapsedLabel={formatCallElapsed(callDisplaySec)}
           // 실기기 신고 F1 — R2 첫 통화 전(시작 문자 화면)에는 연결된 통화가 없다.
           // 2026-11-07 — 통화를 끊고 전화 앱 · 홈 화면에서 연 문자함에도 '통화 중' 표시줄이 없다(연결된 통화 0).
           noActiveCall={(smsStart && (phase === "incoming" || phase === "connecting")) || legScreen.kind === "dialer" || legScreen.kind === "genuine"}
@@ -4438,7 +4457,7 @@ export default function SessionCallPage() {
           통화 세션 · 마이크 · 타이머가 그대로 이어진다. 문자함 · 확인 시트와 동시에 열리지 않는다(여는 핸들러가 상대를 닫는다 — G26). */}
       {bankAppEnabled && bankAppOpen && bankTransfer && (
         <BankAppOverlay
-          call={{ callerLabel, elapsedLabel: formatCallElapsed(elapsedSec) }}
+          call={{ callerLabel, elapsedLabel: formatCallElapsed(callDisplaySec) }}
           myBankName={myBankNameFor(sessionId ?? "", bankTransfer.target.bankName)}
           balance={fictionalBalanceFor(sessionId ?? "")}
           target={bankTransfer.target}
@@ -4457,7 +4476,7 @@ export default function SessionCallPage() {
         <VerifyCallOverlay
           offer={verifyOffer}
           callerLabel={callerLabel}
-          elapsedLabel={formatCallElapsed(elapsedSec)}
+          elapsedLabel={formatCallElapsed(callDisplaySec)}
           dialing={verifyDialing}
           errorMessage={verifyError}
           onClose={handleCloseVerifyOverlay}

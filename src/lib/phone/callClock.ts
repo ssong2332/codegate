@@ -26,3 +26,17 @@ export function spokenCallElapsed(totalSeconds: number): string {
   const s = safe % 60;
   return `통화 중, 경과 ${h > 0 ? `${h}시간 ` : ""}${m}분 ${s}초`;
 }
+
+/**
+ * 2026-11-07 Edge 시험 판 1 · 26 — 통화 화면 경과는 **지금 통화가 연결된 시각부터의 벽시계 경과**다(실제 휴대폰 — 새 통화 = 00:00).
+ * 종전은 1초마다 1씩 더해(`setInterval`) 탭이 멈추면 늦게 갔고(판 1 — 화면 07:27 · 실제 12:39), 다통화에서는 세션 경과가 이어졌다
+ * (판 26 — 다시 걸려 온 전화 03:04 · 상담원 04:54 · 검사 14:32).
+ * | # | If | Then |
+ * |---|---|---|
+ * | 1 | 연결 시각을 안다 | `floor((now − 연결 시각) / 1000)`(음수 = 0) |
+ * | 2 | 모른다(`null`) | `fallbackSec`(종전 값) |
+ */
+export function callElapsedSince(nowMs: number, callStartMs: number | null, fallbackSec: number): number {
+  if (callStartMs === null || !Number.isFinite(callStartMs)) return Math.max(0, Math.floor(fallbackSec));
+  return Math.max(0, Math.floor((nowMs - callStartMs) / 1000));
+}
