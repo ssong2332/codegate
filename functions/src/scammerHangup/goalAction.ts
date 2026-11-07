@@ -15,7 +15,7 @@
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import { findFlowVariant, type FlowVariantSms } from "../scenarios/flowVariants";
 import { findInCallSmsItem } from "../scenarios/inCallSms";
-import { resolveMockScreenKind } from "../scenarios/mockScreens";
+import { isBankTransferLanding, resolveMockScreenKind } from "../scenarios/mockScreens";
 
 /**
  * C-3 — 마지막 문자 도착 뒤 참가자 발화 수. ⚠️ **판단값**(측정값 아님): 문자 백스톱의 넛지 간격(`BACKSTOP_USER_TURNS = 2`) · 문자 간 간격
@@ -82,15 +82,36 @@ function followUpDone(input: GoalActionInput, followUpUserTurns: number): boolea
  * |---|---|
  * | 후속 값 없음(그 밖 모든 변형 — 다른 확인 무력화 고급 포함) | `none` — 종전(`none_pending` · 클라는 더 묻지 않는다) |
  * | 호 전환이 끝났다(확인 창구 화자) | `none` — 원 사기범이 없다(넛지와 같은 판단) |
+ * | ⭐ PR-A — 결정 화면(이체)을 아직 마치지 않았다 · 마지막 제출이 요구액보다 적다(`scenarioId`를 넘긴 호출부만) | `pending` — 이체 전 · 적게 보낸 상태에서 "할 일을 모두 마쳤다" 지시가 나가지 않는다 |
  * | C-5 아직 거짓 | `pending` — 클라가 다음 발화에 다시 묻는다(`goal_pending`) |
  * | C-5 참(⭐ §117 — 다음 발화 기준 · 아래 주석) | `wrap_up` — 마무리 지시(`none_pending` + `wrapUpInstruction` — 클라는 그 뒤 더 묻지 않는다 = 1회) |
  */
-export function planGoalWrapUp(input: Omit<GoalActionInput, "mockScreens"> & { placed: boolean }): "none" | "pending" | "wrap_up" {
+export function planGoalWrapUp(
+  input: Omit<GoalActionInput, "mockScreens"> & { placed: boolean; scenarioId?: string },
+): "none" | "pending" | "wrap_up" {
   if (input.followUpUserTurns === undefined || input.placed) return "none";
+  // ⭐ PR-A(2026-11-07 사용자 신고 — 기관 사칭 고급 *"이체 금액을 적게 보내도 그냥 넘어가는"* · *"대출 관련 안내하다가 그냥 전화 끊는"*) — 종전에는
+  // 이체 문자 **도착** 뒤 발화 수만 봐서, 이체 전 · 적게 보낸 상태에서도 "할 일은 모두 마쳤다 · end_call" 지시가 나갔다(설계 §2.1).
+  if (input.scenarioId !== undefined && isTransferScreenUnfinished(input.scenarioId, input.declared, input.delivered)) return "pending";
   // ⭐ §117 — 백스톱 질의의 `userTurns`는 **응답까지 끝난** 발화 수다. 이 지시는 맥락 주입이라 **다음** 발화의 응답에 실리고, 끊기 승인은 그
   // 발화를 포함한 수(클라 주장 = flush + 응답 중 1)로 판정한다 ⇒ 한 발화 앞당겨 맞춘다. 종전에는 C-5가 참이 된 발화에서 모델이 끊지 않으면
   // 지시가 그다음 응답에야 붙어 한 응답 늦었다.
   return followUpDone({ ...input, userTurns: input.userTurns + 1, mockScreens: [] }, input.followUpUserTurns) ? "wrap_up" : "pending";
+}
+
+/**
+ * PR-A — 후속 단계 변형의 결정 화면(선언 순서상 마지막 화면 문자)이 **이체 화면**인데 아직 마치지 않았는가. 마지막 제출이 요구액보다 적어도(N1 `less`)
+ * 마치지 않은 것이다. 마지막 화면이 이체 화면이 아니면(설치 화면 뒤 말로 끝나는 `fv-e5mv` · `fv-r4hc`) 이 판정 밖이다(거짓 — 종전 그대로).
+ */
+function isTransferScreenUnfinished(
+  scenarioId: string,
+  declared: readonly FlowVariantSms[],
+  delivered: readonly DeliveredSmsRecord[],
+): boolean {
+  const screen = finalTransferScreenSms(scenarioId, declared);
+  if (screen === undefined) return false;
+  const record = delivered.find((d) => d.smsId === screen.smsId);
+  return record?.landingSubmitted !== true || record.landingAmountComparison === "less";
 }
 
 /** 세션의 `mockScreens` 문서를 읽어 판정 사실만 남긴다. 실패는 호출부가 잡는다(미완료로 본다). */
@@ -112,7 +133,8 @@ export async function readMockScreenCompletion(
 // 결정 화면 판정표(위에서부터 첫 행):
 // | # | If(서버 선언 · 서버 기록) | Then |
 // |---|---|---|
-// | D-1 | 후속 단계 변형(4-b행이 맡는다) | 대상 아님(`false`) — ⭐ D-a(P2 실측 2026-11-01)로 확인 무력화 세션은 대상에 들어왔다(아래 주석) |
+// | D-1 | 후속 단계 변형(4-b행이 맡는다) ∧ 결정 화면이 이체 화면이 아니다(`finalTransferScreenSms` — 설치 화면 뒤 말로 끝나는 `fv-e5mv` · `fv-r4hc`) | 대상 아님(`false`) |
+// |     | ⭐ PR-A(2026-11-07) — 종전에는 후속 단계 변형 전부가 대상 아님이라 기관 사칭 고급 `fv-c5fj`에서 적게 보낸 뒤에도 goal 끊기가 열렸다(설계 §1 표 7행). 결정 화면이 이체 화면인 후속 단계 변형은 D-2 이하를 본다(4-b행과 겹쳐도 된다) | — |
 // | D-2 | 선언을 해석할 수 없다(변형 없음 · 모름 · 시나리오 불일치) | 대상 아님(`false` — 화면이 올 수 없다) |
 // | D-2b | 결정 순간이 **말**인 변형(`VERBAL_DECISION_VARIANTS` — 화면은 앞 단계뿐) | 대상 아님(`false` — 메인 세션 결정 2026-10-31 B안) |
 // | D-3 | 선언된 문자 중 `required` ∧ 목적 `transfer` ∨ `link` ∧ 카탈로그에 모의 화면(`fakeLandingId`)이 있는 것이 없다 | 대상 아님(`false` — 말로 끝나는 결말은 범위 밖) |
@@ -132,7 +154,7 @@ export async function readMockScreenCompletion(
 export const VERBAL_DECISION_VARIANTS: readonly string[] = [
   "fv-k9ra", // 자산 보호 고급 — 보관 접수 신청 화면 뒤 인출 · 전달 약속(P5 현금)
   "fv-t8ga", // 자산 보호 고급 — 보관 접수 신청 화면 뒤 금 제출 약속(P5 금)
-  "fv-v2mk", // 검찰 고급 — 사건 조회 화면 뒤 상품권 핀 번호(P5 상품권)
+  // 2026-11-07 — fv-v2mk(검찰 고급 상품권형)는 앱 안 상품권 구매 화면이 생겨 이 목록에서 빼고 4-c 대상으로 옮겼다(위 ⚠️ 주석대로 · 사용자 결정 "앱 안 화면 추가").
   "fv-a6lq", // 검찰 고급 — 사건 조회 화면 뒤 대출 약속(P4 대출)
 ];
 
@@ -150,6 +172,13 @@ export type DecisionScreenInput = {
   followUpUserTurns: number | undefined;
 };
 
+/** PR-A — 결정 화면 문자가 훈련용 이체 화면(`BANK_TRANSFER_LANDINGS`)을 열 때만 그 문자(아니면 undefined). 후속 단계 변형의 D-1 · 마무리 지시가 쓴다. */
+export function finalTransferScreenSms(scenarioId: string, declared: readonly FlowVariantSms[]): FlowVariantSms | undefined {
+  const screen = finalDecisionScreenSms(scenarioId, declared);
+  const landingId = screen ? findInCallSmsItem(scenarioId, screen.smsId)?.fakeLandingId : undefined;
+  return landingId !== undefined && isBankTransferLanding(landingId) ? screen : undefined;
+}
+
 /** D-3 — 이 선언의 결정 화면 문자(선언 순서상 마지막 · 없으면 undefined). */
 export function finalDecisionScreenSms(scenarioId: string, declared: readonly FlowVariantSms[]): FlowVariantSms | undefined {
   const screens = declared.filter(
@@ -166,9 +195,9 @@ export function isDecisionScreenPending(input: DecisionScreenInput): boolean {
   // ⭐ D-a(P2 실 키 실측 2026-11-01 · 대출 고급 `fv-m3hd`) — 확인 무력화 세션을 4-c에서 빼고 4행에 맡겼더니, 4행 입력(`goalActionDone`)이 **아무 화면** 제출(설치 응낙)로
   // 참이 되어 이체 문자 전에 goal 끊기가 승인됐다. 이제 확인 무력화 세션도 4-c 대상이다 — 4행(호 전환 · 화면 행동 전 모든 끊기)을 지난 뒤에도 goal 끊기는
   // 선언 순서상 마지막 화면을 마칠 때까지 막힌다(`give_up`은 통과 — 거절하는 참가자를 붙잡아 두지 않는다). `verifyEnabled`는 입력으로 남긴다(호출부 무변경).
-  if (input.followUpUserTurns !== undefined) return false; // D-1
   if (!input.declaredKnown) return false; // D-2
   if (input.flowVariantId !== undefined && VERBAL_DECISION_VARIANTS.includes(input.flowVariantId)) return false; // D-2b
+  if (input.followUpUserTurns !== undefined && finalTransferScreenSms(input.scenarioId, input.declared) === undefined) return false; // D-1
   const screen = finalDecisionScreenSms(input.scenarioId, input.declared);
   if (screen === undefined) return false; // D-3
   const landingId = findInCallSmsItem(input.scenarioId, screen.smsId)?.fakeLandingId;

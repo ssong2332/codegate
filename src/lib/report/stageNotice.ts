@@ -30,12 +30,15 @@ export function buildStageNotice(
   stages: readonly ReportStage[],
   messengerSurface?: "kakao" | "sms",
 ): string | null {
-  if (stages.length < 2) return null;
+  // 2026-11-07 Edge 시험 판 19(메인 지시 "실제로 지난 단계만") — 전화가 없던 메신저 판에 "→ 전화로 이어지는"이 나왔다(루트 정의를 그대로 씀).
+  // 종전 OQ-U24 판정("미도달 단계도 구조 고지에 포함")을 뒤집는다: 고지는 **도달한 단계만** 잇는다. 데이터(`stages`)에는 미도달 단계가 그대로 남는다.
+  const reached = reachedStages(stages);
+  if (reached.length < 2) return null;
   // 리포트 검수(2026-10-22) — 카카오톡형 메신저로 시작한 세션을 "문자"로 부르면 틀린 말이다. 표면을 알면 그 이름을 쓰고,
   // 모르면(조회 실패 · 과거 데이터) 종전 표기("문자")를 그대로 둔다.
   const label = (s: ReportStage) =>
     s.stage === "messenger" && messengerSurface === "kakao" ? "메신저" : STAGE_LABEL[s.stage];
-  const labels = stages.map(label).filter(Boolean);
+  const labels = reached.map(label).filter(Boolean);
   if (labels.length < 2) return null;
   return `이번 훈련은 ${labels.join(" → ")}로 이어지는 수법이었습니다.`;
 }

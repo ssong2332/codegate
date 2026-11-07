@@ -24,7 +24,7 @@
 //    참가자는 설치 없이 이관 단계로 넘어가지 않고, 재촉 단계(판정표 SP)가 다른 압박 뒤 포기로 끝낸다(영원히 멈추지 않게 하는 쪽이 보류 시한이 아니라 포기다).
 // ⛔ 순수 함수(Firestore · LLM 0). 문면에 횟수 · 턴 번호 0 · 따옴표 대사 예시 0(턴 지시 스캔 게이트).
 import type { MessengerAttachment } from "../shared/types";
-import { findMockScreenItem, isBankTransferLanding } from "../scenarios/mockScreens";
+import { findMockScreenItem, isBankTransferLanding, isVoucherLanding } from "../scenarios/mockScreens";
 import { IN_CALL_SMS } from "../scenarios/inCallSms";
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import { isCompletionClaim } from "../inCallSms/confirmResult";
@@ -57,6 +57,8 @@ export function screenKindOf(scenarioId: string, landingId: string): ScreenKind 
   const item = findMockScreenItem(scenarioId, landingId);
   if (!item) return undefined;
   if (item.kind === "app-install") return "install";
+  // 2026-11-07 — 상품권 구매 화면은 이체가 아니라 구매(입력 화면 종류 · 완료 주장 = 아래 `PURCHASE_CLAIM` 포함). 문자 종류(`account`)보다 먼저 본다.
+  if (isVoucherLanding(landingId)) return "form";
   // 훈련용 이체 화면(P2) ∨ 계좌 문자(`kind: "account"`)가 여는 화면(P2 이전 이체 화면 — 예: 카드 피해금 이관 `card-relief-transfer`) = 이체.
   if (isBankTransferLanding(landingId)) return "transfer";
   return (IN_CALL_SMS[scenarioId] ?? []).some((sms) => sms.kind === "account" && sms.fakeLandingId === landingId) ? "transfer" : "form";
@@ -122,12 +124,18 @@ export function messengerScreenFacts(
 /** 설치 완료 주장("설치했어요" · "깔았어요" · "권한 허용 눌렀어요") — 앞에 "안 · 못"이 붙거나 물음이면 아니다. */
 const INSTALL_CLAIM = /(?<!(?:안|못)\s?)(?:설치(?:했|해\s?놨|해\s?뒀|\s?완료|\s?다\s?했|\s?끝났)|깔았|(?:권한|허용)[^.?!\n]{0,6}(?:했|눌렀|해\s?놨))/;
 
+/**
+ * 2026-11-07(상품권 구매 화면 · 사용자 결정 "앱 안 화면 추가") — 구매 완료 주장("샀어요" · "구매했어요" · "결제했어요" · "결제 완료"). 앞에 "안 · 못"이 붙거나 물음이면 아니다.
+ * 입력 화면(`form`) 주장에 더한다 — 상품권 구매 화면은 입력 화면 종류로 판정한다(`screenKindOf` 기본값).
+ */
+const PURCHASE_CLAIM = /(?<!(?:안|못)\s?)(?:샀(?:어|습|다)|사\s?놨|(?:구매|결제)(?:했|해\s?놨|\s?완료|\s?다\s?했|\s?끝났))/;
+
 /** 이 발화가 그 종류 화면의 완료 주장인가. */
 export function isScreenClaim(kind: ScreenKind, text: string): boolean {
   const statements = (text.match(/[^.?!\n]+[.?!]?/g) ?? []).map((s) => s.trim()).filter((s) => s.length > 0 && !s.endsWith("?"));
   if (kind === "install") return statements.some((s) => INSTALL_CLAIM.test(s));
   if (kind === "transfer") return isCompletionClaim(text, "transfer") || statements.some((s) => USER_TRANSFER_REPORT.test(s));
-  return isCompletionClaim(text, "link");
+  return isCompletionClaim(text, "link") || statements.some((s) => PURCHASE_CLAIM.test(s));
 }
 
 /** SA1 지시 — 종류별(따옴표 대사 예시 0 · 횟수 0). */
@@ -337,8 +345,9 @@ export const SCREEN_PRESSURE_SENTENCES = {
   // R10(#468 실측 — 메신저 설치 칩 포기 단계에서 이체 요구로 넘어감) — 이번 대답에서 끝내고 새 요구를 꺼내지 않는다.
   giveUpMessenger:
     "여러 번 재촉해도 하지 않으니 더 진행할 수 없다고 보고 이번 대답에서 포기로 끝내라. 신분증 · 송금 같은 새 요구를 꺼내지 말고, 대화방이니 전화를 끊는다는 말은 하지 말고, 끝내면서 다시 요구를 남기지 마라. 원하던 것을 얻었다고 끝내지는 마라.",
+  // 2026-11-07 Edge 시험 판 26 — 모자란 이체를 "아직 입금 확인이 되지 않았습니다"로 말했다(`confirmResult.ts` `LANDING_SUBMITTED_SHORT_INSTRUCTION` 주석) — '확인 안 됨'류 금지를 직접 적는다.
   transferLess:
-    "상대가 보낸 돈이 요구한 금액보다 적다. 들어온 만큼은 확인됐다고 하되 모자란 금액을 같은 화면에서 마저 보내라고 하고, 다 받았다거나 끝났다고 말하지 마라.",
+    "상대가 보낸 돈은 들어왔지만 요구한 금액보다 적다. 입금이 확인되지 않았다거나 아직 확인 중이라고 말하지 말고, 들어온 만큼은 확인됐다고 하되 금액이 모자란다고 분명히 짚고 모자란 금액을 같은 화면에서 마저 보내라고 하라. 다 받았다거나 끝났다고 말하지 마라.",
   transferMore: "상대가 요구한 금액보다 많이 보냈다. 받은 것으로 치고, 돌려주겠다는 약속은 하지 마라.",
 } as const;
 

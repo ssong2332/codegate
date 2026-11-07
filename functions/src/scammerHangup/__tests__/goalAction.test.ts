@@ -242,7 +242,7 @@ test("[§117 로그 재현] f7047187 — 이체 문자 도착(발화 6) 뒤 발�
   const declared = FLOW_VARIANTS.find((v) => v.variantId === "fv-c5fj")!.sms;
   const delivered: DeliveredSmsRecord[] = [
     { smsId: "institution-otp", userTurnsAtArrival: 4 },
-    { smsId: "institution-safe-account", userTurnsAtArrival: 6 },
+    { smsId: "institution-asset-safe-account", userTurnsAtArrival: 6 }, // PR-A — 현행 fv-c5fj 선언 문자(금액 줄 · 같은 계좌)
   ];
   const followUp = goalFollowUpFor("institutional-impersonation", "fv-c5fj");
   const input: GoalActionInput = { delivered, mockScreens: [], declared, declaredKnown: true, userTurns: 9, followUpUserTurns: followUp };

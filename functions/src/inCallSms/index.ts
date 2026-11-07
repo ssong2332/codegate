@@ -41,6 +41,7 @@ import { withModelToolNoRepeat } from "./toolGuidance";
 import { findFlowVariant } from "../scenarios/flowVariants";
 import { LEG_LATER_SMS_DECLINE, LEG_TRANSFER_HANDOFF_INSTRUCTION, isLaterLegSmsPurpose, planLegHandoff } from "../callLegs/legHandoff";
 import { landingSubmittedInstructionFor } from "./confirmResult";
+import { VOUCHER_PURCHASED_INSTRUCTION, isVoucherLanding } from "../scenarios/mockScreens";
 import type {
   DeliverInCallSmsRequest,
   DeliverInCallSmsResponse,
@@ -230,6 +231,8 @@ export const deliverInCallSms = onCall<
         userTurns,
         followUpUserTurns,
         placed: await isVerifyOfferPlaced(db, sessionId, session.scenarioId),
+        // PR-A — 이체 전 · 적게 보낸 상태에서는 마무리 지시를 내지 않는다(`planGoalWrapUp` 판정표).
+        scenarioId: session.scenarioId,
       });
       if (wrap === "pending") return withScreenStatus({ status: "goal_pending" });
       if (wrap === "wrap_up") {
@@ -387,6 +390,12 @@ export const recordInCallSmsEvent = onCall<
   // N1 — 비교 결과는 제출마다 마지막 값으로 덮는다(모자란 금액을 마저 보낸 두 번째 제출이 반영되게 — 화면이 같은 계좌로 보낸 합계로 비교한다).
   const previousComparison = isAmountComparison(snap.get("landingAmountComparison")) ? (snap.get("landingAmountComparison") as string) : undefined;
   const comparisonUpdate = amountComparison !== undefined ? { landingAmountComparison: amountComparison } : {};
+  // ⭐ 2026-11-07(Edge 시험 판 12 · 사용자 결정 "앱 안 화면 추가") — 상품권 구매 화면 결제는 이체가 아니라 구매다. 처음 기록한 순간의 실시간 맥락은
+  // `VOUCHER_PURCHASED_INSTRUCTION`(화면에 뜬 핀 번호를 불러 달라 · 지어내지 않음)이다(이체 문면 "입금 확인" 대신). 비교 결과는 없다(금액 비교 대상 아님).
+  if (event === "landing_submitted" && !snap.get(field) && isVoucherLanding(snap.get("fakeLandingId") as string | undefined)) {
+    await smsRef.update({ [field]: Timestamp.now() });
+    return { recorded: true, contextInstruction: VOUCHER_PURCHASED_INSTRUCTION };
+  }
   // 최초 1회만 세팅한다(§API.md) — 다시 열어봐도 "처음 열어본 시각"이 밀리지 않는다.
   if (!snap.get(field)) {
     await smsRef.update({ [field]: Timestamp.now(), ...comparisonUpdate });

@@ -7,9 +7,10 @@
 // | secrecy_promise | 비밀로 하겠다고 약속했어요 | 확인을 막는 수법 · 바로 알리기 |
 // | bank_disclosed | 거래 은행을 알려 줬어요 | 다음 사칭에 쓰일 수 있음 · 거래 은행도 말하지 않기 |
 // | fake_info | 가짜 정보로 맞대응했어요 | 대화가 길어질수록 설득당하기 쉬움 · 끊기 |
+// | how_to_question | 요구를 받고 방법을 물었어요 | 2026-11-07 사용자 결정 — 속음은 아니지만 다음 지시를 부르는 행동 · 묻지 말고 멈추기 |
 // ⛔ 속은 순간이 아니다 — 되감기 버튼 0 · "여기가 신호였어요" 카드 수(`countSignalCards`)에 넣지 않는다 · 질책 · 과신 표현 0(P-8).
 
-export type RiskSignalKind = "secrecy_promise" | "bank_disclosed" | "fake_info";
+export type RiskSignalKind = "secrecy_promise" | "bank_disclosed" | "fake_info" | "how_to_question";
 export type RiskSignalView = { turnIndex: number; timeLabel: string; kind: RiskSignalKind };
 
 /** 되짚어보기 주석 · 리포트 블록의 소제목(같은 문자열). */
@@ -33,6 +34,11 @@ const COPY: Record<RiskSignalKind, { title: string; explanation: string }> = {
     explanation:
       "가짜 정보를 줘도 대화가 길어질수록 설득당하기 쉬워요. 맞대응하지 말고 끊은 뒤 알고 있는 번호로 직접 확인하세요.",
   },
+  how_to_question: {
+    title: "요구를 받고 방법을 물었어요",
+    explanation:
+      "'어떻게 하면 되나요?'라고 물으면 상대는 바로 다음 지시를 내려요. 요구를 받으면 방법을 묻지 말고 대화를 멈춘 뒤 알고 있는 번호로 직접 확인하세요.",
+  },
 };
 
 export function riskSignalCopy(kind: RiskSignalKind): { title: string; explanation: string } {
@@ -46,7 +52,7 @@ export function readRiskSignals(raw: unknown): RiskSignalView[] {
     if (typeof item !== "object" || item === null) return [];
     const { turnIndex, timeLabel, kind } = item as Record<string, unknown>;
     if (typeof turnIndex !== "number" || typeof timeLabel !== "string") return [];
-    if (kind !== "secrecy_promise" && kind !== "bank_disclosed" && kind !== "fake_info") return [];
+    if (kind !== "secrecy_promise" && kind !== "bank_disclosed" && kind !== "fake_info" && kind !== "how_to_question") return [];
     return [{ turnIndex, timeLabel, kind }];
   });
 }

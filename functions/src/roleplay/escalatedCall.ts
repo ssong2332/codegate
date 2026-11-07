@@ -10,7 +10,7 @@
 // ⇒ 채널이 에스컬레이션으로 voice가 된 세션의 **폴백 턴**에만 ① 맥락 1줄을 싣고 ② 응낙 지시를 통화 중 변형으로 바꾼다.
 // ⛔ Live(실시간)는 이 경로가 아니다 — 폴백(`sendMessage`)만 부른다. ⛔ 채널 전이 판정(`transitionChannel` · 구조화 신호)은
 //    무접촉이다. ⛔ 잎 모듈(타입 import만).
-import type { ChannelTransitionEntry, MessengerChannel } from "../shared/types";
+import type { ChannelTransitionEntry, MessengerChannel, ScenarioPromptDoc } from "../shared/types";
 
 /**
  * 판정표:
@@ -75,4 +75,47 @@ export function callPhaseMockTacticHints(tactics: string[], escalatedCall: boole
     return !CHAT_ONLY_TACTIC_LABELS.includes(label);
   });
   return kept.length > 0 ? kept : tactics;
+}
+
+// ── Edge 시험 판 23 · 24(2026-11-07 · 택배 · 정부지원금 스미싱) — 이미 통화 중인데 "상담원이 직접 전화드릴게요"(+ `[[SIGNAL:ESCALATE_VOICE]]`) →
+//    판 23은 아무 일도 없이 50초 무음. 원인: 통화 단계(Live 토큰 · 폴백 턴) 프롬프트에도 페르소나의 [에스컬레이션] 절 · "전화드릴게요" 줄 · "채널 전환 유도"
+//    수법이 그대로 실린다(위 A-1 ⑧ 맥락 1줄은 폴백의 "다른 턴 지시가 없는 턴"에만 실리고 Live에는 없다). 모델이 지금 통화 중이라는 사실보다 페르소나 지시를 따랐다.
+// ⇒ 메신저에서 넘어온 통화에서는 그 지시들을 빼고 통화 단계 절 1개로 바꾼다. 판정표(위에서 첫 매치):
+// | # | If | Then |
+// |---|---|---|
+// | C0 | `escalatedCall === false`(메신저 단계 · 처음부터 통화인 세션) | 원본 그대로(같은 객체 — 바이트 동일) |
+// | C1 | 페르소나에 `[에스컬레이션` 절이 있다 | 그 절(다음 `[` 절 앞까지)을 지운다 |
+// | C2 | 페르소나 줄(`- `로 시작)이 전환 신호 토큰 · "전화드릴게요/전화드리겠" 예고를 담는다 | 그 줄을 지운다 |
+// | C3 | 수법 항목이 전환 신호 토큰을 담는다 | 그 항목을 뺀다(다 빠지면 원본 — 수법 0 방지) |
+// | C4 | C1 ~ C3 중 하나라도 지웠다 | 페르소나 끝에 `CALL_PHASE_BLOCK`(+ 통화 중 문자가 없는 세션이면 링크 줄)을 붙인다 |
+// ⛔ 채널 전이 판정(`transitionChannel` · 구조화 신호 처리)은 무접촉 — 통화 단계에서 신호가 와도 서버가 무시하는 것은 그대로다.
+/** 줄 머리의 절 제목부터(본문 속 "(아래 [에스컬레이션] 참고)" 같은 언급은 아니다) 다음 절 앞까지. */
+const ESCALATION_SECTION = /\n\[에스컬레이션[^\]\n]*\]\n[\s\S]*?(?=\n\n\[|$)/;
+const ESCALATION_TOKEN = "ESCALATE_VOICE";
+const CALL_ANNOUNCE_LINE = /^- .*전화\s*드(?:릴게요|리겠)/;
+
+/** C4 — 통화 단계 절(따옴표 대사 예시 0). */
+export const CALL_PHASE_BLOCK = `[통화 단계 — 지금 이미 통화 중이다]
+- 너는 문자에서 넘어와 지금 상대와 전화 통화를 하고 있다. 전화를 걸겠다, 상담원이 직접 전화하겠다, 상담을 연결해 주겠다, 잠시 기다려 달라는 말을 하지 않는다 — 그런 말을 하면 상대는 아무도 말하지 않는 전화기를 들고 기다리게 된다. 이 통화 안에서 네가 직접 안내를 이어간다.
+- 상대가 의심하거나 거절하면 다른 사람에게 넘기지 말고 이 통화 안에서 마감 압박이나 명의 도용 걱정 같은 다른 말로 붙잡는다.`;
+
+/** C4 — 통화 중 문자를 선언하지 않은 세션: 통화 안에서는 새 링크를 보낼 수 없다. */
+export const CALL_PHASE_NO_LINK_LINE =
+  "- 통화 중에는 새 문자나 링크를 보낼 수 없다. 링크를 보내 주겠다고 말하지 말고, 화면이 필요하면 앞서 문자로 보낸 링크 화면에서 하라고 한다. 그 화면에 없는 추가 단계(권한을 하나 더 허용 · 다른 앱 설치 · 인증번호 입력)를 요구하지 않는다.";
+
+export function callPhaseScenarioPrompt(
+  prompt: ScenarioPromptDoc,
+  opts: { escalatedCall: boolean; inCallSmsEnabled: boolean },
+): ScenarioPromptDoc {
+  if (!opts.escalatedCall) return prompt; // C0
+  const withoutSection = prompt.personaPrompt.replace(ESCALATION_SECTION, "").replace(/\n{3,}/g, "\n\n"); // C1
+  const persona = withoutSection
+    .split("\n")
+    .filter((line) => !(line.startsWith("- ") && (line.includes(ESCALATION_TOKEN) || CALL_ANNOUNCE_LINE.test(line)))) // C2
+    .join("\n");
+  const keptTactics = prompt.weakenedTactics.filter((tactic) => !tactic.includes(ESCALATION_TOKEN)); // C3
+  const tactics = keptTactics.length > 0 ? keptTactics : prompt.weakenedTactics;
+  if (persona === prompt.personaPrompt && tactics.length === prompt.weakenedTactics.length) return prompt;
+  const block = opts.inCallSmsEnabled ? CALL_PHASE_BLOCK : `${CALL_PHASE_BLOCK}\n${CALL_PHASE_NO_LINK_LINE}`;
+  return { ...prompt, personaPrompt: `${persona.trimEnd()}\n\n${block}`, weakenedTactics: tactics }; // C4
 }

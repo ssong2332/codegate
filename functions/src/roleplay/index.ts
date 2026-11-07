@@ -97,10 +97,23 @@ import { wasTurnInstructionSpoken } from "./announceMarking";
 import { planOtpFollowUp } from "./otpFollowUp";
 import { OTP_HOLD_INSTRUCTION, claimMatchesPurpose, combineReplyGuards, otpDemandGuardFor, replyClaimsSmsSent } from "./smsClaim";
 import { extractEscalationSignal } from "./escalationSignal";
-import { callPhaseMockTacticHints, ESCALATED_CALL_CONTEXT_INSTRUCTION, isEscalatedVoiceCall, userTurnsSinceCallEntry } from "./escalatedCall";
+import {
+  callPhaseMockTacticHints,
+  callPhaseScenarioPrompt,
+  ESCALATED_CALL_CONTEXT_INSTRUCTION,
+  isEscalatedVoiceCall,
+  userTurnsSinceCallEntry,
+} from "./escalatedCall";
 import { isFirstUserTurn } from "./firstTurn";
 import { isL3Procedural } from "./l3Depth";
-import { demandAmountFrom, dropPrematureBankTransferChip, ensureBankTransferChip, extractLinkMarker, withBankTransferPrefill } from "./linkMarker";
+import {
+  demandAmountFrom,
+  dropPrematureBankTransferChip,
+  ensureBankTransferChip,
+  extractLinkMarker,
+  finalizeBankTransferChips,
+  withBankTransferPrefill,
+} from "./linkMarker";
 import { sessionReachableLandingIds } from "../scenarios/reachability";
 import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
@@ -225,13 +238,18 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // T191 S5(AC-096 (e)(f)) — 세션에 배정된 흐름 변형을 합성한 프롬프트(부재 = 원본 · 무소급).
     // §142(PR-3) — 다통화 변형은 현재 레그의 인물 · 단계로 합성한다(그 밖 = undefined = 종전 바이트 동일).
     const sessionCallLeg = resolveSessionCallLeg(findFlowVariant(session.flowVariantId), session);
-    const scenarioPrompt = resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId, sessionCallLeg?.legIndex);
-    if (!scenarioPrompt) {
+    const resolvedScenarioPrompt = resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId, sessionCallLeg?.legIndex);
+    if (!resolvedScenarioPrompt) {
       throw new HttpsError(
         "internal",
         `세션의 scenarioId에 해당하는 scenarioPrompts가 없습니다: ${session.scenarioId}`,
       );
     }
+    // Edge 판 23 · 24 — 메신저에서 넘어온 통화는 문자 단계의 통화 전환 지시를 뺀다(`escalatedCall.ts` 판정표 C · 그 밖 = 같은 객체).
+    const scenarioPrompt = callPhaseScenarioPrompt(resolvedScenarioPrompt, {
+      escalatedCall: isEscalatedVoiceCall(session.channel, session.channelHistory),
+      inCallSmsEnabled: sessionDeclaresInCallSms(session.scenarioId, session.flowVariantId),
+    });
     // §121.7 PR-3 — 통화 중 대화방 카톡(메인 결정 ⓑⓒ). 문자 · 끊기 · 전환 판정을 타지 않는 별도 경로(`chatDuringCall.ts` 판정표).
     if (request.data?.duringCall === true) {
       // D-k(P2 확인 실측 2026-11-01) — 통화 중 대화방 캡처도 종류를 넘긴다(빠지면 일반 사진 지시가 갔다).
@@ -808,7 +826,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
           )
         : undefined;
     const fallbackWrapUp =
-      hangupMode === "signal" && goalActionDone && goalFollowUpFor(session.scenarioId, session.flowVariantId) !== undefined
+      // PR-A — 결정 화면(이체)을 마치기 전 · 적게 보낸 상태에서는 마무리 지시를 싣지 않는다(실시간 `planGoalWrapUp`과 같은 조건 · 4-c행 입력 재사용).
+      hangupMode === "signal" && goalActionDone && !decisionScreenPending && goalFollowUpFor(session.scenarioId, session.flowVariantId) !== undefined
         ? FALLBACK_GOAL_WRAP_UP_INSTRUCTION
         : claimWrapUp;
     const turnInstructionWithPhoto =
@@ -1156,12 +1175,19 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 2026-09-06 버그수정 — 사기범(LLM) 응답에는 maskPII를 적용하지 않는다(scammerReplyMasking.ts
     // 헤더 주석 참고 — 라이브 신고 "[계좌]" 리터럴 노출, 시나리오·난이도 무관 공통 재현).
     const finalReplyText = finalizeScammerReplyText(shapedReplyText);
+    // S2 · Edge 판 25 — 문장 상한 · 대사 교체 뒤 최종 대사로 이체 화면 칩을 한 번 더 판정한다(계좌 문장이 잘렸으면 칩도 뺀다 — `finalizeBankTransferChips` 표).
+    const savedReplyAttachments = finalizeBankTransferChips(replyAttachments, finalReplyText, {
+      accountNumber: routeAccountNumber,
+      bankName: fictionalBankName,
+      accountHolder: routeVariant?.scenarioId === session.scenarioId ? routeVariant.accountHolder : undefined,
+      history: storedHistory,
+    });
     await messagesRef.add({
       role: "scammer",
       textMasked: finalReplyText,
       turnIndex: nextIndex + 1,
       createdAt: Timestamp.now(),
-      ...(replyAttachments ? { attachments: replyAttachments } : {}),
+      ...(savedReplyAttachments ? { attachments: savedReplyAttachments } : {}),
       ...(session.channel ? { channel: session.channel } : {}),
       ...(sessionCallLeg ? { legIndex: sessionCallLeg.legIndex } : {}),
     } satisfies MessageDoc);
@@ -1377,7 +1403,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const reply: ScammerMessage = {
       role: "scammer",
       text: finalReplyText,
-      ...(replyAttachments ? { attachments: replyAttachments } : {}),
+      ...(savedReplyAttachments ? { attachments: savedReplyAttachments } : {}),
     };
     return {
       reply,

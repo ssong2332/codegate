@@ -169,15 +169,48 @@ export function withBankTransferPrefill(
 // | M1 | 이번 대사에 원 단위 금액이 있다 | 그 대사의 **마지막** 금액("삼천만 원 말고 200만 원만" → 200만) |
 // | M2 | 앞선 사기범 메시지(최근부터)에 금액이 있다 | 그 메시지의 마지막 금액 |
 // | M3 | 그 밖 | 없음 |
-// 금액 표기: 숫자(쉼표 허용) + 단위(억 · 천만 · 백만 · 십만 · 만 · 천)를 이어 쓰고 끝에 "원"("1억 2천만 원" · "200만 원" · "2,340,000원"). 한글 수사("이백만 원")는 읽지 않는다.
+// 금액 표기: 숫자(쉼표 허용) + 단위(억 · 천만 · 백만 · 십만 · 만 · 천)를 이어 쓰고 끝에 "원"("1억 2천만 원" · "200만 원" · "2,340,000원").
+// ⭐ PR-A(2026-11-07) — 한글 수사("이백만 원" · "구만 구천 원")도 먼저 숫자로 바꿔 읽는다. 아래 한글 수사 줄은 클라 `src/lib/bankapp/bankApp.ts`와 원문이 같다(드리프트 테스트).
 const AMOUNT_UNITS: Readonly<Record<string, number>> = { 억: 100_000_000, 천만: 10_000_000, 백만: 1_000_000, 십만: 100_000, 만: 10_000, 천: 1_000 };
 const AMOUNT_PATTERN = /((?:\d[\d,]*\s*(?:억|천만|백만|십만|만|천)\s*)*\d[\d,]*\s*(?:억|천만|백만|십만|만|천)?)\s*원/g;
 const AMOUNT_TOKEN = /(\d[\d,]*)\s*(억|천만|백만|십만|만|천)?/g;
 
-/** 한 대사의 마지막 원 단위 금액("2,000,000"). 없으면 undefined. */
+const HANGUL_NUMERALS: Readonly<Record<string, number>> = { 일: 1, 이: 2, 삼: 3, 사: 4, 오: 5, 육: 6, 칠: 7, 팔: 8, 구: 9 };
+const HANGUL_AMOUNT_PATTERN = /(^|[^가-힣\d,])((?:[\d,]+|[일이삼사오육칠팔구십백천만억])(?:\s?(?:[\d,]+|[일이삼사오육칠팔구십백천만억]))*)(?=\s*원)/g;
+
+function hangulAmountValue(phrase: string): number | undefined {
+  let total = 0;
+  let section = 0;
+  let digit = 0;
+  for (const [token] of phrase.replace(/\s/g, "").matchAll(/[\d,]+|[^\d,]/g)) {
+    if (/^[\d,]+$/.test(token)) digit = Number(token.replace(/,/g, ""));
+    else if (token in HANGUL_NUMERALS) digit = HANGUL_NUMERALS[token]!;
+    else if (token === "십" || token === "백" || token === "천") {
+      section += (digit || 1) * (token === "십" ? 10 : token === "백" ? 100 : 1_000);
+      digit = 0;
+    } else {
+      total += (section + digit || 1) * (token === "억" ? 100_000_000 : 10_000);
+      section = 0;
+      digit = 0;
+    }
+  }
+  const value = total + section + digit;
+  return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
+/** 한글 수사 금액을 숫자로 바꾼 대사(판정표 H1 ~ H3 — 클라 `src/lib/bankapp/bankApp.ts`). */
+function hangulAmountsToDigits(text: string): string {
+  return text.replace(HANGUL_AMOUNT_PATTERN, (whole: string, before: string, phrase: string) => {
+    if (!/[일이삼사오육칠팔구십백천만억]/.test(phrase) || !/[\d십백천만억]/.test(phrase)) return whole;
+    const value = hangulAmountValue(phrase);
+    return value === undefined ? whole : `${before}${value}`;
+  });
+}
+
+/** 한 대사의 마지막 원 단위 금액("2,000,000"). 없으면 undefined. 한글 수사도 읽는다(PR-A). */
 function lastAmountIn(text: string): string | undefined {
   let last: number | undefined;
-  for (const match of text.matchAll(AMOUNT_PATTERN)) {
+  for (const match of hangulAmountsToDigits(text).matchAll(AMOUNT_PATTERN)) {
     let total = 0;
     for (const token of match[1]!.matchAll(AMOUNT_TOKEN)) {
       total += Number(token[1]!.replace(/,/g, "")) * (token[2] ? AMOUNT_UNITS[token[2]]! : 1);
@@ -222,6 +255,46 @@ export function dropPrematureBankTransferChip(
   if (account.length > 0 && history.some((message) => message.role === "scammer" && compact(message.textMasked ?? "").includes(account))) return attachments; // P3
   const kept = (attachments ?? []).filter((attachment) => !isBankTransferLanding(attachment.fakeLandingId)); // P4
   return kept.length > 0 ? kept : undefined;
+}
+
+/** 마커 1개로 만든 칩(라벨 · 종류 · 무해 표시가 마커 경로와 같다). Edge 판 22 · 23 · 24 문자 스미싱 첫 문자 링크 백스톱이 쓴다. */
+export function linkChipFor(
+  landingId: string,
+  scenarioId: string,
+  session: Parameters<typeof extractLinkMarker>[2],
+): MessengerAttachment[] | undefined {
+  return extractLinkMarker(`[[LINK:${landingId}]]`, scenarioId, session).attachments;
+}
+
+/**
+ * ⭐ Edge 시험 판 25(2026-11-07 · 자녀 사칭 중급 — "계좌 알려줄게" 메시지에 "이체하기" 칩 · 열면 "메시지로 받은 계좌가 채워져 있습니다"인데 입금 계좌 칸이 빔).
+ * 원인(추정 — 서버 로그 미확인): ① S2(`dropPrematureBankTransferChip`)는 문장 상한 · 대사 교체 **전** 대사로 판정하는데, 계좌 문장이 상한에 잘려도 칩은 남았다.
+ * ② 세션 은행 · 계좌를 칩에 싣는 것(`withBankTransferPrefill`)은 일반 대화 턴만 했다 — 통화 복귀 · 통화 중 대화방 · 화면 뒤 대사 · 첫 메시지 칩은 빈 칸 화면을 열었다.
+ * ⇒ 저장 직전 **최종 대사**로 한 번 더 판정하고, 모든 경로가 같은 방식으로 싣는다. 판정표(위에서 첫 매치):
+ * | # | If | Then |
+ * |---|---|---|
+ * | F1 | 이체 화면 칩이 없다 | 그대로 |
+ * | F2 | 최종 대사 · 앞선 사기범 메시지 어디에도 세션 계좌가 없다(S2 P4) | 이체 화면 칩만 뺀다 |
+ * | F3 | 세션 은행명을 모른다(채울 수 없다 — 빈 칸 화면이 된다) | 이체 화면 칩만 뺀다 |
+ * | F4 | 그 밖 | 세션 은행 · 계좌 · 예금주 · 요구액을 싣는다(P2-c · P2-d · N1 — 같은 값을 다시 실어도 같다) |
+ */
+export function finalizeBankTransferChips(
+  attachments: MessengerAttachment[] | undefined,
+  finalText: string,
+  ctx: {
+    accountNumber: string;
+    bankName: string | undefined;
+    accountHolder?: string;
+    history: ReadonlyArray<{ role: string; textMasked?: string }>;
+  },
+): MessengerAttachment[] | undefined {
+  if (!(attachments ?? []).some((attachment) => isBankTransferLanding(attachment.fakeLandingId))) return attachments; // F1
+  const kept = dropPrematureBankTransferChip(attachments, finalText, ctx.accountNumber, ctx.history); // F2
+  if (!ctx.bankName) {
+    const withoutTransfer = (kept ?? []).filter((attachment) => !isBankTransferLanding(attachment.fakeLandingId)); // F3
+    return withoutTransfer.length > 0 ? withoutTransfer : undefined;
+  }
+  return withBankTransferPrefill(kept, ctx.bankName, ctx.accountNumber, ctx.accountHolder, demandAmountFrom(finalText, ctx.history)); // F4
 }
 
 /**

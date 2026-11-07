@@ -16,8 +16,16 @@ export default function BigClock({ seconds, label, className = "" }: { seconds: 
     } catch {
       reduced = false;
     }
-    // reduced-motion · 0초면 첫 프레임에 바로 최종 값(굴리기 없음).
-    const duration = reduced || seconds <= 0 ? 0 : E2_MOTION.clockMs;
+    // 2026-11-07 Edge 시험 판 3(큰 숫자 "1:15" · 낭독 "1분 26초") — 가려진 탭은 프레임 · 타이머가 멈추거나 늦어 숫자가 중간 값에 머문다(추정 —
+    // 낭독 값과 큰 숫자는 같은 `seconds`에서 나오므로 남는 원인은 굴리기 중단뿐). 가려진 채 열리면 굴리지 않고, 다시 보이면 최종 값으로 맞춘다.
+    let hidden = false;
+    try {
+      hidden = document.visibilityState === "hidden";
+    } catch {
+      hidden = false;
+    }
+    // reduced-motion · 0초 · 가려진 탭이면 첫 프레임에 바로 최종 값(굴리기 없음).
+    const duration = reduced || hidden || seconds <= 0 ? 0 : E2_MOTION.clockMs;
     let raf = 0;
     const t0 = performance.now();
     const tick = (now: number) => {
@@ -29,9 +37,17 @@ export default function BigClock({ seconds, label, className = "" }: { seconds: 
     // §129.10(메인 라이브 재테스트 2026-10-24 — 큰 숫자 "0:00" · 낭독 문구 "처음 속은 시각 36초") — 탭이 보이지 않거나 프레임이 멈추면
     // requestAnimationFrame이 돌지 않아 숫자가 0에 머문다(추정). 굴리기 시간이 지나면 프레임과 무관하게 최종 값으로 맞춘다.
     const settle = window.setTimeout(() => setShown(seconds), duration + 100);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        cancelAnimationFrame(raf);
+        setShown(seconds);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelAnimationFrame(raf);
       window.clearTimeout(settle);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [seconds]);
 
