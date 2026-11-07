@@ -99,6 +99,17 @@ test("[P4] 서버 요구액 판독 — 한글 수사 · 섞임 · 금액 아닌 
   for (const [text, want] of cases) assert.equal(demandAmountFrom(text, []), want, text);
 });
 
+// ⭐ 2026-11-07(Edge 재시험 2) — 주겠다는 돈(환급금 · 지원금 · 조회 금액)은 요구액이 아니다(판정표 D — 클라 `bankApp.ts`와 같은 원문).
+test("[재시험 2 D] 메신저 칩 요구액 — 주겠다는 돈은 건너뛰고 앞 대사의 요구액 · 없으면 없음", () => {
+  assert.equal(demandAmountFrom("지원금 300만 원이 지급될 예정이에요", []), undefined, "D1 · M3");
+  assert.equal(demandAmountFrom("지원금 300만 원 받으시려면 보증금 30만 원 먼저 보내 주세요", []), "300,000", "M1 D2");
+  assert.equal(
+    demandAmountFrom("미수령 환급금이 오만 원 정도 조회됩니다", [{ role: "scammer", textMasked: "처리 수수료 99,000원 입금해 주세요" }]),
+    "99,000",
+    "M1 건너뜀 → M2 앞 대사",
+  );
+});
+
 test("[P5] 문자 문서 transferAmount = 금액 줄", () => {
   const ts = { seconds: 0, nanoseconds: 0 } as unknown as FirebaseFirestore.Timestamp;
   const inst = buildInCallSmsDoc(findInCallSmsItem(SCENARIO, "institution-asset-safe-account")!, ts, 0, SCENARIO, "새솔은행");

@@ -146,3 +146,55 @@ test("[PR-A R] 통화 중 문자 이체 화면 — 요구액 = 통화에서 마�
   // G138 — 기록 콜백 인자는 그대로 비교 결과 하나(위 [B4]).
   assert.ok(!smsOverlay.includes("onLandingSubmitted(landing.smsId, amountComparison, "));
 });
+
+// ── ⭐ 2026-11-07(Edge 재시험 2 — 국세청 환급 고급) — 주겠다는 돈은 요구액이 아니다(판정표 D1 ~ D5 · `bankApp.ts` `lastDemandAmountIn`) ──
+
+test("[재시험 2 D] 재현 — '미수령 환급금이 오만 원 정도 조회' 뒤 문자 수수료 99,000원을 그대로 보내면 같은 금액", () => {
+  const spoken = latestDemandAmount([
+    "안녕하세요, 국세청 환급 안내 담당입니다.",
+    "고객님 앞으로 미수령 환급금이 오만 원 정도 조회되고 있습니다.",
+    "문자로 보내 드린 링크에서 처리 수수료만 먼저 내시면 바로 환급됩니다.",
+  ]);
+  assert.equal(spoken, undefined, "D1 · D5 — 말한 요구액 없음");
+  // 화면 비교: 말한 요구액이 없으면 문자 금액(미리 채운 값)이 요구액(종전 R2).
+  const sms = { accountNumber: "318-0472-6619-05", amount: "99,000" };
+  const transfer = spoken ? { ...sms, requestedAmount: spoken } : sms;
+  assert.equal(recordTransferAndCompare("d-repro", transfer, "99,000"), "equal");
+  // 수정 전 판정(가장 최근 금액 = 5만 원)이면 "more"였다 — 같은 대사의 금액 자체는 여전히 읽힌다.
+  assert.equal(lastAmountIn("고객님 앞으로 미수령 환급금이 오만 원 정도 조회되고 있습니다."), "50,000");
+});
+
+test("[재시험 2 D] 판정표 D1 ~ D4 — 가장 가까운 열쇠말 · 문장 단위 · 종전 요구 문장은 그대로", () => {
+  const cases: Array<[string, string | undefined, string]> = [
+    ["처리 수수료 99,000원을 먼저 입금해 주셔야 환급금이 지급됩니다", "99,000", "D2 수수료"],
+    ["수수료 9만 9천 원을 보내시면 환급금 5만 원을 돌려드립니다", "99,000", "뒤 금액은 D1 → 앞 금액 D2"],
+    ["환급금 5만 원을 받으시려면 수수료 9만 9천 원을 먼저 보내셔야 합니다", "99,000", "D2 가장 가까운 말 = 수수료"],
+    ["지원금 300만 원이 지급될 예정이에요", undefined, "D1"],
+    ["대출 한도는 최대 3천만 원까지 조회됩니다", undefined, "D3 뒤쪽 조회"],
+    ["보상금 120만 원을 돌려드릴게요. 다만 보증금 30만 원이 필요합니다", "300,000", "문장 단위"],
+    ["환급 수수료 99,000원", "99,000", "같은 자리면 뒤에 끝나는 요구 말"],
+    ["300만 원 필요해", "3,000,000", "D4 열쇠말 없음"],
+    ["그중 구백팔십만 원을 먼저 옮기셔야 합니다", "9,800,000", "D3 뒤쪽 옮기"],
+    ["들어온 대출금 980만 원 그대로 옮기시면 됩니다", "9,800,000", "대출금 = 열쇠말 아님 · 뒤쪽 옮기"],
+  ];
+  for (const [text, want, why] of cases) assert.equal(latestDemandAmount([text]), want, `${why}: ${text}`);
+  // 최근 대사에 요구액이 없으면 그 앞 대사의 요구액(종전 R1 · A4).
+  assert.equal(latestDemandAmount(["수수료 9만 9천 원 보내 주세요", "환급금은 5만 원이 조회됩니다"]), "99,000");
+});
+
+test("[재시험 2 D 드리프트] 요구액 판정 줄은 서버 linkMarker(메신저 칩 요구액)와 원문이 같다", () => {
+  const server = read("functions/src/roleplay/linkMarker.ts");
+  const client = read("src/lib/bankapp/bankApp.ts");
+  for (const name of ["DEMAND_GIVE_WORDS", "DEMAND_ASK_WORDS"]) {
+    const line = (src: string) => src.split("\n").find((l) => l.startsWith(`const ${name} =`));
+    assert.ok(line(client), name);
+    assert.equal(line(client), line(server), `${name} 서버와 같은 줄`);
+  }
+  const fn = (src: string) => {
+    const at = src.indexOf("function lastDemandAmountIn(text: string): string | undefined {");
+    return src.slice(at, src.indexOf("\n}\n", at));
+  };
+  assert.ok(fn(client).length > 300);
+  assert.equal(fn(client), fn(server));
+  assert.ok(server.includes("const own = lastDemandAmountIn(replyText);"), "M1도 같은 판정");
+});
