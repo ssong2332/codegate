@@ -19,11 +19,30 @@ test("[D6] pending ∧ 만료 경과 → expired · 만료 전 · 경계 시각"
   assert.equal(listedChallengeStatus("pending", NOW, NOW), "expired");
 });
 
-test("[D6] pending 밖 상태는 만료와 무관하게 그대로다(동의 뒤 재개는 보존기간을 따른다)", () => {
-  const others: ChallengeStatus[] = ["consented", "in_progress", "completed", "expired", "reported", "deleted"];
+test("[D6 2차 · L1] 동의만 하고 끝내지 않은 챌린지(consented · in_progress)도 링크 기한이 지나면 expired — 10-17 생성분", () => {
+  const oct17Expiry = Date.parse("2026-10-20T10:00:00+09:00");
+  for (const status of ["consented", "in_progress"] as const) {
+    assert.equal(listedChallengeStatus(status, oct17Expiry, NOW), "expired", status);
+    assert.equal(listedChallengeStatus(status, NOW + DAY, NOW), status, `${status}: 기한 안은 그대로`);
+  }
+});
+
+test("[D6 · L2] 완료 · 신고 · 삭제 · 이미 expired는 기한과 무관하게 그대로다", () => {
+  const others: ChallengeStatus[] = ["completed", "expired", "reported", "deleted"];
   for (const status of others) {
     assert.equal(listedChallengeStatus(status, NOW - 10 * DAY, NOW), status, status);
   }
+});
+
+test("[D6 2차] 목록 표기는 동의 게이트를 바꾸지 않는다 — 동의한 본인은 링크 기한 뒤에도 보존기간 안이면 재개된다", () => {
+  const gate = decideConsentGate({
+    linkExpired: true,
+    retentionExpired: false,
+    status: "in_progress",
+    existingSessionUid: "u2",
+    callerUid: "u2",
+  });
+  assert.equal(gate.action, "resume");
 });
 
 test("[D6] 목록 표기 = 동의 게이트 판정 — 목록이 '만료'면 그 링크는 실제로 거부된다", () => {

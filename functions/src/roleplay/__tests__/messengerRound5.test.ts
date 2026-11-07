@@ -115,7 +115,8 @@ test("[§131(2) 판정표 K] 직전 사기범 메시지의 통화 불가 핑계 
     index,
     /session\.channel === "messenger" &&\n\s*turnChoice === "none" &&\n\s*saidCallUnavailableRecently\(storedHistory\.filter\(\(m\) => m\.role === "scammer"\)\.map\(\(m\) => m\.textMasked\)\)\n\s*\? CALL_AFTER_EXCUSE_INSTRUCTION/,
   );
-  assert.match(index, /repeatBreakInstruction\(repeatBreakKind\),\s*callAfterExcuseInstruction,/);
+  // D4 2차(2026-11-07) — 반복 차단과 이 줄 사이에 초급 물러섬 · 마무리 1줄이 끼었다(`beginnerRetreat.ts`).
+  assert.match(index, /repeatBreakInstruction\(repeatBreakKind\),\s*beginnerRetreatInstruction\(beginnerRetreatKind\),\s*callAfterExcuseInstruction,/);
 });
 
 test("[§131(4) 판정표 O] 메신저 첫 메시지 — 전용 지시(전화 인사말 금지) · 맨 앞 '여보세요' 삭제 · 통화 시나리오 지시는 종전 그대로", () => {
