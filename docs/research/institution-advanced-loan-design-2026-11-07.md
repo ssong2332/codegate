@@ -220,3 +220,23 @@
 - 대출계약 청약철회권(14일 · 신용 4,000만 원 이하): [KB국민카드 대출철회권 안내](https://m.kbcard.com/FNC/DVIEW/MFDMCXHIAFLC0068) · [금융위원회](https://fsc.go.kr/no010101/72323) · [볼보파이낸셜 안내문](https://www.volvofinancialservices.com/content/dam/volvo-financial-services/markets/korea/compliance/%EB%8C%80%EC%B6%9C%EA%B3%84%EC%95%BD%EC%B2%A0%ED%9A%8C%EA%B6%8C%EC%95%88%EB%82%B4210325.pdf) — 검색 요약 기준(원문 미열람)
 - 대출 실행 전 금융회사의 보이스피싱 확인 전화 절차: 이번 검색에서도 **찾지 못했다**(D10 '중' 유지)
 - Live 전사 금액 표기: `docs/research/p2-live-probe-2026-11-01.md:32`
+
+## 12. PR-A 구현 (2026-11-07 · 메인 "구현 시작" · 사용자 결정 D-L1 ~ D-L7 권장안 · 범위 추가 = Edge 시험 판 10 택배 통관 고급)
+| # | 바꾼 것 | 파일 |
+|---|---|---|
+| A1 | 한글 수사 금액 판독(판정표 H1 ~ H3) — 클라 · 서버 같은 원문(드리프트 테스트) | `src/lib/bankapp/bankApp.ts` · `functions/src/roleplay/linkMarker.ts` |
+| A2 | 통화 중 문자 이체 화면 요구액 = 통화에서 사기범이 마지막으로 말한 금액(올린 대사 + 아직 올리지 않은 실시간 전사) → 없으면 문자 금액(R1 ~ R3). 링크 화면 · 은행 앱 '송금' 두 길 · 열 때마다 다시 잼 | `src/components/InCallSmsOverlay.tsx` · `src/app/session/play/page.tsx` |
+| A3 | 기관 고급 `fv-c5fj` — 고급 전용 문자 `institution-asset-safe-account`(금액 줄 980만 원 · 같은 계좌 · 같은 이체 화면) · 단계 · 수법 인용구 980만 원. 초급 · 중급 · 은퇴 `fv-pgqt` 문자 · 상수 무변경 | `functions/src/scenarios/inCallSms.ts` · `flowVariants.ts` |
+| A4 | 택배 통관 고급 `fv-y3ks` — `courier-safe-account` 금액 줄 760만 원(이 문자는 `fv-y3ks`만 씀) · 단계 · 수법 760만 원 | 같은 두 파일 |
+| A5 | 끊기 4-c 결정 화면 판정의 D-1(후속 단계 변형 = 대상 아님)을 좁힘 — 결정 화면이 **이체 화면**인 후속 단계 변형(`fv-c5fj`)은 미제출 · 적게 보냄이면 goal 끊기 거절. 설치 화면 뒤 말로 끝나는 `fv-e5mv` · `fv-r4hc`는 종전 그대로(첫 구현은 D-1을 통째로 지워 두 변형까지 4-c 대상이 됐다 — 테스트 장부로 잡아 좁혔다) | `functions/src/scammerHangup/goalAction.ts` |
+| A6 | 마무리 지시 — 결정 화면(이체) 미제출 · 적게 보냄이면 `pending`(실시간 `planGoalWrapUp` + `scenarioId` 1줄 · 폴백 `fallbackWrapUp`에 `!decisionScreenPending`) | `goalAction.ts` · `functions/src/inCallSms/index.ts`(인자 1줄만) · `functions/src/roleplay/index.ts` |
+- `functions/src/inCallSms/index.ts`는 `planGoalWrapUp` 호출 인자 1줄(`scenarioId`)만 더했다. 부족 금액 맥락 지시(`landingSubmittedInstructionFor`)는 건드리지 않았다(card-rejoin-timer 세션과 겹침 최소).
+
+### 12.1 검증 (2026-11-07)
+| 항목 | 결과 | 근거 |
+|---|---|---|
+| functions 테스트 | **2153 pass / 0 fail** (신규 5) | `npm --prefix functions test` |
+| root 테스트 | **1310 pass / 0 fail / 1 skip** (신규 3 · skip = `out/` 없음) | `npm test` |
+| lint | functions 통과 · root 오류 0 · 경고 1(변경 밖 `scripts/live-turn-probe.mjs`) | 두 lint 명령 |
+| 화면 확인 | **안 함** — 통화 중 이체 화면의 비교는 실시간 통화(실 키) 없이는 사기범 전사가 생기지 않는다. 배선은 소스 단언(`amountCompare.test.ts` [PR-A R])으로만 고정 | — |
+| 실 키 프로브 | 안 함(§10 PR-A ① ② 3세션 — 메인 승인 필요) | — |

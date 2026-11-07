@@ -24,8 +24,9 @@ test("[§127 ①] 폴백 마무리 지시 — 신호 모드 ∧ 할 일 완료 �
   assert.ok(!/\d/.test(FALLBACK_GOAL_WRAP_UP_INSTRUCTION));
   const src = readFileSync(path.join(SRC, "roleplay/index.ts"), "utf8");
   assert.ok(
-    src.includes('hangupMode === "signal" && goalActionDone && goalFollowUpFor(session.scenarioId, session.flowVariantId) !== undefined'),
-    "조건 3항",
+    // PR-A(2026-11-07) — 4항: 결정 화면(이체)을 마치기 전 · 적게 보낸 상태에서는 싣지 않는다(4-c행 입력 재사용).
+    src.includes('hangupMode === "signal" && goalActionDone && !decisionScreenPending && goalFollowUpFor(session.scenarioId, session.flowVariantId) !== undefined'),
+    "조건 4항",
   );
   assert.ok(src.includes("participantCalledInstruction, fallbackWrapUp]"), "턴 지시 끝에 붙는다");
 });

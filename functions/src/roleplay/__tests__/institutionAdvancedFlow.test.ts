@@ -39,6 +39,8 @@ const INSTITUTION = "institutional-impersonation";
 // §119(D-11) — fv-pgqt는 배정 은퇴했지만 옛 세션이 그 선언으로 해석되므로 은퇴 변형까지 함께 검사한다.
 // §124(#239) — 다중 루트 1a: 이 파일의 "신고①" 검사는 안전계좌 이체 루트(routeKey safe-account)에 대한 것이다. 현금 · 금 루트는 아래 §124 테스트가 본다.
 const ADVANCED = FLOW_VARIANTS.filter((v) => v.scenarioId === INSTITUTION && v.level === "advanced" && v.routeKey === "safe-account");
+// PR-A(2026-11-07) — 현행 fv-c5fj는 금액 줄이 있는 고급 전용 안전계좌 문자(같은 계좌 · 같은 이체 화면) · 은퇴 fv-pgqt는 종전 문자.
+const safeSmsOf = (variantId: string) => (variantId === "fv-c5fj" ? "institution-asset-safe-account" : "institution-safe-account");
 
 /** geminiProvider.ts의 Live 토큰 조립과 같은 문자 술어(변형 기준)로 옵션을 만든다. */
 function liveOpts(variantId: string, extra: BuildSystemPromptOptions = {}): BuildSystemPromptOptions {
@@ -67,7 +69,7 @@ test("[신고①] 기관 사칭 고급 변형은 전부 인증번호(필수) →
     const transfer = v.sms.find((s) => s.purpose === "transfer");
     assert.equal(identity?.smsId, "institution-otp", `${v.variantId}: 인증번호 문자`);
     assert.equal(identity?.required, true, `${v.variantId}: 인증번호 백스톱 강제`);
-    assert.equal(transfer?.smsId, "institution-safe-account", `${v.variantId}: 안전계좌 문자`);
+    assert.equal(transfer?.smsId, safeSmsOf(v.variantId), `${v.variantId}: 안전계좌 문자`);
     assert.equal(transfer?.required, true, `${v.variantId}: 계좌 백스톱 강제`);
     assert.ok(identity!.notBeforeUserTurns < transfer!.notBeforeUserTurns, `${v.variantId}: 인증번호가 먼저 열린다`);
     assert.ok(v.channels.includes("sms"), `${v.variantId}: 채널 메타`);
@@ -126,9 +128,9 @@ test("[신고①] 백스톱 — 모델이 안 불러도 인증번호 → 계좌 
     const accountAt = Math.max(6, otpAt + 2) + 2 * step;
     assert.equal(planSmsBackstop({ declared, delivered, userTurns: accountAt - 1 }).action === "deliver", false, `${v.variantId}: 계좌 강제 직전`);
     const second = planSmsBackstop({ declared, delivered, userTurns: accountAt });
-    assert.equal(second.action === "deliver" && second.item.smsId, "institution-safe-account", `${v.variantId}: 둘째 = 계좌`);
+    assert.equal(second.action === "deliver" && second.item.smsId, safeSmsOf(v.variantId), `${v.variantId}: 둘째 = 계좌`);
     assert.equal(
-      planSmsBackstop({ declared, delivered: [...delivered, { smsId: "institution-safe-account", userTurnsAtArrival: accountAt }], userTurns: 20 }).action,
+      planSmsBackstop({ declared, delivered: [...delivered, { smsId: safeSmsOf(v.variantId), userTurnsAtArrival: accountAt }], userTurns: 20 }).action,
       "none_pending",
     );
   }

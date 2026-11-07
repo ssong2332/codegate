@@ -75,9 +75,9 @@ test("[P2 B2 · B3] 문자 문서 — 이체 화면 문자만 받는 분 · 금�
   assert.equal(deposit.accountHolder, "서지원"); // S1 — 기관명 → 가상 개인 이름
   // P2-d — 공탁금 문자에 금액 줄(500만 원)이 생겼다(사기범 말 · 문자 · 화면 금액 일치).
   assert.equal(deposit.transferAmount, "5000000");
-  // 금액 줄이 없는 문자(국가 안전계좌 — 금액은 통화에서 정한다)는 금액 필드 없음.
+  // PR-A(2026-11-07 Edge 시험 판 10 — 금액 줄이 없어 10만 원만 보내도 통과) — 국가 안전계좌 문자에 금액 줄(760만 원)이 생겼다.
   const safeKeep = buildInCallSmsDoc(findInCallSmsItem("courier-customs-scam", "courier-safe-account")!, at, 7, "courier-customs-scam", "새솔은행");
-  assert.equal("transferAmount" in safeKeep, false);
+  assert.equal(safeKeep.transferAmount, "7600000");
   // B7(2026-11-01) — P2 이전 이체 화면(안전계좌 · 카드 피해금 · 보호계좌)도 받는 분 · 금액을 싣는다(금액 줄이 없는 안전계좌는 받는 분만).
   const safe = buildInCallSmsDoc(findInCallSmsItem("institutional-impersonation", "institution-safe-account")!, at, 6, "institutional-impersonation", "한결은행");
   assert.equal(safe.accountHolder, "강태윤");

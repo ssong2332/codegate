@@ -150,10 +150,51 @@ const AMOUNT_UNITS: Readonly<Record<string, number>> = { 억: 100_000_000, 천�
 const AMOUNT_PATTERN = /((?:\d[\d,]*\s*(?:억|천만|백만|십만|만|천)\s*)*\d[\d,]*\s*(?:억|천만|백만|십만|만|천)?)\s*원/g;
 const AMOUNT_TOKEN = /(\d[\d,]*)\s*(억|천만|백만|십만|만|천)?/g;
 
-/** 한 대사의 마지막 원 단위 금액("2,000,000"). 없으면 undefined. */
+// ⭐ PR-A(2026-11-07 · 기관 사칭 고급 · 택배 통관 고급 — 적은 금액이 통과) — 통화(Live) 전사는 금액을 한글 수사로도 적는다(실측 *"삼백만 원"* ·
+// *"구만 구천 원"* · *"5백만 원"* — `docs/research/p2-live-probe-2026-11-01.md:32`). 위 패턴은 숫자만 읽으므로 먼저 숫자로 바꾼다.
+// 판정표(`docs/research/institution-advanced-loan-design-2026-11-07.md` §1.1):
+// | # | If | Then |
+// |---|---|---|
+// | H1 | "원" 바로 앞 낱말 묶음(앞이 한글 · 숫자에 붙어 있지 않다)에 한글 수사가 있다 ∧ 단위(십 · 백 · 천 · 만 · 억)나 숫자가 있다 | 숫자로 바꾼다("구백팔십만 원" → "9800000 원") |
+// | H2 | 한글 수사만 있고 단위 · 숫자가 없다("사원" · "구원") | 그대로(금액 아님) |
+// | H3 | 숫자뿐이다 | 그대로(위 패턴이 읽는다) |
+// ⚠️ 서버 `functions/src/roleplay/linkMarker.ts`에 같은 줄이 있다(드리프트 테스트 — 아래 두 상수와 두 함수의 원문이 같아야 한다).
+const HANGUL_NUMERALS: Readonly<Record<string, number>> = { 일: 1, 이: 2, 삼: 3, 사: 4, 오: 5, 육: 6, 칠: 7, 팔: 8, 구: 9 };
+const HANGUL_AMOUNT_PATTERN = /(^|[^가-힣\d,])((?:[\d,]+|[일이삼사오육칠팔구십백천만억])(?:\s?(?:[\d,]+|[일이삼사오육칠팔구십백천만억]))*)(?=\s*원)/g;
+
+function hangulAmountValue(phrase: string): number | undefined {
+  let total = 0;
+  let section = 0;
+  let digit = 0;
+  for (const [token] of phrase.replace(/\s/g, "").matchAll(/[\d,]+|[^\d,]/g)) {
+    if (/^[\d,]+$/.test(token)) digit = Number(token.replace(/,/g, ""));
+    else if (token in HANGUL_NUMERALS) digit = HANGUL_NUMERALS[token]!;
+    else if (token === "십" || token === "백" || token === "천") {
+      section += (digit || 1) * (token === "십" ? 10 : token === "백" ? 100 : 1_000);
+      digit = 0;
+    } else {
+      total += (section + digit || 1) * (token === "억" ? 100_000_000 : 10_000);
+      section = 0;
+      digit = 0;
+    }
+  }
+  const value = total + section + digit;
+  return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
+/** 한글 수사 금액을 숫자로 바꾼 대사(판정표 H1 ~ H3 — 클라 `src/lib/bankapp/bankApp.ts`). */
+export function hangulAmountsToDigits(text: string): string {
+  return text.replace(HANGUL_AMOUNT_PATTERN, (whole: string, before: string, phrase: string) => {
+    if (!/[일이삼사오육칠팔구십백천만억]/.test(phrase) || !/[\d십백천만억]/.test(phrase)) return whole;
+    const value = hangulAmountValue(phrase);
+    return value === undefined ? whole : `${before}${value}`;
+  });
+}
+
+/** 한 대사의 마지막 원 단위 금액("2,000,000"). 없으면 undefined. 한글 수사도 읽는다(PR-A). */
 export function lastAmountIn(text: string): string | undefined {
   let last: number | undefined;
-  for (const match of text.matchAll(AMOUNT_PATTERN)) {
+  for (const match of hangulAmountsToDigits(text).matchAll(AMOUNT_PATTERN)) {
     let total = 0;
     for (const token of match[1]!.matchAll(AMOUNT_TOKEN)) {
       total += Number(token[1]!.replace(/,/g, "")) * (token[2] ? AMOUNT_UNITS[token[2]]! : 1);
