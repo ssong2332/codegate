@@ -718,7 +718,7 @@ const INSTITUTIONAL_IMPERSONATION: MockScreenItem[] = [
     mockHost: "deposit-reserve.invalid",
     fields: ["출금 금액", "받으실 형태"],
     submitLabel: "예탁금 출금 예약하기",
-    successHeadline: "출금 예약이 완료되었습니다.",
+    successHeadline: "출금 예약이 접수되었습니다.",
     momentTactic: "예탁 명목의 현금 · 수표 출금 예약 유도",
     correctAction:
       "검찰 · 경찰 · 금융감독원은 수사나 조사를 이유로 예금을 현금 · 수표로 바꾸게 하거나 받아 가지 않습니다. ① 출금 예약을 하지 말고 전화를 끊기 ② 이미 알고 있는 기관 대표번호로 직접 확인하기 ③ 은행 문진표 · 직원 질문에 사실대로 답하고 도움을 청하기 ④ 이미 찾았거나 건넸다면 바로 112(경찰)에 신고하기.",
@@ -896,7 +896,7 @@ const ASSET_PROTECTION_NOTICE_CALL: MockScreenItem[] = [
     mockHost: "custody-reserve.invalid",
     fields: ["보관할 금액", "받으실 형태"],
     submitLabel: "보관 자산 출금 예약하기",
-    successHeadline: "보관 자산 출금 예약이 완료되었습니다.",
+    successHeadline: "보관 자산 출금 예약이 접수되었습니다.",
     momentTactic: "자산 보관 명목의 현금 · 수표 출금 예약 유도",
     correctAction:
       "검찰 · 경찰 · 금융감독원은 수사나 조사를 이유로 예금을 현금 · 수표로 바꾸게 하거나 받아 가지 않습니다. ① 출금 예약을 하지 말고 전화를 끊기 ② 이미 알고 있는 기관 대표번호로 직접 확인하기 ③ 은행 문진표 · 직원 질문에 사실대로 답하고 도움을 청하기 ④ 이미 찾았거나 건넸다면 바로 112(경찰)에 신고하기.",

@@ -95,6 +95,19 @@ test("[CW5] 화면 문구 — G437 · AC-102 (d) · 보류 안내", () => {
   assert.doesNotMatch(copy, /\d+\s?시|[가-힣]+지점|[가-힣]+본점|출장소|주소|[가-힣]+(로|길)\s?\d+/, "AC-102 (d) 지점명 · 주소 · 시각 0");
   assert.match(CASH_COPY.heldLines.join(" "), /112/);
   assert.match(CASH_COPY.heldLines.join(" "), /1332/);
+  // 2026-11-08 사용자 결정 §15.4 (c) — 완료 화면에 영업점 방문 · 신분증 안내 0(앱 밖 행동 암시 0).
+  assert.ok(!("pickupNote" in CASH_COPY), "완료 화면 방문 안내 문구 0");
+  assert.doesNotMatch(copy, /신분증|영업점|오셔서|방문/, "화면 문구에 영업점 방문 안내 0");
+  assert.match(CASH_COPY.doneHeadline, /접수되었습니다/);
+  const component = cashComponentSource();
+  const doneStart = component.indexOf("// ④ 예약 완료");
+  const doneEnd = component.indexOf("// ② 금융사기", doneStart);
+  assert.ok(doneStart > 0 && doneEnd > doneStart, "완료 화면 구간 표식");
+  assert.doesNotMatch(component.slice(doneStart, doneEnd), /pickupNote|신분증|영업점/, "완료 화면 렌더에 방문 안내 0");
+  for (const id of ["cash-withdraw", "asset-cash-withdraw"]) {
+    const entry = SERVER_CATALOG.slice(SERVER_CATALOG.indexOf(`landingId: "${id}"`));
+    assert.match(entry.slice(0, 1500), /successHeadline: "[^"]*접수되었습니다\."/, `${id} 완료 머리글 = 접수`);
+  }
 });
 
 test("[CW6] 화면 컴포넌트 — 저장 · 전송 0 · 콜백 무인자 · 보류 = landing_held · 클라 목록 = 서버 목록 · 머리띠", () => {

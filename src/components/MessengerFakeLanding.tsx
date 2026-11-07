@@ -875,7 +875,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
       { label: "받으실 형태", placeholder: "형태를 고르세요" },
     ],
     submitLabel: "예탁금 출금 예약하기",
-    successHeadline: "출금 예약이 완료되었습니다.",
+    successHeadline: "출금 예약이 접수되었습니다.",
     issuerLabel: "ⓒ 모바일뱅킹 출금 예약 · 예탁",
     mockHost: "deposit-reserve.invalid",
   },
@@ -887,7 +887,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
       { label: "받으실 형태", placeholder: "형태를 고르세요" },
     ],
     submitLabel: "보관 자산 출금 예약하기",
-    successHeadline: "보관 자산 출금 예약이 완료되었습니다.",
+    successHeadline: "보관 자산 출금 예약이 접수되었습니다.",
     issuerLabel: "ⓒ 모바일뱅킹 출금 예약 · 보관",
     mockHost: "custody-reserve.invalid",
   },
@@ -1593,9 +1593,6 @@ function CashWithdrawMockup({
             [CASH_COPY.formRow, formLabel(reservation.form)],
             [CASH_COPY.fromLabel, accountLabel(account)],
           ])}
-          <p className="text-[13px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
-            {CASH_COPY.pickupNote}
-          </p>
           <Button type="button" onClick={onClose}>
             {returnLabel}
           </Button>

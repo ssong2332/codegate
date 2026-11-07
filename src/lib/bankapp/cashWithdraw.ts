@@ -8,7 +8,7 @@
 // | 금액 | 1만 원 단위 · 100만 원 이상(고액 예약 · ⚠️ 판단값) · 1회 예약 한도 `CASH_RESERVE_LIMIT`(⚠️ 판단값) · 잔액 판정은 화면이 출금 계좌 시트로(`withdrawAccounts.ts`) |
 // | 문진표 | 금감원 맞춤형 고액 현금 인출 문진 문항(근거 R7 — 파이낸셜뉴스 2022-08-26 · SBS Biz: 인출 목적 · 타인과 통화 여부 · 앱 설치 여부 · 2022 기준, 지금 그대로인지는 미확인). 하나라도 "예" = 예약 보류 |
 // | 저장 · 전송 | 금액 · 형태 · 목적 · 답은 이 모듈의 메모리 표와 화면 state를 벗어나지 않는다(G138 — 네트워크 · 저장소 0). 기록은 "예약했다" · "보류됐다" 사실 하나씩(D-G4) |
-// | 영업점 | 지점명 · 주소 · 시각 0(AC-102 (d)) |
+// | 영업점 | 지점명 · 주소 · 시각 0(AC-102 (d)) · 완료 화면에 영업점 방문 · 신분증 안내 0(2026-11-08 사용자 결정 §15.4 (c) — 앱 밖 행동 암시를 남기지 않는다) |
 
 /** 1회 예약 한도(원 · 판단값). */
 export const CASH_RESERVE_LIMIT = 50_000_000;
@@ -100,7 +100,6 @@ export function lastCashReservation(ledgerKey: string, screenId: string): CashRe
 /** 화면 문구. ⛔ 지점명 · 주소 · 시각 0(AC-102 (d)) · 화면 문구에 연습 표시 낱말 0(G437). */
 export const CASH_COPY = {
   menuTitle: "현금 · 수표 출금 예약",
-  lead: "큰 금액을 현금이나 수표로 찾으실 때 미리 예약하시면 영업점에서 바로 준비해 드립니다.",
   fromLabel: "출금 계좌",
   amountLabel: "출금 금액",
   allButton: "전액",
@@ -120,9 +119,8 @@ export const CASH_COPY = {
     "누군가의 안내로 예약하시는 중이라면 통화를 끊고 112 또는 1332로 먼저 확인해 주세요.",
   ],
   heldBack: "예약 화면으로",
-  doneHeadline: "출금 예약이 완료되었습니다",
+  doneHeadline: "출금 예약이 접수되었습니다",
   numberLabel: "예약 번호",
   amountRow: "예약 금액",
   formRow: "받으실 형태",
-  pickupNote: "신분증을 가지고 영업점에 오셔서 예약 번호를 말씀해 주세요.",
 } as const;
