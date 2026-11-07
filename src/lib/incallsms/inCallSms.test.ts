@@ -258,3 +258,11 @@ test("[11-07 배선] 문자함 = 목록 · 대화방 · 랜딩 세 보기(hidden
   assert.ok(overlay.includes('else if (view === "thread") setView("list");'), "Esc(뒤로 키) — 대화방 → 목록");
   assert.ok(overlay.includes("{threadPreviewText(item.latest)}"), "행 미리보기 = 그 방 최신 문자");
 });
+
+test("[11-07 배선] 배너 누름 = 그 문자를 보낸 번호의 대화방 · 그 밖 여는 곳 = 목록(page.tsx)", () => {
+  const page = readFileSync("src/app/session/play/page.tsx", "utf8").replace(/\r\n/g, "\n");
+  assert.ok(page.includes("handleOpenSmsOverlay(event.currentTarget, latestSms.senderLabel)"), "배너는 보낸 라벨을 넘긴다");
+  assert.ok(page.includes("setSmsOverlayThread(thread);"), "열 때마다 방을 새로 정한다(이전 배너 값이 남지 않는다)");
+  assert.ok(page.includes("initialThread={smsOverlayThread}"), "문자함에 전달");
+  assert.equal((page.match(/handleOpenSmsOverlay\([^)]*latestSms/g) ?? []).length, 1, "보낸 라벨을 넘기는 곳은 배너 하나");
+});

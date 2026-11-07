@@ -450,6 +450,8 @@ export default function SessionCallPage() {
   // 않는다(§15.1.1 — 넣으면 통화가 멈춰 이 기능의 존재 이유가 무너진다).
   const [inCallSms, setInCallSms] = useState<InCallSmsView[]>([]);
   const [smsOverlayOpen, setSmsOverlayOpen] = useState(false);
+  // 2026-11-07 실기기 신고 3(번호별 대화방) — 배너로 열면 그 문자를 보낸 번호의 대화방을 바로 연다. 그 밖(메시지 버튼 · 다이얼 · 시작 화면) = null → 받은 문자 목록.
+  const [smsOverlayThread, setSmsOverlayThread] = useState<string | null>(null);
   // T190-3(UX D-91 · §74.6 (6)) — 예전 boolean `smsBannerDismissed`를 **"확인한 마지막 smsId"** 로 바꿨다.
   // 새 문자는 도착 경로(백스톱 · 모델 도구 · 폴백)와 무관하게 id가 새로우므로 되돌리는 쓰기 지점이 필요 없다
   // (판정은 `@/lib/phone/bannerState`). 6초가 지나 접힌 id · 포커스/호버로 멈춘 id도 같은 방식으로 둔다.
@@ -2645,10 +2647,11 @@ export default function SessionCallPage() {
 
   // T68 — 오버레이 열기/닫기. **라우팅을 하지 않는다**(D-35 하드 요구): 상태만 바꾸므로
   // GeminiVoiceSession/RealtimeVoiceSession은 언마운트되지 않고 통화가 그대로 유지된다.
-  const handleOpenSmsOverlay = (trigger: HTMLButtonElement | null) => {
+  const handleOpenSmsOverlay = (trigger: HTMLButtonElement | null, thread: string | null = null) => {
     // ⭐ C5 리뷰 M1 — 끊기 승인 · 종료 래치 뒤에는 문자함을 열지 않는다(E2가 닫은 뒤 다시 열려 끊김 표시를 가리면 안 된다 — D-113).
     if (isEndLatched(callEndingRef.current)) return;
     smsTriggerRef.current = trigger;
+    setSmsOverlayThread(thread);
     // ⭐ T190-3(UX D-99 · G452) — 폴백 경로에서도 문자함을 열 때 마이크를 닫지 **않는다**(예전 T68은 여기서 STT를
     // 멈췄다). 참가자는 문자를 보면서 인증번호를 그대로 불러 줄 수 있다(AC-061 "불러준 사실").
     // T190-3(D-91 ③) — 문자함을 열면 그때까지 온 건의 배너는 다시 뜨지 않는다.
@@ -3471,7 +3474,7 @@ export default function SessionCallPage() {
             type="button"
             onClick={(event) => {
               setBannerPausedSmsId(null);
-              handleOpenSmsOverlay(event.currentTarget);
+              handleOpenSmsOverlay(event.currentTarget, latestSms.senderLabel);
             }}
             onFocus={() => setBannerPausedSmsId(latestSms.smsId)}
             onBlur={() => setBannerPausedSmsId(null)}
@@ -4400,6 +4403,7 @@ export default function SessionCallPage() {
       {smsOverlayOpen && (
         <InCallSmsOverlay
           messages={inCallSms}
+          initialThread={smsOverlayThread}
           // T190-5(§74.5 (2) · AC-092 (b)) — 통화 셸과 같은 스킨(한 세션 = 한 스킨).
           skin={deviceSkin.skin}
           callerLabel={callerLabel}
