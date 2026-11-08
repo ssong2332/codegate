@@ -432,7 +432,8 @@ export const recordInCallSmsEvent = onCall<
     // N1 — 요구액보다 적게 보냈으면 모자란 금액을 요구하는 문면(판정표 `landingSubmittedInstructionFor`).
     // ⭐ PR-B — 대출 신청 화면(`loan-apply`) 제출은 이체가 아니라 신청 접수 문면(판정표 L0).
     if (event === "landing_submitted" && snap.get("fakeLandingId") === LOAN_APPLY_LANDING_ID) return { recorded: true, contextInstruction: LOAN_APPLY_SUBMITTED_INSTRUCTION };
-    if (event === "landing_submitted") return { recorded: true, contextInstruction: landingSubmittedInstructionFor(amountComparison, false) };
+    // 2026-11-08(§15.5 관찰 ③) — 화면 id를 넘긴다: 돈을 옮기지 않는 입력 화면은 이체 문면 대신 입력 제출 문면(판정표 L-F).
+    if (event === "landing_submitted") return { recorded: true, contextInstruction: landingSubmittedInstructionFor(amountComparison, false, snap.get("fakeLandingId") as string | undefined) };
   } else if (event === "landing_submitted" && amountComparison !== undefined) {
     await smsRef.update(comparisonUpdate);
     // N1 — 앞 제출이 모자랐는데 다시 제출했다: 이번 결과를 알린다(그 밖 재제출 = 종전대로 없음).

@@ -617,3 +617,25 @@ test("[T194-a §84.13.3 ③] 설치 항목마다 자기 문구만 그린다(교�
   assert.equal(unknown.markup, "", "표에 없는 id의 설치 화면은 생략돼야 한다(UF-012 Failure (a))");
   assert.equal(unknown.text.includes(subsidyHeadline), false);
 });
+
+// ⭐ 2026-11-08(§15.7 · §15.4 (c) 후속 — 라이브 재시험에서 루트가 뽑히지 않아 화면 문구를 눈으로 확인하지 못했다) — 실 키 없이 **실제 렌더 결과**로 본다.
+// 금 거래소 · 출금 예약 화면의 첫 화면을 그대로 그려, 카탈로그 본문이 그려지고 매장 방문 수령 · 영업점 방문 · 신분증 안내가 0인지 확인한다.
+// ⚠️ 한계: 정적 렌더라 첫 화면만 본다(주문 확인 · 완료 · 보류 화면은 버튼 전이 뒤라 이 하네스가 닿지 않는다 — 그 구간은 `goldBuy.test.ts` GB5 ·
+// `cashWithdraw.test.ts` CW5의 렌더 소스 구간 스캔이 맡는다).
+test("[§15.7 · §15.4 (c) 렌더] 금 거래소 · 출금 예약 첫 화면 렌더에 매장 방문 수령 · 영업점 방문 · 신분증 안내가 없다", (t) => {
+  const ids = ["gold-buy", "asset-gold-buy", "cash-withdraw", "asset-cash-withdraw"];
+  const lines: string[] = [];
+  for (const id of ids) {
+    const item = catalogItems.find((candidate) => candidate.landingId === id);
+    assert.ok(item, `${id} 카탈로그 항목`);
+    const { text, markup } = renderLandingScreen(propsFor(item));
+    assert.ok(markup.length >= 500, `${id}: 마크업 ${markup.length}자 — 빈 렌더`);
+    const body = item.fields.get("bodyLines") ?? [];
+    assert.ok(body.length > 0, `${id}: bodyLines`);
+    for (const line of body) assert.ok(text.includes(line), `${id}: 본문 '${line}'이 렌더되지 않았다`);
+    const banned = text.match(/매장|수령|방문|신분증|영업점|오셔서/g) ?? [];
+    assert.deepEqual(banned, [], `${id}: 렌더 텍스트에 방문 · 수령 안내 낱말`);
+    lines.push(`${id}=본문 ${body.length}줄 · 금지 낱말 0`);
+  }
+  t.diagnostic(lines.join(" | "));
+});

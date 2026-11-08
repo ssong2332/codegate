@@ -19,8 +19,8 @@
 //    문면 상수를 쓴다(클라 저작 0 — G101/G386 관례).
 // ⛔ 문면에 횟수·턴 번호 0(F11/G130) · 따옴표 대사 예시 0 · "재촉"·"다급" 0(smsGate 문면 규칙과 같은 기준).
 import type { FlowVariantSms, SmsPurpose } from "../scenarios/flowVariants";
-// T194-c-1 G608 — 값 import는 카탈로그 판별자 1개뿐이다(Firestore · LLM 0 유지 — 위 "잎 모듈" 행의 예외).
-import { isInCallInstallSms } from "../scenarios/mockScreens";
+// T194-c-1 G608 — 값 import는 카탈로그 판별자뿐이다(Firestore · LLM 0 유지 — 위 "잎 모듈" 행의 예외). 2026-11-08 §15.5 관찰 ③ — 돈 이동 화면 판별자 1개 추가.
+import { isInCallInstallSms, isMoneyMoveLanding } from "../scenarios/mockScreens";
 import type { DeliveredSmsRecord } from "./smsGate";
 
 /** 결과 신호 대상 목적. identity는 `otpCheck`가 소유한다(위 머리 주석). */
@@ -80,6 +80,14 @@ export function transferClaimsReachDemandStages(userTexts: readonly string[], de
 export const LANDING_SUBMITTED_INSTRUCTION =
   "(앱 확인: 상대가 방금 문자 링크 화면에서 이체하기를 눌러 이체를 마쳤다. 이체가 끝난 것으로 받아들이고, 아직 완료되지 않았다거나 다시 이체하라는 말은 하지 마라. 이번 대답에서 입금 확인이 끝났다고 그럴듯하게 알려 주고, 상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
 
+/**
+ * ⭐ 2026-11-08(§15.5 관찰 ③ · 판정표 S3) — 돈을 옮기지 않는 입력 화면(보관 신청서 · 본인 확인 · 계좌 등록 · 수취인 정보 · 사건 기록 열람)의 제출 맥락 1줄.
+ * 종전에는 이 화면들도 `LANDING_SUBMITTED_INSTRUCTION`("이체하기를 눌러 이체를 마쳤다")을 받아, 신청서 제출 뒤 사기범이 "어디까지 진행하셨는지" 되물었다.
+ * 입력값은 앱이 알리지 않는다(값 0 — G138).
+ */
+export const LANDING_FORM_SUBMITTED_INSTRUCTION =
+  "(앱 확인: 상대가 방금 문자 링크 화면에 입력을 마치고 제출했다. 제출이 끝난 것으로 받아들이고, 아직 안 됐다거나 다시 입력하라는 말은 하지 마라. 이 제출로 돈이 옮겨진 것은 아니니 이체나 입금이 끝났다는 말은 하지 마라. 이번 대답에서 접수가 확인됐다고 짧게 말하고, 상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
+
 /** ⭐ PR-B — 앱 안 대출 신청 화면 id(`scenarios/mockScreens.ts` 카탈로그 · 클라 `MessengerFakeLanding.tsx` `LoanApplyMockup`). */
 export const LOAN_APPLY_LANDING_ID = "loan-apply";
 /** ⭐ PR-B(판정표 L0) — 대출 신청 화면 제출 맥락 1줄. 금액 · 용도는 앱이 알리지 않는다(값 0 — G138). 다음 단계(확인 전화 코칭)로 넘어가게 한다. */
@@ -93,6 +101,7 @@ export const LOAN_APPLY_SUBMITTED_INSTRUCTION =
  * | L1 | 적음(`less`) | `LANDING_SUBMITTED_SHORT_INSTRUCTION` — 들어온 만큼만 확인 · 모자란 금액을 같은 화면에서 마저 · 끝내지 않는다 |
  * | L2 | 다시 제출 ∧ 같음 · 많음 | `LANDING_RESUBMITTED_FULL_INSTRUCTION` — 이제 다 들어왔다 |
  * | L3 | 그 밖(같음 · 많음 · 모름) | `LANDING_SUBMITTED_INSTRUCTION`(종전 바이트) |
+ * L0 · L-F는 L1보다 먼저 본다: 대출 신청 화면 = L0 · 화면 id가 있고 돈을 옮기지 않는 입력 화면(`isMoneyMoveLanding` 거짓) = L-F `LANDING_FORM_SUBMITTED_INSTRUCTION`.
  * 은행 화면은 현실처럼 아무 금액이나 보낼 수 있다(막지 않는다) — 사기범이 반응할 뿐이다.
  *
  * 2026-11-07 Edge 시험 판 26(카드사 고급 R1 · 980만 원 요구에 300만 원) — 검사가 "아직 입금 확인이 되지 않았습니다 … 이체를 마저"라고 했다.
@@ -108,10 +117,11 @@ export const LANDING_RESUBMITTED_FULL_INSTRUCTION =
 export function landingSubmittedInstructionFor(
   comparison: "less" | "equal" | "more" | undefined,
   resubmitted: boolean,
-  /** ⭐ PR-B — 제출된 화면 id. 대출 신청 화면(`loan-apply`)이면 L0(이체가 아니라 신청 접수 문면). 부재 = 종전 판정표. */
+  /** ⭐ PR-B — 제출된 화면 id. 대출 신청 화면(`loan-apply`)이면 L0(이체가 아니라 신청 접수 문면). 2026-11-08 — 돈을 옮기지 않는 입력 화면이면 L-F. 부재 = 종전 판정표. */
   landingId?: string,
 ): string {
   if (landingId === LOAN_APPLY_LANDING_ID) return LOAN_APPLY_SUBMITTED_INSTRUCTION; // L0
+  if (landingId !== undefined && !isMoneyMoveLanding(landingId)) return LANDING_FORM_SUBMITTED_INSTRUCTION; // L-F
   if (comparison === "less") return LANDING_SUBMITTED_SHORT_INSTRUCTION; // L1
   if (resubmitted) return LANDING_RESUBMITTED_FULL_INSTRUCTION; // L2
   return LANDING_SUBMITTED_INSTRUCTION; // L3
