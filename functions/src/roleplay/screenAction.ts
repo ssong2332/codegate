@@ -260,7 +260,7 @@ export const SCREEN_GIVE_UP_REPLY = {
   polite: "더는 진행이 어렵겠습니다. 여기서 마치겠습니다.",
 } as const;
 
-const GIVE_UP_POLITE_ENDING = /(?:니다|습니까|십니까|세요|십시오|어요|아요|에요|예요|해요|죠|군요|네요)(?=[\s.?!~…ㅠㅜ]|$)/;
+export const GIVE_UP_POLITE_ENDING = /(?:니다|습니까|십니까|세요|십시오|어요|아요|에요|예요|해요|죠|군요|네요)(?=[\s.?!~…ㅠㅜ]|$)/;
 
 export function screenGiveUpReply(modelText: string): string {
   return GIVE_UP_POLITE_ENDING.test(modelText) ? SCREEN_GIVE_UP_REPLY.polite : SCREEN_GIVE_UP_REPLY.casual;

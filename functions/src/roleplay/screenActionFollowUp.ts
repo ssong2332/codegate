@@ -45,6 +45,7 @@ import type { MessageDoc, MockScreenDoc, SessionDoc } from "../shared/types";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { decideCallAnnouncement } from "./callAnnouncement";
 import { extractEscalationSignal } from "./escalationSignal";
+import { followUpSkipsEscalationFloor } from "./installCallNext";
 import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker, finalizeBankTransferChips } from "./linkMarker";
 import { dropRepeatedLinkChips } from "./linkChipRepeat";
@@ -171,9 +172,11 @@ export const requestScreenActionFollowUp = onCall<RequestScreenActionFollowUpReq
 
     const scenarioPrompt = resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId);
     if (!scenarioPrompt) return {};
+    // Edge 재시험 3 표 T1(`installCallNext.ts`) — 설치 뒤 통화가 설계인 항목의 응낙이면 전환 하한(A0)을 보지 않는다(설치가 참가자 행동이다).
     const canEscalateNow =
       resolveTransitionNow(session, PUBLIC_SCENARIOS) !== undefined &&
-      !isEscalationTooEarly(turnsSinceMessengerEntry(session.turnCount, session.channelHistory));
+      (followUpSkipsEscalationFloor(kind, landingId) ||
+        !isEscalationTooEarly(turnsSinceMessengerEntry(session.turnCount, session.channelHistory)));
     const messagesRef = sessionRef.collection("messages");
     const historySnap = await messagesRef.orderBy("turnIndex", "asc").get();
     const history = historySnap.docs.map((doc) => doc.data() as MessageDoc);

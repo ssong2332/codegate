@@ -51,7 +51,9 @@ test("[R19 배선] sendMessage — A의 포기 단계 판정을 G에 넘긴다 �
   const gate = roleplay.indexOf("const advanceGate = decideStageAdvanceGate({");
   const forced = roleplay.indexOf("const forcedScreenGiveUp = decideForcedScreenGiveUp({");
   const giveUpLine = roleplay.indexOf(': advanceGate.giveUpStage && endCallSignal === "give_up"\n        ? screenGiveUpReply(farewellGuard.text)');
-  const last = roleplay.indexOf("const shapedReplyText = forcedScreenGiveUp ? screenGiveUpReply(");
+  // D4 3차(2026-11-08) — G 교체 결과 이름 `screenShapedReplyText`. 그 뒤 초급 판정표 V가 오지만 포기 1줄은 V에 걸리지 않는다
+  // (`beginnerRetreatTurn.test.ts` [D4 3차 · V1 · V4]) — 대사를 바꾸는 마지막 교체는 여전히 G다.
+  const last = roleplay.indexOf("const screenShapedReplyText = forcedScreenGiveUp ? screenGiveUpReply(");
   assert.ok(gate > 0 && forced > gate && giveUpLine > forced && last > giveUpLine, JSON.stringify([gate, forced, giveUpLine, last]));
   // 포기 1줄은 다시 A에 걸리지 않는다(다음 단계 요구 어휘 0).
   for (const line of Object.values(SCREEN_GIVE_UP_REPLY)) {
