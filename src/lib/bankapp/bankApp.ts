@@ -253,6 +253,101 @@ export function latestDemandAmount(scammerTexts: readonly string[]): string | un
   return undefined;
 }
 
+// ⭐ 2026-11-08(라이브 재시험 7 · 사용자 결정 "말한 값에 맞추기") — 앱 안 현금 출금 예약 화면의 출금 계좌 은행 · 잔액 = 참가자가 통화에서 말한 값.
+// 실측: 참가자 "거래 은행은 새솔은행이고요. 1,200만 원쯤 있어요" → 화면 "늘봄은행 · 24,820,000원"(세션 고정 값).
+// 판정표 S(화면을 여는 순간의 대사로 정한다 · 값은 화면 안에서만 — 서버 · 콜백 0 · G138):
+// | # | If | Then |
+// |---|---|---|
+// | S1 | 참가자의 마지막 은행 언급 = 가상 은행명(`FICTIONAL_BANK_NAMES` · "새솔 은행" 띄어쓰기 허용) | 은행 = 그 이름 |
+// | S2 | 참가자의 마지막 은행 언급 = 가상 목록 밖 "○○은행" · "○○뱅크"(실제 은행 등 · 일반어 앞말 `BANK_MENTION_STOP` 제외) | 은행 없음 → 고정 가상 은행(화면에 실제 기관명 0) · 금액은 S4 ~ S7대로 |
+// | S3 | 은행 언급 없음 | 은행 없음 → 고정 값 |
+// | S4 | 참가자 대사의 금액 · 같은 문장에서 가장 가까운 열쇠말(뒤쪽 먼저 · 다음 금액 전까지) = 보유 말(`SPOKEN_HOLD_WORDS`) | 잔액 후보 |
+// | S5 | 가장 가까운 열쇠말 = 보내기 말(`SPOKEN_SEND_WORDS`) | 건너뜀 |
+// | S6 | 열쇠말 없음 ∧ 바로 앞 대사 = 잔액을 묻는 사기범 대사(`BALANCE_QUESTION`) | 잔액 후보("1,500만 원이요") |
+// | S7 | 열쇠말 없음 ∧ 앞 질문도 아님 | 건너뜀(되묻기 "300만 원이요?") |
+// | S8 | 후보가 1만 원 미만 · 10억 원 초과(⚠️ 판단값) | 건너뜀(1만 원 이상 100만 원 미만은 그대로 반영 — 출금 예약 최소 금액에 걸려 예약 불가 · 2026-11-08 사용자 결정 "그대로 둠") |
+// | S9 | 여러 번 말함 | 은행 · 잔액 각각 마지막 유효 값 |
+// | S10 | 사기범 대사 | 은행 · 잔액으로 쓰지 않는다(역할로 가름 — S6 질문 판정에만 쓴다) |
+// | S11 | 한쪽만 있음 | 있는 쪽만 반환 — 호출부가 없는 쪽을 고정 값으로 채운다 |
+// | S12 | 쓰는 화면 | 출금 예약(`CashWithdrawMockup`) · 금 거래소(`GoldBuyMockup` — 2026-11-08 사용자 결정 "같은 규칙") |
+// ⚠️ S2 한계: 실제 은행 이름을 목록으로 두지 않는다(이 파일은 `[BA-1 A5]`가 실존 은행명 0을 스캔한다) — "○○은행" · "○○뱅크" 꼴만 알아본다.
+//    "은행"이 붙지 않은 단독 이름(농협 · 우체국 등)은 언급으로 세지 않아, 가상 은행을 말한 뒤 그런 이름으로 고쳐 말하면 앞의 가상 은행이 남는다.
+//    띄어 쓴 "○○ 은행"은 가상 은행일 때만 센다("그럼 은행 가야 돼요?" · "우리 은행"은 언급 아님) · 붙여 쓴 꼴도 일반어 앞말(`BANK_MENTION_STOP` — "거래은행")은 세지 않는다.
+const FICTIONAL_BANK_STEMS = FICTIONAL_BANK_NAMES.map((name) => name.replace(/은행$/, ""));
+const BANK_MENTION = /([가-힣A-Za-z]{1,8})(\s?)(?:은행|뱅크)/g;
+const BANK_MENTION_STOP = /^(?:거래|주거래|다른|무슨|어느|어떤|그|이|저|제|내|시중|인터넷|모바일|저축|같은)$/;
+const SPOKEN_HOLD_WORDS = /있|잔액|잔고|예금|통장|모아|모은|저축/g;
+const SPOKEN_SEND_WORDS = /보내|보낼|보냈|이체|송금|찾|뽑|인출|출금|드리|드려|드릴|입금/g;
+const BALANCE_QUESTION = /잔액|잔고|예금|예치|얼마(?:나|정도)?\s*(?:있|되|계)/;
+const SPOKEN_BALANCE_MIN = 10_000;
+const SPOKEN_BALANCE_MAX = 1_000_000_000;
+
+export type SpokenAccount = { bankName?: string; balance?: number };
+
+/** 한 참가자 대사의 마지막 은행 언급(S1 · S2). 언급 없음 = undefined · 실제 은행 = null. */
+function lastBankMentionIn(text: string): string | null | undefined {
+  let last: string | null | undefined;
+  for (const match of text.matchAll(BANK_MENTION)) {
+    const prefix = match[1]!;
+    const stem = FICTIONAL_BANK_STEMS.find((candidate) => prefix.endsWith(candidate));
+    if (stem && match[0].endsWith("은행")) last = `${stem}은행`; // S1(앞에 조사 없이 붙어 있어도 — "통장은새솔은행")
+    else if (match[2] === "" && !BANK_MENTION_STOP.test(prefix)) last = null; // S2
+  }
+  return last;
+}
+
+/** 한 참가자 대사의 마지막 잔액 후보(S4 ~ S8). `askedBalance` = 바로 앞 대사가 잔액을 묻는 사기범 대사인가. */
+function lastBalanceIn(text: string, askedBalance: boolean): number | undefined {
+  const converted = hangulAmountsToDigits(text);
+  const amounts = [...converted.matchAll(AMOUNT_PATTERN)];
+  let last: number | undefined;
+  amounts.forEach((match, index) => {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    const sentenceStart = Math.max(...[".", "?", "!", "\n"].map((mark) => converted.lastIndexOf(mark, start - 1))) + 1;
+    const prevEnd = index > 0 ? (amounts[index - 1]!.index ?? 0) + amounts[index - 1]![0].length : 0;
+    const before = converted.slice(Math.max(sentenceStart, prevEnd), start);
+    const nextStart = index + 1 < amounts.length ? (amounts[index + 1]!.index ?? converted.length) : converted.length;
+    const after = converted.slice(end, nextStart);
+    const stop = after.search(/[.?!\n]/);
+    const following = stop < 0 ? after : after.slice(0, stop);
+    const firstAt = (re: RegExp) => Math.min(Infinity, ...[...following.matchAll(re)].map((m) => m.index ?? 0));
+    const lastEnd = (re: RegExp) => Math.max(-1, ...[...before.matchAll(re)].map((m) => (m.index ?? 0) + m[0].length));
+    const holdAfter = firstAt(SPOKEN_HOLD_WORDS);
+    const sendAfter = firstAt(SPOKEN_SEND_WORDS);
+    const holdBefore = lastEnd(SPOKEN_HOLD_WORDS);
+    const sendBefore = lastEnd(SPOKEN_SEND_WORDS);
+    const kind =
+      holdAfter !== Infinity || sendAfter !== Infinity
+        ? holdAfter < sendAfter ? "hold" : "send"
+        : holdBefore >= 0 || sendBefore >= 0
+          ? holdBefore > sendBefore ? "hold" : "send"
+          : askedBalance ? "hold" : "none"; // S6 · S7
+    if (kind !== "hold") return; // S5 · S7
+    let total = 0;
+    for (const token of match[1]!.matchAll(AMOUNT_TOKEN)) {
+      total += Number(token[1]!.replace(/,/g, "")) * (token[2] ? AMOUNT_UNITS[token[2]]! : 1);
+    }
+    if (Number.isSafeInteger(total) && total >= SPOKEN_BALANCE_MIN && total <= SPOKEN_BALANCE_MAX) last = total; // S8
+  });
+  return last;
+}
+
+/** 대사(오래된 순 · 역할 포함)에서 참가자가 말한 거래 은행 · 잔액(판정표 S1 ~ S11). 말하지 않은 쪽은 빠진다. */
+export function spokenAccountFrom(turns: readonly { role: "scammer" | "user"; text: string }[]): SpokenAccount {
+  let bankName: string | undefined;
+  let balance: number | undefined;
+  turns.forEach((turn, index) => {
+    if (turn.role !== "user") return; // S10
+    const mention = lastBankMentionIn(turn.text);
+    if (mention !== undefined) bankName = mention ?? undefined; // S1 · S2 · S9
+    const previous = turns[index - 1];
+    const value = lastBalanceIn(turn.text, previous?.role === "scammer" && BALANCE_QUESTION.test(previous.text));
+    if (value !== undefined) balance = value; // S9
+  });
+  return { ...(bankName ? { bankName } : {}), ...(balance !== undefined ? { balance } : {}) };
+}
+
 /** 완료 화면 시각("오후 3:07" — 기기 시계 · 화면에만). */
 export function transferTimeText(date: Date): string {
   const hours = date.getHours();
