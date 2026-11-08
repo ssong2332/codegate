@@ -15,7 +15,8 @@ import { ELEVENLABS_API_KEY, GEMINI_KEY_SECRETS } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { getVerifyOfferTrigger } from "../scenarios/verifyIntercept";
-import { findFlowVariant, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
+import { findFlowVariant, routeEndsWithoutAccount, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
+import { callScreensDoneRule, linkScreensAllDone } from "../roleplay/callScreensDone";
 import { buildLegLoanReviewContext, buildLegRejoinContext, legSentSmsDescriptions, resolveSessionCallLeg } from "../callLegs/legPlan";
 import type { VoiceMode } from "../scenarios/publicMeta";
 import type { ChallengeDoc, MessageDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
@@ -210,6 +211,14 @@ export const createRealtimeCall = onCall<
       if (priorChatContext && PUBLIC_SCENARIOS[session.scenarioId]?.escalationCloneOnly === true) {
         priorChatContext = `${priorChatContext}\n${CLONE_SHORT_CALL_RULE}`;
       }
+      // Edge 재시험 5 판정표 S(`roleplay/callScreensDone.ts`) — 결말이 링크 화면인 루트에서 연 화면을 다 마쳤으면 이 통화의 남은 일(공통 절보다 뒤 자리).
+      const screensDoneRule = callScreensDoneRule({
+        escalatedCall: true,
+        noAccountRoute: routeEndsWithoutAccount(session.scenarioId, session.flowVariantId),
+        inCallSms: sessionDeclaresInCallSms(session.scenarioId, session.flowVariantId),
+        allScreensDone: linkScreensAllDone(mockSnap.docs.map((d) => d.data())),
+      });
+      if (screensDoneRule) priorChatContext = priorChatContext ? `${priorChatContext}\n${screensDoneRule}` : screensDoneRule;
     } catch {
       priorChatContext = undefined;
     }
