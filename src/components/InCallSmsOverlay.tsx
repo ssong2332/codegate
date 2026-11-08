@@ -846,12 +846,16 @@ export default function InCallSmsOverlay({
             <div
               ref={landingViewRef}
               hidden={view !== "landing"}
-              className={view === "landing" ? "flex min-h-0 flex-1 flex-col" : "hidden"}
+              // ⭐ 2026-11-08 웹 안의 웹 PR-1(사용자 결정 O4 (a)) — 문자 링크를 누르면 페이지가 오른쪽에서 들어온다(약 0.4초 · 숨김 → 보임마다 다시 ·
+              // 움직임 줄이기면 즉시 — globals.css). 문자 보기는 종전처럼 `hidden`으로 바로 숨는다(입력값 유지 마운트 그대로).
+              className={view === "landing" ? "landing-page-enter flex min-h-0 flex-1 flex-col" : "hidden"}
             >
               <MessengerFakeLanding
                 key={landing.smsId}
                 entrySurface="in-call-sms"
                 skin={skin}
+                // ⭐ PR-1 — iOS형 '◀ 메시지' 줄은 맨 위 통화 표시줄이 없을 때만(판정표 LC1 · LC2).
+                callBarShown={!noActiveCall}
                 title={landing.displayText}
                 landingId={landing.landingId}
                 landingKind={landing.landingKind}

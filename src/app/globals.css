@@ -417,6 +417,52 @@ body {
   }
 }
 
+/* --- 가짜 사이트 랜딩 넘어가는 순간(⭐ 2026-11-08 웹 안의 웹 PR-1 · 사용자 결정 O4 (a)) ---
+   문자 · 대화 링크를 누르면 페이지가 오른쪽에서 들어오고(약 0.4초) 주소 아래 사이트 색 진행 막대가 차오른 뒤 사라진다(약 1.2초).
+   진행 막대는 기본 상태가 보이지 않음(scaleX 0 · opacity 0)이라 움직임 줄이기에서 애니메이션을 끄면 그리지 않는 것과 같다. */
+@keyframes landing-page-in {
+  from {
+    opacity: 0.2;
+    transform: translateX(28%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes landing-progress-load {
+  0% {
+    opacity: 1;
+    transform: scaleX(0);
+  }
+  80% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+}
+
+.landing-page-enter {
+  animation: landing-page-in 0.38s ease-out;
+}
+
+.landing-progress {
+  opacity: 0;
+  transform: scaleX(0);
+  animation: landing-progress-load 1.2s ease-out 0.3s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-page-enter,
+  .landing-progress {
+    animation: none;
+  }
+}
+
 /* --- 이체 출금 계좌 · 생체 인증 시트(2026-11-07 실기기 신고 — "생체인식 화면에서도 별 모션 없이 그냥 넘어간다") ---
    `WithdrawAccountSheet` · `BankAuthSheet`(두 이체 화면 공용). 시트는 아래에서 올라오고, 지문 센서는 기다리는 동안 퍼지는 고리 ·
    누르는 동안 차오르는 고리(`--bank-hold` 동안) · 실패면 흔들림 · 성공이면 체크가 그려진다. 얼굴(iOS형)은 가운데 표시가 커지며 나타나고

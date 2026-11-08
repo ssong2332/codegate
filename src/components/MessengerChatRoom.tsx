@@ -1455,6 +1455,8 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
           landingKind={fakeLanding.landingKind}
           // T190-6(AC-092 (b)) — 브라우저 바도 같은 스킨(카카오형은 스킨이 없어 기본).
           skin={isSms ? messengerSkin : "default"}
+          // ⭐ 2026-11-08 웹 안의 웹 PR-1 — 문자형 = 기기 브라우저 틀 · 대화방형 = 메신저 안 브라우저 틀(판정표 `landingChrome.ts` LC).
+          messengerSurface={surface}
           onClose={() => setFakeLanding(null)}
           // 사용자 결정(2026-10-18) — 가짜 페이지 브라우저 바의 종료 버튼을 없애 `onEndTraining`을 넘기지 않는다.
           // 끝내는 경로 = 닫기 → 이 대화 화면 헤더의 종료 버튼(그대로 남는다).
