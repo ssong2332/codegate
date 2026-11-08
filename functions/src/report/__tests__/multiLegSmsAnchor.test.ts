@@ -9,6 +9,7 @@
 // | M3 | 카드사 고급 R1 fv-k3dn 통화 4(안전계좌 이체) | card-safe-account | 연결 안 수 → 통화 4보다 앞 | 세션 누적 → 통화 4 |
 // | M4 | 같은 통화 안 연결 끊김 다시 잇기(화면 꺼짐 · 10분 이어받기) | 재연결 뒤 문자 | 0부터 → 재연결 전 앞쪽 | 세션 누적 → 재연결 뒤 |
 // | M5 | 세션 첫 연결(대조) | 첫 통화 문자 | 같음 | 같음(동작 변화 0) |
+// | M6 | 라이브 재시험 7(통화 1개 · 재연결 없음) — 사기범이 턴을 말하는 **도중** 도구(이미 말한 그 턴은 아직 flush 전) | 인증번호 · 출금 예약 | 그 턴 빠짐 → ⑤ · ⑦ 뒤 | 그 턴 +1 → ⑥ · ⑧ 뒤 |
 // 클라 쪽 값이 실제로 세션 누적인지는 루트 `src/lib/realtime/sessionScammerAnchor.test.ts`가 배선으로 고정한다.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -106,4 +107,17 @@ test("[M4 · M5] 같은 통화 재연결 뒤 문자 · 첫 연결(대조)", () =
   // M5 — 첫 연결은 두 값이 같다(동작 변화 0).
   const m5 = claims(perConnection, 0, 5);
   assert.equal(m5.old, m5.fixed);
+});
+
+test("[M6] 라이브 재시험 7 — 통화 1개에서도 말하는 도중 요청은 그 턴까지 세야 문자가 같이 들린 대사 뒤에 놓인다", () => {
+  // 사기범 대사 ①~⑨ · 참가자 답 번갈이(오프닝 문서 turnIndex 0 = 낭독 안 함 · 리플레이 숨김 · 앵커 +1 칸).
+  const { messages } = layout([9]);
+  const scammerTurn = (n: number) => messages.filter((m) => m.role === "scammer")[n]!.turnIndex; // ①=1번째 전사
+  const placed = (claimed: number) => resolveAnchor(realtimeAnchorScammerTurn(claimed), messages, CREATED).anchorTurnIndex;
+  // 문자 1 — ①~⑤ flush 뒤 ⑥을 말하는 도중. 종전 5 → ⑤ 뒤(관찰과 같음) · 고친 6 → ⑥ 뒤.
+  assert.equal(placed(5), scammerTurn(5));
+  assert.equal(placed(6), scammerTurn(6));
+  // 문자 2 — ⑧을 말한 직후(flush 전) 도구 → 도구 뒤 ⑨. 종전 7 → ⑦ 뒤(관찰과 같음) · 고친 8 → ⑧ 뒤(⑨ 바로 앞).
+  assert.equal(placed(7), scammerTurn(7));
+  assert.equal(placed(8), scammerTurn(8));
 });

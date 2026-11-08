@@ -28,3 +28,19 @@ export function appendScammerChunk(
   if (!boundaryPending || !chunk.trim()) return { buffer: scammerBuffer + chunk, boundaryPending };
   return { buffer: `${scammerBuffer.trimEnd()}\n${chunk.trimStart()}`, boundaryPending: false };
 }
+
+/**
+ * ⭐ 2026-11-08(라이브 재시험 7 · 사용자 결정 "고치기" — 문자 위치) — 문자 · 확인 오퍼 앵커 입력(서버로 넘기는 사기범 전사 수).
+ * 앵커 = "문자가 도착한 시점까지 사기범 문서 수"(`functions/src/inCallSms/buildDoc.ts` `realtimeAnchorScammerTurn`). 도구 호출 · 말하는 도중 "보냈다" 주장은
+ * **사기범이 한 턴을 말하는 도중**에 오므로, 이미 말했지만 아직 flush되지 않은 그 턴도 곧 문서 1개가 된다(위 표 2행 — 도구 뒤 말은 같은 문서).
+ * 그 턴을 빼면 리포트 · 리플레이에서 문자가 한 대사 앞에 놓였다(재시험 7: ⑥과 함께 온 문자 → ⑤ 뒤 · ⑨ 직전에 온 문자 → ⑦ 뒤).
+ *
+ * | # | If | Then |
+ * |---|---|---|
+ * | K6 | 이 턴에 이미 말한 사기범 대사가 있다(사고 문장 · 금지 표식을 거른 뒤 비어 있지 않음) | 세션 누적 + 1 |
+ * | K7 | 없다(턴 시작 직후 도구 · 발화 뒤 백스톱) | 세션 누적 그대로 |
+ * 사용자 발화 수의 같은 보정(`claimedUserTurns` — 응답 중인 발화 +1)과 같은 규칙이다.
+ */
+export function claimedScammerTranscriptTurns(sessionScammerTurns: number, currentTurnSpoken: boolean): number {
+  return sessionScammerTurns + (currentTurnSpoken ? 1 : 0);
+}

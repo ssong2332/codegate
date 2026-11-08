@@ -62,7 +62,7 @@ import {
 import { INITIAL_LOUDNESS_STATE, normalizeChunk, type LoudnessState } from "./loudnessNormalizer";
 import { createEarlyMessageGate } from "./earlyMessageGate";
 import { INITIAL_UNHEARD_REPLY_STATE, UNHEARD_REPLY_TEXT, stepUnheardReply } from "./unheardReply";
-import { appendScammerChunk, shouldMarkToolBoundary } from "./toolTurnTranscript";
+import { appendScammerChunk, claimedScammerTranscriptTurns, shouldMarkToolBoundary } from "./toolTurnTranscript";
 import { INITIAL_THOUGHT_LEAK_GATE_STATE, pickLiveAudioData, stepThoughtLeakGate, stripLeakedThought, type LiveContentPart } from "./thoughtLeak";
 import { guardLiveScammerLine, guardLiveUserLine } from "./liveTranscriptGuard";
 import {
@@ -657,7 +657,10 @@ export default function GeminiVoiceSession({
     // ⭐ 2026-11-08(#538 발견 1) — 종전 지역 사본 `modelToolScammerTurns`(이 effect 안 `let` · 연결마다 0)를 없앴다. 도구 경로가 넘기는 사기범 전사 수는
     // 부모 누적 getter다 — 부모 `handleTranscriptTurn`이 아래 flush의 `onTranscriptTurn("scammer")` 호출 안에서 **동기적으로** 올리므로(같은 경계 ·
     // 빈 전사 0 — `countTranscriptFlush`) 리렌더 지연 없이 최신 값이고, 다음 통화 · 재연결 재마운트에도 세션 값이 유지된다(사용자 발화 수와 같은 방식).
-    const sessionScammerTurns = () => handlersRef.current.getSessionScammerTurns();
+    // ⭐ 2026-11-08(라이브 재시험 7) — 도구는 사기범이 턴을 말하는 **도중**에 온다. 이미 말한 이 턴(아직 flush 전)도 곧 문서 1개가 되므로 더한다
+    // (판정 K6 · K7 = `claimedScammerTranscriptTurns` — 응답 중인 사용자 발화 +1과 같은 규칙). 거르는 식은 flush와 같은 `guardScammer`.
+    const sessionScammerTurns = () =>
+      claimedScammerTranscriptTurns(handlersRef.current.getSessionScammerTurns(), guardScammer(scammerBuffer) !== "");
     // ⭐ T192 C5(§79.18 (3) ↳ ② · §79.19 (7) · G552 ⓒ) — 예전 지역 사용자 발화 사본은 없앴다. 모델 도구 경로가
     // 서버에 넘기는 사용자 발화 수는 이제 부모 누적값(`getSessionUserTurns` — 같은 flush에서 오른다 · leg 재마운트에도 유지)
     // + 응답 중 발화 1이다. `send_prepared_sms` · `end_call` 두 분기가 **이 함수 하나**를 쓴다(오늘 동작 변화 0 — §79.18 끝).

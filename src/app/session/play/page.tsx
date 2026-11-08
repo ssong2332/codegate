@@ -173,6 +173,7 @@ import {
   INITIAL_TURN_COUNTERS,
   type InstructionDelivery,
 } from "@/lib/realtime/contextInjection";
+import { claimedScammerTranscriptTurns } from "@/lib/realtime/toolTurnTranscript";
 import {
   INITIAL_CONFIRM_RESULT_INJECTION_STATE,
   VERIFY_RECONNECT_MAX_ATTEMPTS,
@@ -1290,7 +1291,8 @@ export default function SessionCallPage() {
         const result = await deliverInCallSms({
           sessionId,
           userTurns: smsClaimPendingRef.current ? Math.max(counters.userTurns, smsClaimUserTurnsRef.current) : counters.userTurns,
-          scammerTranscriptTurns: counters.scammerTranscriptTurns,
+          // ⭐ 2026-11-08(라이브 재시험 7) — 말하는 도중 "보냈다" 주장(§126)이면 그 턴은 아직 flush 전이지만 곧 문서 1개가 된다(판정 K6 — 모델 도구와 같은 함수).
+          scammerTranscriptTurns: claimedScammerTranscriptTurns(counters.scammerTranscriptTurns, smsClaimRaisedMidTurnRef.current),
           trigger: "backstop",
           ...(smsClaimPendingRef.current ? { smsClaimed: true } : {}),
         });
