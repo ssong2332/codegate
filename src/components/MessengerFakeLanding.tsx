@@ -85,7 +85,9 @@ import {
   availableBalance,
   recordLoanApplication,
   recordWithdrawal,
+  resolveMyAccount,
   withdrawAccountsFor,
+  type CardAccount,
   withdrawError,
   type WithdrawAccount,
 } from "../lib/bankapp/withdrawAccounts";
@@ -237,6 +239,11 @@ type MessengerFakeLandingProps = {
    * (판정표 S — `bankApp.ts` `spokenAccountFrom`). 말하지 않은 쪽 · 부재 = 종전 고정 값. ⛔ 화면 안에서만 쓴다(콜백 · 네트워크 0 · G138).
    */
   spokenAccountNow?: () => SpokenAccount;
+  /**
+   * ⭐ 2026-11-08(실기기 신고 — 상품권 화면에 무관한 은행 · 금액 3개 · 사용자 결정 D1 ~ D3) — 시작 전 '이번 훈련 속 내 정보' 카드에 넣은 거래 은행 · 잔액
+   * (`withdrawAccounts.ts` 판정표 A1 · A5 — 말한 값보다 먼저). 부재 = 카드 값 없음. ⛔ 화면 안에서만 쓴다(콜백 · 네트워크 0 · G138).
+   */
+  cardAccountNow?: () => CardAccount | undefined;
 };
 
 /**
@@ -285,6 +292,7 @@ export default function MessengerFakeLanding({
   loanContext,
   bankIdentity,
   spokenAccountNow,
+  cardAccountNow,
 }: MessengerFakeLandingProps) {
   // ⭐ PR-1 — 틀 색은 기기 쪽이다. 테마는 훈련 화면 테마(지금 라이트 고정 — 사용자 결정 2026-10-21 · `deviceTheme.ts`)를 따른다.
   const bar = browserBarTokensFor(skin, TRAINING_SCREEN_THEME);
@@ -501,6 +509,8 @@ export default function MessengerFakeLanding({
             returnLabel={returnLabel}
             onClose={onClose}
             onSubmit={() => onCredentialSubmit?.()}
+            spokenAccountNow={spokenAccountNow}
+            cardAccountNow={cardAccountNow}
           />
         ) : landingId !== undefined && CASH_LANDINGS.includes(landingId) ? (
           // ⭐ 2026-11-07(사용자 결정 D-G2 E1-b) — 내 은행 출금 예약 화면(금액 · 형태 → 금융사기 예방 문진표 → 생체 인증 → 예약 번호). 예약 · 보류 = 무인자(G138).
@@ -511,6 +521,7 @@ export default function MessengerFakeLanding({
             onHeld={() => onLandingStep?.("landing_held")}
             bankIdentity={bankIdentity}
             spokenAccountNow={spokenAccountNow}
+            cardAccountNow={cardAccountNow}
             returnLabel={returnLabel}
             skin={skin}
           />
@@ -523,6 +534,7 @@ export default function MessengerFakeLanding({
             onHeld={() => onLandingStep?.("landing_held")}
             bankIdentity={bankIdentity}
             spokenAccountNow={spokenAccountNow}
+            cardAccountNow={cardAccountNow}
             returnLabel={returnLabel}
             skin={skin}
             payBarLifted={payBarLifted}
@@ -534,6 +546,8 @@ export default function MessengerFakeLanding({
             onClose={onClose}
             onCredentialSubmit={() => onCredentialSubmit?.()}
             bankIdentity={bankIdentity}
+            spokenAccountNow={spokenAccountNow}
+            cardAccountNow={cardAccountNow}
             returnLabel={returnLabel}
             skin={skin}
             payBarLifted={payBarLifted}
@@ -546,6 +560,8 @@ export default function MessengerFakeLanding({
             onLandingStep={onLandingStep}
             prefilledAccount={prefilledAccount}
             prefilledTransfer={prefilledTransfer}
+            spokenAccountNow={spokenAccountNow}
+            cardAccountNow={cardAccountNow}
             returnLabel={returnLabel}
             skin={skin}
           />
@@ -1642,6 +1658,7 @@ function GoldBuyMockup({
   onHeld,
   bankIdentity,
   spokenAccountNow,
+  cardAccountNow,
   returnLabel,
   skin,
   payBarLifted,
@@ -1655,6 +1672,8 @@ function GoldBuyMockup({
   bankIdentity?: { myBankName: string; ledgerKey: string };
   /** 판정표 S12(2026-11-08 사용자 결정) — 출금 예약 화면과 같은 규칙: 여는 순간 참가자가 말한 거래 은행 · 잔액. ⛔ 결제 계좌 목록에만 쓴다(G138). */
   spokenAccountNow?: () => SpokenAccount;
+  /** 판정표 A1 · A5(2026-11-08) — 시작 전 카드에 넣은 거래 은행 · 잔액(말한 값보다 먼저). ⛔ 계좌 목록 · 머리띠에만(G138). */
+  cardAccountNow?: () => CardAccount | undefined;
   returnLabel: string;
   skin: MessengerSkin;
   /** PR-3 B2 — iOS형 틀이면 결제 막대를 떠 있는 주소 막대 위로. */
@@ -1667,10 +1686,12 @@ function GoldBuyMockup({
   const siteTokens = PURCHASE_SITE_TOKENS.gold;
   const ledger = bankIdentity?.ledgerKey ?? "";
   const [spoken] = useState<SpokenAccount>(() => spokenAccountNow?.() ?? {});
-  const appBankName = spoken.bankName ?? bankIdentity?.myBankName ?? myBankNameFor(ledger);
-  const [accounts] = useState(() =>
-    withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: spoken.balance ?? fictionalBalanceFor(ledger) }),
+  // ⭐ 2026-11-08 판정표 A · C(`withdrawAccounts.ts`) — 카드 값 → 말한 값 → 고정 값 · 참가자 쪽 값이 있으면 그 계좌 하나만.
+  const [mine] = useState(() =>
+    resolveMyAccount({ card: cardAccountNow?.(), spoken, fixedBankName: bankIdentity?.myBankName ?? myBankNameFor(ledger), fixedBalance: fictionalBalanceFor(ledger) }),
   );
+  const appBankName = mine.bankName;
+  const [accounts] = useState(() => withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: mine.balance, single: mine.single }));
   const [accountId, setAccountId] = useState<WithdrawAccount["id"]>("main");
   const account = accounts.find((item) => item.id === accountId) ?? accounts[0]!;
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);
@@ -2061,6 +2082,7 @@ function CashWithdrawMockup({
   onHeld,
   bankIdentity,
   spokenAccountNow,
+  cardAccountNow,
   returnLabel,
   skin,
 }: {
@@ -2073,6 +2095,8 @@ function CashWithdrawMockup({
   bankIdentity?: { myBankName: string; ledgerKey: string };
   /** 판정표 S — 여는 순간 참가자가 말한 거래 은행 · 잔액(말하지 않은 쪽 = 고정 값). ⛔ 계좌 목록 · 머리띠에만 쓴다(G138). */
   spokenAccountNow?: () => SpokenAccount;
+  /** 판정표 A1 · A5(2026-11-08) — 시작 전 카드에 넣은 거래 은행 · 잔액(말한 값보다 먼저). ⛔ 계좌 목록 · 머리띠에만(G138). */
+  cardAccountNow?: () => CardAccount | undefined;
   returnLabel: string;
   skin: MessengerSkin;
 }) {
@@ -2082,10 +2106,12 @@ function CashWithdrawMockup({
   const site = SITE_SKINS.bank;
   const ledger = bankIdentity?.ledgerKey ?? "";
   const [spoken] = useState<SpokenAccount>(() => spokenAccountNow?.() ?? {});
-  const appBankName = spoken.bankName ?? bankIdentity?.myBankName ?? myBankNameFor(ledger);
-  const [accounts] = useState(() =>
-    withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: spoken.balance ?? fictionalBalanceFor(ledger) }),
+  // ⭐ 2026-11-08 판정표 A · C(`withdrawAccounts.ts`) — 카드 값 → 말한 값 → 고정 값 · 참가자 쪽 값이 있으면 그 계좌 하나만.
+  const [mine] = useState(() =>
+    resolveMyAccount({ card: cardAccountNow?.(), spoken, fixedBankName: bankIdentity?.myBankName ?? myBankNameFor(ledger), fixedBalance: fictionalBalanceFor(ledger) }),
   );
+  const appBankName = mine.bankName;
+  const [accounts] = useState(() => withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: mine.balance, single: mine.single }));
   const [accountId, setAccountId] = useState<WithdrawAccount["id"]>("main");
   const account = accounts.find((item) => item.id === accountId) ?? accounts[0]!;
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);
@@ -2435,6 +2461,8 @@ function VoucherPurchaseMockup({
   onClose,
   onCredentialSubmit,
   bankIdentity,
+  spokenAccountNow,
+  cardAccountNow,
   returnLabel,
   skin,
   payBarLifted,
@@ -2444,6 +2472,10 @@ function VoucherPurchaseMockup({
   /** ⛔ 무인자 — 결제했다는 사실 하나만 올린다(G138). */
   onCredentialSubmit: () => void;
   bankIdentity?: { myBankName: string; ledgerKey: string };
+  /** 판정표 A2 · A3 · A6(2026-11-08 실기기 신고) — 여는 순간 참가자가 통화에서 말한 거래 은행 · 잔액. ⛔ 결제 계좌 목록에만(G138). */
+  spokenAccountNow?: () => SpokenAccount;
+  /** 판정표 A1 · A5(2026-11-08) — 시작 전 카드에 넣은 거래 은행 · 잔액(말한 값보다 먼저). ⛔ 계좌 목록 · 머리띠에만(G138). */
+  cardAccountNow?: () => CardAccount | undefined;
   returnLabel: string;
   skin: MessengerSkin;
   /** PR-3 B2 — iOS형 틀이면 결제 막대를 떠 있는 주소 막대 위로. */
@@ -2455,8 +2487,17 @@ function VoucherPurchaseMockup({
   const site = SITE_SKINS.gift;
   const siteTokens = PURCHASE_SITE_TOKENS.gift;
   const ledger = bankIdentity?.ledgerKey ?? "";
-  const appBankName = bankIdentity?.myBankName ?? myBankNameFor(ledger);
-  const [accounts] = useState(() => withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: fictionalBalanceFor(ledger) }));
+  // ⭐ 2026-11-08 판정표 A · C — 신고 화면(검찰 고급 상품권). 카드 값 → 말한 값 → 고정 값 · 참가자 쪽 값이 있으면 그 계좌 하나만.
+  const [mine] = useState(() =>
+    resolveMyAccount({
+      card: cardAccountNow?.(),
+      spoken: spokenAccountNow?.(),
+      fixedBankName: bankIdentity?.myBankName ?? myBankNameFor(ledger),
+      fixedBalance: fictionalBalanceFor(ledger),
+    }),
+  );
+  const appBankName = mine.bankName;
+  const [accounts] = useState(() => withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: mine.balance, single: mine.single }));
   const [accountId, setAccountId] = useState<WithdrawAccount["id"]>("main");
   const account = accounts.find((item) => item.id === accountId) ?? accounts[0]!;
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);
@@ -2828,9 +2869,12 @@ type LoanApplyProps = {
   onClose: () => void;
   /** 마지막 신청 버튼을 눌렀다는 사실 하나(무인자 — G138). */
   onSubmit?: () => void;
+  /** 판정표 A(2026-11-08) — 입금 계좌(= 첫 출금 계좌)의 은행 · 잔액 출처. ⛔ 화면 안에서만(G138). */
+  spokenAccountNow?: () => SpokenAccount;
+  cardAccountNow?: () => CardAccount | undefined;
 };
 
-function LoanApplyMockup({ ledgerKey, lenderName, skin, returnLabel, onClose, onSubmit }: LoanApplyProps) {
+function LoanApplyMockup({ ledgerKey, lenderName, skin, returnLabel, onClose, onSubmit, spokenAccountNow, cardAccountNow }: LoanApplyProps) {
   // ⭐ PR-3(판정표 P4) — 대출 계열 색. 키 이름이 기본 토큰과 같아 아래 단계 코드는 그대로다.
   const page: PurchasePalette = purchasePalette("loan");
   const site = SITE_SKINS.loan;
@@ -2841,8 +2885,12 @@ function LoanApplyMockup({ ledgerKey, lenderName, skin, returnLabel, onClose, on
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const offer = loanOfferFor(ledgerKey);
-  const appBankName = myBankNameFor(ledgerKey);
-  const depositAccount = withdrawAccountsFor({ seed: ledgerKey, appBankName, primaryBalance: fictionalBalanceFor(ledgerKey) })[0]!;
+  // ⭐ 2026-11-08 판정표 A — 입금 계좌는 뒤의 대출금 보관 이체 화면의 첫 출금 계좌와 같은 계좌다(같은 판정 · 같은 장부 열쇠 "main").
+  const [mine] = useState(() =>
+    resolveMyAccount({ card: cardAccountNow?.(), spoken: spokenAccountNow?.(), fixedBankName: myBankNameFor(ledgerKey), fixedBalance: fictionalBalanceFor(ledgerKey) }),
+  );
+  const appBankName = mine.bankName;
+  const depositAccount = withdrawAccountsFor({ seed: ledgerKey, appBankName, primaryBalance: mine.balance, single: mine.single })[0]!;
   const amountValue = Number(amount.replace(/[\s,]/g, "")) || 0;
   const hint = amountHint(amount);
 
@@ -3095,6 +3143,8 @@ function CredentialFormMockup({
   onLandingStep,
   prefilledAccount,
   prefilledTransfer,
+  spokenAccountNow,
+  cardAccountNow,
   returnLabel,
   skin,
 }: {
@@ -3108,6 +3158,9 @@ function CredentialFormMockup({
   prefilledAccount?: string;
   /** ⭐ P2(X6) — 훈련용 이체 화면의 받는 분 · 금액 · 은행 미리 채움(부재 = 받는 분 "조회 중" · 금액 빈 칸). */
   prefilledTransfer?: PrefilledTransfer;
+  /** 판정표 A(2026-11-08) — 훈련용 이체 화면의 첫 출금 계좌 은행 · 잔액 출처(말한 값 · 카드 값). ⛔ 화면 안에서만(G138). */
+  spokenAccountNow?: () => SpokenAccount;
+  cardAccountNow?: () => CardAccount | undefined;
   /** 완료 화면 복귀 버튼 문면(진입 표면이 정한다 — D-93). */
   returnLabel: string;
   /** 기기 스킨 — 훈련용 이체 화면의 인증 수단(iOS형 = 얼굴 · 그 밖 = 지문). */
@@ -3120,9 +3173,18 @@ function CredentialFormMockup({
   const [bankStage, setBankStage] = useState<"form" | "confirm" | "auth">("form");
   // 2026-11-07 — 출금 계좌(가상 3개 · 기본 = 머리띠 은행 입출금 · 잔액은 내 은행 송금 화면과 같은 세션 값) · 계좌 선택 시트.
   const ledger = prefilledTransfer?.ledgerKey ?? "";
-  const appBankName = prefilledTransfer?.myBankName ?? myBankNameFor(ledger, prefilledTransfer?.bankName);
+  // ⭐ 2026-11-08 판정표 A · C — 카드 값 → 말한 값 → 고정 값 · 참가자 쪽 값이 있으면 그 계좌 하나만(이체 화면이 아니면 쓰이지 않는다).
+  const [mine] = useState(() =>
+    resolveMyAccount({
+      card: bankTransfer ? cardAccountNow?.() : undefined,
+      spoken: bankTransfer ? spokenAccountNow?.() : undefined,
+      fixedBankName: prefilledTransfer?.myBankName ?? myBankNameFor(ledger, prefilledTransfer?.bankName),
+      fixedBalance: fictionalBalanceFor(ledger),
+    }),
+  );
+  const appBankName = mine.bankName;
   const [accounts] = useState(() =>
-    withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: fictionalBalanceFor(ledger), avoidBankName: prefilledTransfer?.bankName }),
+    withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: mine.balance, avoidBankName: prefilledTransfer?.bankName, single: mine.single }),
   );
   const [accountId, setAccountId] = useState<WithdrawAccount["id"]>("main");
   const account = accounts.find((item) => item.id === accountId) ?? accounts[0]!;
@@ -3271,7 +3333,7 @@ function CredentialFormMockup({
       {/* P2 — 훈련용 이체 화면은 은행 앱 흉내라 머리띠에 은행명을 쓴다. N2(실기기 신고 2026-11-01) — 받는 계좌 은행이 아니라 참가자의 "내 은행"이다
           (`myBankName` — 부재 = 발급처 이름 · 실존 은행명 0). */}
       <span className="truncate">
-        {bankTransfer && prefilledTransfer?.myBankName ? `${prefilledTransfer.myBankName} 모바일뱅킹` : issuerNameOf(copy.issuerLabel)}
+        {bankTransfer && prefilledTransfer?.myBankName ? `${appBankName} 모바일뱅킹` : issuerNameOf(copy.issuerLabel)}
       </span>
     </div>
   );

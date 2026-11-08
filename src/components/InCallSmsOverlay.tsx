@@ -48,6 +48,7 @@ import {
 import { runExitSequence } from "@/lib/incallsms/closeSequence";
 import { CALL_BAR_TOKENS, smsListTokensFor, smsThreadTokensFor } from "@/lib/phone/skinTokens";
 import { BANK_APP_COPY, amountFromSmsBody, holderFromSmsBody, type AmountComparison, type SpokenAccount, type TransferTarget } from "@/lib/bankapp/bankApp";
+import type { CardAccount } from "@/lib/bankapp/withdrawAccounts";
 import type { MessengerSkin } from "@/lib/messenger/detectSkin";
 
 type InCallSmsOverlayProps = {
@@ -129,6 +130,11 @@ type InCallSmsOverlayProps = {
    */
   spokenAccountNow?: () => SpokenAccount;
   /**
+   * ⭐ 2026-11-08(실기기 신고 — 상품권 화면 출금 계좌 · 판정표 A1 · A5) — 시작 전 '이번 훈련 속 내 정보' 카드에 넣은 거래 은행 · 잔액(이 탭에만 · 서버 0).
+   * 화면 안 계좌 목록 · 머리띠에만 쓰인다(G138). 부재 = 카드 값 없음.
+   */
+  cardAccountNow?: () => CardAccount | undefined;
+  /**
    * 2026-11-07 실기기 신고("문자 발신처는 다른데 한 곳에서 오는 걸로 되어 있다") — 열 때 바로 보일 **대화방**(발신 라벨 또는 번호).
    * 도착 배너를 눌러 열면 그 문자를 보낸 번호의 대화방이 바로 열린다(실제 휴대폰 알림). 부재 · 없는 번호 = 받은 문자 목록(메시지 앱 첫 화면).
    */
@@ -163,6 +169,7 @@ export default function InCallSmsOverlay({
   onSendToAccount,
   demandAmountNow,
   spokenAccountNow,
+  cardAccountNow,
   onDialNumber,
   bankIdentity,
   initialThread = null,
@@ -880,6 +887,8 @@ export default function InCallSmsOverlay({
                 bankIdentity={bankIdentity}
                 // ⭐ 2026-11-08(판정표 S · S12) — 출금 예약 · 금 거래소 화면의 출금 계좌 은행 · 잔액 = 참가자가 말한 값(화면 안에서만).
                 spokenAccountNow={spokenAccountNow}
+                // ⭐ 2026-11-08(판정표 A) — 출금 계좌가 나오는 화면 전부(금 · 출금 예약 · 상품권 · 대출 · 이체)의 카드 값.
+                cardAccountNow={cardAccountNow}
                 // T194-c-1(Q2) — 가짜 "권한 허용" 응낙 **사실 하나**를 페이지로 중계한다(인자 = 랜딩 id뿐 · 이 파일은 콜러블을 부르지 않는다).
                 onInstallConsent={() => {
                   if (landing.landingKind === "app-install" && landing.landingId) onInstallConsent?.(landing.landingId);

@@ -124,6 +124,7 @@ const CLIENT_SCREEN_INVENTORY: Record<string, boolean> = {
   "TrainingPrepScreen.tsx": false, // 훈련 준비 대기 화면(UX D-141 · §97.7) — 세션 전 앱 안내(실제 준비 단계 · 예방 요령), 사기 표면 아님
   "SelectScreenHeader.tsx": false, // 선택 화면 머리(UX D-141) — 뒤로 · 단계 표시 · 제목, 사기 표면 아님
   "PageToc.tsx": false, // 긴 페이지 "목록" 토글(UX D-140 · 2026-10-21) — 앱 자신의 탐색 UI, 사기 표면 아님(훈련 화면에는 두지 않는다 — G-TOC7)
+  "CardAccountFields.tsx": false, // 2026-11-08 "내 정보" 블록 안 거래 은행 · 잔액 칸(세션 전 앱 화면 · 가상 은행 고르기만) — 앱 자신의 입력 칸, 사기 표면 아님
   "PersonaCardInputFields.tsx": false, // §88 UX D-131 "내 정보" 선택 입력(세션 전 앱 화면) — 앱 자신의 안내 · 입력 칸, 사기 표면 아님
   "CallExtraSheets.tsx": false, // 2026-10-27 통화 부가 기능 시트(더 보기 · 오디오 기기 · 연락처 · 통화 어시스트) — 기기 통화 앱 메뉴 이름만, 사기 표면 아님
   "IosCallControls.tsx": false, // 2026-10-27 iOS 26 통화 버튼 묶음 — 기기 통화 앱 버튼 이름만, 사기 표면 아님

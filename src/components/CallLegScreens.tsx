@@ -14,7 +14,7 @@
 // | 지갑(`view: wallet`) | 내 카드 뒷면(서명란 · 고객센터 번호 — 누르면 키패드에 채움) · 앞면 보기. 2026-11-07 사용자 결정 "내 카드 뒷면 화면" · CVC 0 |
 // | 발신 중(`connecting`) | 통화 화면과 같은 바탕 · 배치(번호 · "발신 중…" · 흐린 버튼 묶음 · 종료 원). 종료 = 그 발신만 끊기 |
 // | 넘김 대기(`holding`) | **그리지 않는다** — 통화 화면이 그대로 보이고 대기음만 들린다(2026-11-07 "검은 화면은 몰입감을 깬다") |
-// | 다시 걸려 온 전화(`incoming`) | 수신 벨과 같은 바탕 · 받기 / 거절(거절 = 그 전화만 거절 — 훈련 계속) |
+// | 다시 걸려 온 전화(`incoming`) | 수신 벨과 같은 바탕 · 받기 / 거절(거절 = 그 전화만 거절 — 훈련 계속) · 오른쪽 위 훈련 종료(2026-11-08) |
 // | 자동 안내(`genuine`) | 통화 화면 바탕 · 진짜 기관 자동 안내(서버 번호부 값 그대로) · 방어 성공 안내 · 종료 = 훈련 종료 |
 // ⛔ 세션 중 화면이라 '모의' · '훈련용' 표식 문구 0(G437). ⛔ 실제 전화 발신 0(`tel:` 링크 0). ⛔ 기관 번호 연락처 미리 저장 0.
 // z = 통화 셸 위 · 문자 배너 · 문자함(z-40) 아래 — 다이얼 중에도 문자 속 번호를 다시 볼 수 있다.
@@ -54,7 +54,7 @@ export type CallLegScreensProps = {
   onDecline: () => void;
   /** 발신 중 종료 — 그 발신만 끊기(훈련 계속). */
   onCancelDial: () => void;
-  /** 전화 앱 오른쪽 위 · 자동 안내 종료 — 훈련을 끝낸다. */
+  /** 전화 앱 오른쪽 위 · 다시 걸려 온 전화 오른쪽 위 · 자동 안내 종료 — 훈련을 끝낸다. */
   onEndTraining: () => void;
   /** 문자 앱 열기(홈 화면 메시지). 부재 = 받은 문자 0 — 아이콘은 그대로 두고 빈 문자함 대신 아무 동작 0. */
   onOpenSms?: () => void;
@@ -147,6 +147,25 @@ function phoneAppTheme(skin: DeviceSkin): PhoneAppTheme {
     field: "rgba(255,255,255,0.10)",
     wallpaper: "linear-gradient(165deg, #1A2430 0%, #2B3B4D 55%, #4A5C70 100%)",
   };
+}
+
+/**
+ * 통화 사이 화면의 상시 훈련 종료(AC-006 — 어느 화면에서도 1탭). 전화 앱 오른쪽 위 · 다시 걸려 온 전화 오른쪽 위가 **같은 컨트롤**을 쓴다.
+ * 이름 "훈련 종료"는 G437 닫힌 예외(AC-086 (f)) 그대로. 바탕: 밝은 화면 = 옅은 빨강 / 어두운 화면 = 흰 알약(빨강 #C6392F 대비 약 5:1 — 추정 계산).
+ */
+function LegEndTrainingPill({ onDark, onClick }: { onDark: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="훈련 종료"
+      className="flex min-h-[44px] items-center gap-1.5 rounded-full px-3 text-[14px] font-semibold"
+      style={{ color: "#C6392F", backgroundColor: onDark ? "rgba(255,255,255,0.92)" : "rgba(198,57,47,0.08)" }}
+    >
+      <span aria-hidden="true" className="h-[10px] w-[10px] rounded-[2px]" style={{ backgroundColor: "#C6392F" }} />
+      훈련 종료
+    </button>
+  );
 }
 
 /** 통화 화면 같은 바탕(바깥 = 한 단계 어두운 단색 · 안 = 최대폭 430px 셸). */
@@ -307,6 +326,10 @@ export default function CallLegScreens(props: CallLegScreensProps) {
     );
     return (
       <CallShell tokens={tokens} background={ringBackground(tokens)} label="전화 수신">
+        {/* 2026-11-08 라이브 재시험 12 — 다시 걸려 온 전화에도 훈련 종료(전화 앱과 같은 컨트롤 · 오른쪽 위). 거절은 그 전화만(훈련 계속). */}
+        <div className="-mt-4 flex justify-end px-3">
+          <LegEndTrainingPill onDark onClick={props.onEndTraining} />
+        </div>
         <CallHeader tokens={tokens} number={screen.label} status="수신 전화" />
         <div className="flex-1" />
         <div className="flex justify-between px-12" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 56px)" }}>
@@ -407,16 +430,7 @@ function PhoneApp(props: CallLegScreensProps & { screen: Extract<LegScreen, { ki
         ) : (
           <>
             <div className="flex justify-end px-3" style={{ paddingTop: "calc(env(safe-area-inset-top) + 8px)" }}>
-              <button
-                type="button"
-                onClick={props.onEndTraining}
-                aria-label="훈련 종료"
-                className="flex min-h-[44px] items-center gap-1.5 rounded-full px-3 text-[14px] font-semibold"
-                style={{ color: "#C6392F", backgroundColor: ios || props.skin === "samsung" ? "rgba(198,57,47,0.08)" : "rgba(255,255,255,0.92)" }}
-              >
-                <span aria-hidden="true" className="h-[10px] w-[10px] rounded-[2px]" style={{ backgroundColor: "#C6392F" }} />
-                훈련 종료
-              </button>
+              <LegEndTrainingPill onDark={!(ios || props.skin === "samsung")} onClick={props.onEndTraining} />
             </div>
             {view === "recents" ? (
               <RecentsPane theme={theme} recents={props.recents} onCallNumber={props.onCallNumber} dialing={props.dialing} />

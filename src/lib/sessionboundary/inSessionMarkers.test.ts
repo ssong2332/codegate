@@ -70,6 +70,7 @@ const SESSION_SURFACE_REGISTRY: Record<string, SurfaceRole> = {
   "src/components/TrainingPrepScreen.tsx": "not-in-session", // 훈련 준비 대기 화면(UX D-141 · §97.7) — 세션 전
   "src/components/SelectScreenHeader.tsx": "not-in-session", // 선택 화면 머리(UX D-141) — 세션 전
   "src/components/PageToc.tsx": "not-in-session", // 긴 페이지 "목록" 토글(UX D-140) — 시나리오 선택 · 리포트 · 고지 화면(세션 밖). 훈련 화면 금지는 G-TOC7
+  "src/components/CardAccountFields.tsx": "not-in-session", // 2026-11-08 "내 정보" 블록 안 거래 은행 · 잔액 칸(난이도 화면 — 세션 전)
   "src/components/PersonaCardInputFields.tsx": "not-in-session", // §88 UX D-131 "내 정보" 선택 입력(난이도 · 챌린지 만들기 — 세션 전)
   "src/components/CallExtraSheets.tsx": "in-session", // 2026-10-27 통화 부가 기능 시트(통화 셸)
   "src/components/IosCallControls.tsx": "in-session", // 2026-10-27 iOS 26 통화 버튼 묶음(통화 셸)
@@ -114,8 +115,8 @@ test("[T187/G436] 세션 표면 등록부 = src/components/*.tsx ∪ src/app/ses
   // → §121.4 30(+MessengerChatRoom — 메신저 라우트 본문) → §123 31(+VoiceTalkDialScreen) → §134 32(+DebugFlagCapture — DOM 0)
   // → 2026-10-27 33(+OneUiCallControls — One UI 9 통화 버튼 묶음) → 35(+CallExtraSheets · IosCallControls — 통화 부가 기능 · iOS 26)
   // → BA-1 2026-11-01 36(+BankAppOverlay — 통화 중 훈련용 홈 · 내 은행 앱) → 2026-11-01 37(+LogoutButton — 훈련 유형 선택 하단 로그아웃) → §142 38(+CallLegScreens — 통화 사이 화면)
-  // → 2026-11-07 40(+BankAuthSheet · WithdrawAccountSheet — 이체 생체 인증 · 출금 계좌 선택 시트)
-  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 40);
+  // → 2026-11-07 40(+BankAuthSheet · WithdrawAccountSheet — 이체 생체 인증 · 출금 계좌 선택 시트) → 2026-11-08 41(+CardAccountFields — 카드 거래 은행 · 잔액 칸)
+  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 41);
 });
 
 // ── G451 — 등록부 2벌(G436 · T86)이 최상위 `src/components/*.tsx`만 훑으므로, 하위 디렉터리에 컴포넌트를 두면
