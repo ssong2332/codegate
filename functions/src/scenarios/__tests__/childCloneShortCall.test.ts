@@ -51,7 +51,7 @@ test("[A2 ㉢ 배선] 실제 전환 지점 · 보이스톡 늘 응답 없음 · 
   assert.ok(session.includes("const voiceTalkNeverAnswered = PUBLIC_SCENARIOS[session.scenarioId]?.escalationCloneOnly === true;"));
   assert.ok(session.includes('if (!resolveTransitionNow(session, PUBLIC_SCENARIOS) || (via === "voice_talk" && voiceTalkNeverAnswered)) {'));
   const roleplay = read("roleplay/index.ts");
-  assert.equal((roleplay.match(/resolveTransitionNow\(session, PUBLIC_SCENARIOS\) !== undefined/g) ?? []).length, 2, "자동 전이 · 대사 예고 전환");
+  assert.equal((roleplay.match(/resolveTransitionNow\(session, PUBLIC_SCENARIOS\) !== undefined/g) ?? []).length, 3, "자동 전이 · 대사 예고 전환 · Edge 재시험 3 표 T2 '다음은 통화' 지시 조건");
   assert.ok(read("roleplay/screenActionFollowUp.ts").includes("resolveTransitionNow(session, PUBLIC_SCENARIOS) !== undefined"));
   assert.ok(read("realtime/index.ts").includes("priorChatContext = `${priorChatContext}\\n${CLONE_SHORT_CALL_RULE}`;"));
   assert.ok(read("scammerHangup/commit.ts").includes("PUBLIC_SCENARIOS[session.scenarioId]?.escalationCloneOnly === true && isEscalatedVoiceCall(session.channel, session.channelHistory)"));
