@@ -122,6 +122,6 @@ test("[CW6] 화면 컴포넌트 — 저장 · 전송 0 · 콜백 무인자 · �
   assert.equal((LANDING_SOURCE.match(/onHeld=\{\(\) => onLandingStep\?\.\("landing_held"\)\}/g) ?? []).length, 2, "금 · 출금 예약 보류 = 고정 값 한 개씩");
   assert.ok(SERVER_CATALOG.includes('export const CASH_LANDINGS: readonly string[] = ["cash-withdraw", "asset-cash-withdraw"];'));
   assert.ok(LANDING_SOURCE.includes('const CASH_LANDINGS: readonly string[] = ["cash-withdraw", "asset-cash-withdraw"];'), "클라 목록 = 서버 목록");
-  assert.ok(component.includes("bankIdentity?.myBankName ? `${bankIdentity.myBankName} 모바일뱅킹` : issuerNameOf(copy.issuerLabel)"), "머리띠 = 이체 화면과 같은 규칙");
+  assert.ok(component.includes("bankIdentity?.myBankName ? `${appBankName} 모바일뱅킹` : issuerNameOf(copy.issuerLabel)"), "머리띠 = 이체 화면과 같은 규칙(2026-11-08 판정표 S — 참가자가 말한 은행이 있으면 그 은행 · `spokenAccount.test.ts`)");
   assert.ok(component.includes("<BankAuthSheet"), "생체 인증 시트(이체 화면과 같은 컴포넌트)");
 });

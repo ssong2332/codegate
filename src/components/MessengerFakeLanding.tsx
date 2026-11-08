@@ -47,7 +47,7 @@ import {
 // §106 — 사건 기록 열람본의 피의자 칸 값(잎 모듈 · 상대 경로).
 import { recordIssueInfo, recordSubjectRows, type RecordRow } from "../lib/landing/recordDocument";
 // N1 · N4 — 같은 계좌로 보낸 합계 비교 · 완료 시각(잎 모듈 · 상대 경로 — 위 하네스 주석).
-import { fictionalBalanceFor, myBankNameFor, recordTransferAndCompare, transferTimeText, type AmountComparison } from "../lib/bankapp/bankApp";
+import { fictionalBalanceFor, myBankNameFor, recordTransferAndCompare, transferTimeText, type AmountComparison, type SpokenAccount } from "../lib/bankapp/bankApp";
 // ⭐ 2026-11-07 실기기 신고 — 출금 계좌 선택 · 생체 인증 시트(내 은행 송금 화면 `BankAppOverlay`와 같은 컴포넌트 · 같은 판정표).
 import { authMethodForSkin } from "../lib/bankapp/bankAuth";
 import {
@@ -187,6 +187,11 @@ type MessengerFakeLandingProps = {
    * ⛔ 참가자 입력이 아니다 — 어떤 콜백에도 싣지 않는다.
    */
   bankIdentity?: { myBankName: string; ledgerKey: string };
+  /**
+   * ⭐ 2026-11-08(라이브 재시험 7 · 사용자 결정 "말한 값에 맞추기") — 출금 예약 화면(`CASH_LANDINGS`)을 여는 순간 참가자가 통화에서 말한 거래 은행 · 잔액
+   * (판정표 S — `bankApp.ts` `spokenAccountFrom`). 말하지 않은 쪽 · 부재 = 종전 고정 값. ⛔ 화면 안에서만 쓴다(콜백 · 네트워크 0 · G138).
+   */
+  spokenAccountNow?: () => SpokenAccount;
 };
 
 /**
@@ -232,6 +237,7 @@ export default function MessengerFakeLanding({
   prefilledTransfer,
   loanContext,
   bankIdentity,
+  spokenAccountNow,
 }: MessengerFakeLandingProps) {
   const bar = browserBarTokensFor(skin);
   const returnLabel = RETURN_LABELS[entrySurface];
@@ -372,6 +378,7 @@ export default function MessengerFakeLanding({
             onCredentialSubmit={() => onCredentialSubmit?.()}
             onHeld={() => onLandingStep?.("landing_held")}
             bankIdentity={bankIdentity}
+            spokenAccountNow={spokenAccountNow}
             returnLabel={returnLabel}
             skin={skin}
           />
@@ -1500,6 +1507,7 @@ function CashWithdrawMockup({
   onCredentialSubmit,
   onHeld,
   bankIdentity,
+  spokenAccountNow,
   returnLabel,
   skin,
 }: {
@@ -1510,14 +1518,19 @@ function CashWithdrawMockup({
   /** ⛔ 무인자 — 문진표에서 보류됐다는 사실 하나만 올린다(G138 · 사용자 결정 D-G4). */
   onHeld: () => void;
   bankIdentity?: { myBankName: string; ledgerKey: string };
+  /** 판정표 S — 여는 순간 참가자가 말한 거래 은행 · 잔액(말하지 않은 쪽 = 고정 값). ⛔ 계좌 목록 · 머리띠에만 쓴다(G138). */
+  spokenAccountNow?: () => SpokenAccount;
   returnLabel: string;
   skin: MessengerSkin;
 }) {
   const copy = CREDENTIAL_LANDING_COPY[landingId] ?? GENERIC_CREDENTIAL_COPY;
   const page = LANDING_PAGE_TOKENS;
   const ledger = bankIdentity?.ledgerKey ?? "";
-  const appBankName = bankIdentity?.myBankName ?? myBankNameFor(ledger);
-  const [accounts] = useState(() => withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: fictionalBalanceFor(ledger) }));
+  const [spoken] = useState<SpokenAccount>(() => spokenAccountNow?.() ?? {});
+  const appBankName = spoken.bankName ?? bankIdentity?.myBankName ?? myBankNameFor(ledger);
+  const [accounts] = useState(() =>
+    withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: spoken.balance ?? fictionalBalanceFor(ledger) }),
+  );
   const [accountId, setAccountId] = useState<WithdrawAccount["id"]>("main");
   const account = accounts.find((item) => item.id === accountId) ?? accounts[0]!;
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);
@@ -1541,8 +1554,9 @@ function CashWithdrawMockup({
       style={{ backgroundColor: page.issuerBarBg, color: page.issuerBarText }}
     >
       <PhoneIcon name="shield" size={24} />
-      {/* 이체 화면(`CredentialFormMockup`)과 같은 규칙 — 내 은행이 정해져 있으면 그 은행 모바일뱅킹, 아니면 발급처 라벨(렌더 게이트 · 메신저 진입). */}
-      <span className="truncate">{bankIdentity?.myBankName ? `${bankIdentity.myBankName} 모바일뱅킹` : issuerNameOf(copy.issuerLabel)}</span>
+      {/* 이체 화면(`CredentialFormMockup`)과 같은 규칙 — 내 은행이 정해져 있으면 그 은행 모바일뱅킹, 아니면 발급처 라벨(렌더 게이트 · 메신저 진입).
+          판정표 S — 참가자가 거래 은행을 말했으면 그 은행(출금 계좌 줄과 같은 이름). */}
+      <span className="truncate">{bankIdentity?.myBankName ? `${appBankName} 모바일뱅킹` : issuerNameOf(copy.issuerLabel)}</span>
     </div>
   );
   const rowList = (rows: [string, string][]) => (
