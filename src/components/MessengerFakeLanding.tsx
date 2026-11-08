@@ -35,6 +35,17 @@ import { LANDING_PAGE_TOKENS, browserBarTokensFor } from "../lib/phone/skinToken
 // ⭐ 2026-11-08 웹 안의 웹 PR-1 — 바깥 틀(브라우저 틀) 판정표 · 훈련 화면 테마(잎 모듈 · 상대 경로).
 import { landingChromeFor } from "../lib/landing/landingChrome";
 import { TRAINING_SCREEN_THEME } from "../lib/phone/deviceTheme";
+// ⭐ 2026-11-08 웹 안의 웹 PR-3 — 구매 화면(금 · 상품권 · 내 은행 출금 · 대출) 사이트 계열 값(잎 모듈 · 상대 경로).
+import {
+  PURCHASE_SITE_TOKENS,
+  SITE_SKINS,
+  footerLines,
+  purchaseFamilyOf,
+  purchasePalette,
+  type PurchaseFamilyId,
+  type PurchasePalette,
+  type SiteSkin,
+} from "../lib/landing/siteSkins";
 import type { MessengerSkin } from "../lib/messenger/detectSkin";
 // §101 추가 — 금액 검증 · 한글 단위 표기 · 필수 칸 안내(잎 모듈 · 상대 경로 — 렌더 하네스 관례).
 import { TRANSFER_LIMIT_NOTE, amountError, amountHint, requiredFieldError, transferLimitError } from "../lib/landing/amountInput";
@@ -63,6 +74,8 @@ import {
   type WithdrawAccount,
 } from "../lib/bankapp/withdrawAccounts";
 import { LOAN_PURPOSES, loanApplyError, loanOfferFor } from "../lib/bankapp/loanFlow";
+// ⭐ PR-3 — 대출 진행 칩 이름(위 줄은 `loanScreens.test.ts` S6의 치환 앵커라 그대로 두고 따로 가져온다).
+import { LOAN_SITE_STEPS } from "../lib/bankapp/loanFlow";
 import BankAuthSheet from "./BankAuthSheet";
 // ⭐ 2026-11-07(Edge 시험 판 12) — 상품권 구매 화면(잎 모듈 · 상대 경로).
 import {
@@ -71,6 +84,7 @@ import {
   VOUCHER_DENOMINATIONS,
   VOUCHER_MAX_QUANTITY,
   VOUCHER_SELLER,
+  VOUCHER_SITE_COPY,
   denominationLabel,
   lastVoucherPurchase,
   recordVoucherPurchase,
@@ -86,10 +100,12 @@ import {
   GOLD_PRODUCTS,
   GOLD_PURPOSES,
   GOLD_SHOP_NAME,
+  GOLD_SITE_COPY,
   findGoldProduct,
   goldCheckResult,
   goldOrderError,
   goldProductPrice,
+  goldWeightMark,
   goldWon,
   lastGoldPurchase,
   recordGoldPurchase,
@@ -261,6 +277,20 @@ export default function MessengerFakeLanding({
   // ⭐ PR-1 — 바깥 틀 판정표(LC1 ~ LC6). 틀 안 단추는 동작하는 것만: "‹ 문자"(문자함 = 숨기기 · 문자형 메신저 = 닫기) · ✕ · '◀ 메시지'.
   const chrome = landingChromeFor({ entrySurface, messengerSurface, skin, callBarShown });
   const backAction = entrySurface === "in-call-sms" ? onHide : onClose;
+  // ⭐ PR-3 판정표 P1 ~ P6 — 구매 화면 4종만 사이트 계열 바탕 · 진행 막대 색(그 밖 = 종전 `LANDING_PAGE_TOKENS`). 분기 조건은 아래 서브 컴포넌트 선택과 같다.
+  const purchaseFamily: PurchaseFamilyId | undefined =
+    landingKind === "credential-form" &&
+    landingId !== undefined &&
+    (GOLD_LANDINGS.includes(landingId) ||
+      CASH_LANDINGS.includes(landingId) ||
+      VOUCHER_LANDINGS.includes(landingId) ||
+      (landingId === "loan-apply" && loanContext !== undefined))
+      ? purchaseFamilyOf(landingId)
+      : undefined;
+  const pageBg = purchaseFamily ? SITE_SKINS[purchaseFamily].pageBg : LANDING_PAGE_TOKENS.pageBg;
+  const progressColor = purchaseFamily ? SITE_SKINS[purchaseFamily].accent : LANDING_PAGE_TOKENS.issuerBarBg;
+  // B2 — iOS형 틀이면 아래 고정 결제 막대를 떠 있는 주소 막대 위로.
+  const payBarLifted = chrome.frame === "device-bottom";
 
   // ── 메신저 진입 대화상자의 포커스(사용자 결정 2026-10-18 · UX-023 v1.36 표 · D-116) ───────────────────────────
   // 진입 = 대화상자 컨테이너(이름 "{표시} 화면") · 트랩 = ✕ → 입력 칸 → 제출 → 하단 닫기(첫/끝은 매 Tab마다 실제 보이는
@@ -323,7 +353,7 @@ export default function MessengerFakeLanding({
     <span
       aria-hidden="true"
       className="landing-progress block h-0.5 w-full origin-left"
-      style={{ backgroundColor: LANDING_PAGE_TOKENS.issuerBarBg }}
+      style={{ backgroundColor: progressColor }}
     />
   );
   // ⭐ PR-1 — "‹ 문자"(문자 진입 두 틀이 같은 단추를 쓴다). 문자함 = 숨기기(입력값 유지 — D-94) · 문자형 메신저 = 닫기.
@@ -469,6 +499,7 @@ export default function MessengerFakeLanding({
             spokenAccountNow={spokenAccountNow}
             returnLabel={returnLabel}
             skin={skin}
+            payBarLifted={payBarLifted}
           />
         ) : landingId !== undefined && VOUCHER_LANDINGS.includes(landingId) ? (
           // ⭐ 2026-11-07 — 상품권 구매 화면(권종 · 수량 → 결제 확인 → 결제 인증 → 핀 번호). 제출 = 무인자(G138 — 핀 · 금액은 이 파일 밖으로 나가지 않는다).
@@ -479,6 +510,7 @@ export default function MessengerFakeLanding({
             bankIdentity={bankIdentity}
             returnLabel={returnLabel}
             skin={skin}
+            payBarLifted={payBarLifted}
           />
         ) : (
           <CredentialFormMockup
@@ -525,7 +557,7 @@ export default function MessengerFakeLanding({
         // reviewer Major — 문자함이 보기를 바꿀 때 이 영역으로 포커스를 옮긴다(스크린리더가 이름을 읽어 전환을 안다).
         tabIndex={-1}
         className="flex min-h-0 flex-1 flex-col overflow-y-auto outline-none"
-        style={{ backgroundColor: LANDING_PAGE_TOKENS.pageBg }}
+        style={{ backgroundColor: pageBg }}
       >
         {content}
       </div>
@@ -541,7 +573,7 @@ export default function MessengerFakeLanding({
       tabIndex={-1}
       // ⭐ PR-1(사용자 결정 O4 (a)) — 넘어가는 순간 페이지가 오른쪽에서 들어온다(약 0.4초 · 움직임 줄이기면 즉시 — globals.css).
       className="landing-page-enter fixed inset-0 z-50 flex flex-col overflow-y-auto outline-none"
-      style={{ backgroundColor: LANDING_PAGE_TOKENS.pageBg }}
+      style={{ backgroundColor: pageBg }}
     >
       {content}
     </div>
@@ -1210,6 +1242,171 @@ function landingTitleFor(kind: MessengerFakeLandingKind, landingId?: string): st
   return issuerNameOf(((landingId ? CREDENTIAL_LANDING_COPY[landingId] : undefined) ?? GENERIC_CREDENTIAL_COPY).issuerLabel);
 }
 
+// ── ⭐ 2026-11-08 웹 안의 웹 PR-3 — 구매 화면 공용 조각(시안 E · F · I · G) ─────────────────────────────────────────────
+// 판정표 P(이 표대로만):
+// | # | If | Then |
+// |---|---|---|
+// | P1 ~ P4 | 금(`GOLD_LANDINGS`) · 출금(`CASH_LANDINGS`) · 상품권(`VOUCHER_LANDINGS`) · 맥락 있는 대출(`loan-apply` + `loanContext`) 화면 | 그 계열(`purchaseFamilyOf`) 머리 · 색 · 꼬리말 |
+// | P5 | 맥락 없는 `loan-apply` · `loan-refinance-apply`(둘 다 `CredentialFormMockup`) | 지금 모양 그대로(PR-4 범위) |
+// | P6 | P1 ~ P4 화면 | 페이지 바탕 · 진행 막대 = 계열 `pageBg` · `accent`. 그 밖 화면은 무변경 |
+// | B1 | 금 · 상품권 첫 화면 | 아래 고정 결제 막대(금액 + 제출 버튼 · 판정 오류 줄) |
+// | B2 | B1이고 바깥 틀이 iOS형(device-bottom) | 결제 막대를 떠 있는 주소 막대 위로 올린다(`PAY_BAR_LIFT`) |
+// | F1 | 꼬리말 | 첫 화면 끝. 이름 = 머리와 같은 이름 · 마지막 ⓒ 줄 = 카탈로그 `issuerLabel`(대출 = 캐피탈 이름) |
+// | T1 | 로고 글꼴 | 이미 불러오는 글꼴만(금 = 명조 `--font-display` · 그 밖 = 폰 서체 굵기) — 새 외부 글꼴 요청 0 |
+// ⛔ 조각은 표시만 한다 — 입력값 · 금액은 각 화면 state에 남고, 콜백 · 네트워크 · 저장소 0(G138 · AC-045). 세션 금지 낱말(G437) 0.
+
+/** B2 — iOS형 아래 떠 있는 주소 막대 높이(위 여백 8 + 막대 48 + 아래 여백 10 + 안전 영역). 결제 막대를 그 위에 붙인다. */
+const PAY_BAR_LIFT = "calc(66px + env(safe-area-inset-bottom))";
+
+/** T1 — 로고 글자 모양(글꼴 · 굵기 · 크기). */
+function siteLogoStyle(skin: SiteSkin): { fontFamily?: string; fontWeight: number; fontSize: string; letterSpacing?: string } {
+  if (skin.logoFont === "serif") return { fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "21px", letterSpacing: "0.06em" };
+  if (skin.logoFont === "black") return { fontWeight: 900, fontSize: "18px", letterSpacing: "-0.02em" };
+  if (skin.logoFont === "rounded") return { fontWeight: 800, fontSize: "21px" };
+  return { fontWeight: 700, fontSize: "16px" };
+}
+
+/** 로고 자리 그림(장식 · 읽지 않음). 실제 휘장 · 상표 0 — 선 · 면 도형만. */
+function SiteMark({ skin }: { skin: SiteSkin }) {
+  if (skin.logoMark === "seal") {
+    return (
+      <span
+        aria-hidden="true"
+        className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full text-[13px] font-extrabold"
+        style={{ border: `1.5px solid ${skin.accent}`, color: skin.accent, fontFamily: "var(--font-display)" }}
+      >
+        {GOLD_SITE_COPY.sealGlyph}
+      </span>
+    );
+  }
+  if (skin.logoMark === "ring") {
+    return (
+      <span aria-hidden="true" className="relative inline-block h-[22px] w-[22px] shrink-0 rounded-md" style={{ backgroundColor: skin.headerText }}>
+        <span className="absolute inset-[6px] rounded-full" style={{ border: `2.5px solid ${skin.headerBg}` }} />
+      </span>
+    );
+  }
+  if (skin.logoMark === "bow") {
+    return (
+      <span aria-hidden="true" className="relative inline-block h-6 w-6 shrink-0 overflow-hidden rounded-[7px]" style={{ backgroundColor: skin.accent }}>
+        <span className="absolute left-[10px] top-0 h-6 w-1" style={{ backgroundColor: "#FFD6E5" }} />
+        <span className="absolute left-0 top-[9px] h-1 w-6" style={{ backgroundColor: "#FFD6E5" }} />
+      </span>
+    );
+  }
+  if (skin.logoMark === "leaf") {
+    return (
+      <span aria-hidden="true" className="relative inline-block h-[22px] w-[22px] shrink-0 rounded-full" style={{ backgroundColor: skin.highlight }}>
+        <span className="absolute left-[6px] top-[6px] h-2.5 w-2.5 rounded-full" style={{ backgroundColor: skin.headerBg }} />
+      </span>
+    );
+  }
+  return null;
+}
+
+/**
+ * 구매 사이트 머리(로고 그림 + 이름 · 금 = 영문 작은 줄 · 은행 = 오른쪽 메뉴 이름). ⚠️ 이름은 **한 줄 텍스트 노드**로 둔다 — 렌더 게이트 [T190]이
+ * 추출 텍스트의 한 줄로 "발급처 이름"을 찾는다(그 화면이 늘 쓰던 머리 이름을 그대로 넘긴다).
+ */
+function SiteHeader({ skin, name, aside }: { skin: SiteSkin; name: string; aside?: string }) {
+  const tokens = PURCHASE_SITE_TOKENS[skin.id as PurchaseFamilyId];
+  const light = skin.headerBg.toUpperCase() === "#FFFFFF";
+  return (
+    <div
+      className="flex min-h-14 shrink-0 items-center gap-2.5 px-4 py-2.5"
+      style={{ backgroundColor: skin.headerBg, borderBottom: light ? "1px solid rgba(17, 24, 39, 0.08)" : undefined }}
+    >
+      <SiteMark skin={skin} />
+      <span className="flex min-w-0 flex-col leading-tight">
+        <span className="truncate" style={{ color: skin.headerText, ...siteLogoStyle(skin) }}>
+          {name}
+        </span>
+        {skin.logoSub && (
+          <span className="text-[10px] font-semibold tracking-[0.24em]" style={{ color: tokens.headerSub }}>
+            {skin.logoSub}
+          </span>
+        )}
+      </span>
+      {aside && (
+        <span className="ml-auto shrink-0 text-[13px] font-semibold" style={{ color: tokens.headerSub }}>
+          {aside}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** F1 — 사이트 꼬리말(이름 · 사업자 정보 줄 · ⓒ 줄). 값은 `siteSkins.ts`(실재와 겹칠 수 없는 임의 값 — PR-2 판정표). */
+function SiteFooter({ skin, name, copyright }: { skin: SiteSkin; name: string; copyright: string }) {
+  return (
+    <footer
+      className="mt-auto flex flex-col gap-0.5 px-4 pb-5 pt-[18px] text-[12px] leading-relaxed [word-break:keep-all]"
+      style={{ backgroundColor: skin.footerBg, color: skin.footerText }}
+    >
+      <p
+        className="text-[13px] font-bold"
+        style={{ color: skin.id === "gold" ? skin.headerText : skin.footerText, fontFamily: skin.logoFont === "serif" ? "var(--font-display)" : undefined }}
+      >
+        {name}
+      </p>
+      {skin.footer && footerLines(skin.footer).map((line) => <p key={line}>{line}</p>)}
+      <p>{copyright}</p>
+    </footer>
+  );
+}
+
+/**
+ * B1 · B2 — 아래 고정 결제 막대(쇼핑몰 관례). 판정 오류 줄도 여기 그린다(버튼이 막대에 있어 위쪽 오류는 화면 밖일 수 있다).
+ * ⛔ 버튼은 그 화면의 종전 "다음" 동작(`onSubmit`) 그대로 — 막대는 자리만 옮긴다.
+ */
+function SitePayBar({
+  skin,
+  lifted,
+  summary,
+  amount,
+  label,
+  error,
+  onSubmit,
+}: {
+  skin: SiteSkin;
+  lifted: boolean;
+  summary: string;
+  amount: string;
+  label: string;
+  error?: string;
+  onSubmit: () => void;
+}) {
+  const bar = PURCHASE_SITE_TOKENS[skin.id as PurchaseFamilyId].payBar!;
+  return (
+    <div
+      className="sticky z-[5] flex shrink-0 flex-col gap-1.5 py-2.5 pl-4 pr-3"
+      style={{ bottom: lifted ? PAY_BAR_LIFT : 0, backgroundColor: bar.bg, borderTop: bar.border ? `1px solid ${bar.border}` : undefined }}
+    >
+      {error && (
+        <p role="alert" className="text-[14px] font-semibold" style={{ color: bar.error }}>
+          {error}
+        </p>
+      )}
+      <div className="flex items-center gap-2.5">
+        <span className="flex min-w-0 max-w-[45%] flex-col text-[12px] leading-tight" style={{ color: bar.text }}>
+          <span className="truncate">{summary}</span>
+          <span className="text-[16px] font-bold tabular-nums" style={{ color: bar.amount }}>
+            {amount}
+          </span>
+        </span>
+        <button
+          type="button"
+          onClick={onSubmit}
+          className="min-h-[48px] flex-1 rounded-[10px] px-3 text-[15px] font-bold"
+          style={{ backgroundColor: skin.buttonBg, color: skin.buttonText }}
+        >
+          {label}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * ⭐ 2026-11-07(Edge 재시험 2 S7 · 사용자 결정 D-G1 ~ D-G6 "앱 안 화면으로 바꾸기") — 금 거래소 구매 화면(`GOLD_LANDINGS`). 기관 고급 금 구매형 · 자산 보호 고급 금형의
  * 결말 "예금을 찾아 금을 사서 제출"을 앱 안에서 겪게 한다(실제 거래소 · 금은방으로 가지 않는다).
@@ -1226,6 +1423,7 @@ function GoldBuyMockup({
   spokenAccountNow,
   returnLabel,
   skin,
+  payBarLifted,
 }: {
   landingId: string;
   onClose: () => void;
@@ -1238,9 +1436,14 @@ function GoldBuyMockup({
   spokenAccountNow?: () => SpokenAccount;
   returnLabel: string;
   skin: MessengerSkin;
+  /** PR-3 B2 — iOS형 틀이면 결제 막대를 떠 있는 주소 막대 위로. */
+  payBarLifted: boolean;
 }) {
   const copy = CREDENTIAL_LANDING_COPY[landingId] ?? GENERIC_CREDENTIAL_COPY;
-  const page = LANDING_PAGE_TOKENS;
+  // ⭐ PR-3(판정표 P1) — 금 거래소 계열 색. 키 이름이 기본 토큰과 같아 아래 단계 코드는 그대로다.
+  const page: PurchasePalette = purchasePalette("gold");
+  const site = SITE_SKINS.gold;
+  const siteTokens = PURCHASE_SITE_TOKENS.gold;
   const ledger = bankIdentity?.ledgerKey ?? "";
   const [spoken] = useState<SpokenAccount>(() => spokenAccountNow?.() ?? {});
   const appBankName = spoken.bankName ?? bankIdentity?.myBankName ?? myBankNameFor(ledger);
@@ -1264,15 +1467,8 @@ function GoldBuyMockup({
   const productLabelText = copy.fields[0]?.label ?? "";
   const quantityLabelText = copy.fields[1]?.label ?? "";
 
-  const goldIssuerBar = (
-    <div
-      className="flex h-14 shrink-0 items-center gap-2.5 px-4 text-base font-semibold"
-      style={{ backgroundColor: page.issuerBarBg, color: page.issuerBarText }}
-    >
-      <PhoneIcon name="shield" size={24} />
-      <span className="truncate">{issuerNameOf(copy.issuerLabel)}</span>
-    </div>
-  );
+  // PR-3 — 검정 머리 + 금색 명조 로고 · 인장(시안 E). 이름 = 종전 머리띠와 같은 발급처 이름(렌더 게이트 [T190]).
+  const goldIssuerBar = <SiteHeader skin={site} name={issuerNameOf(copy.issuerLabel)} />;
   const rowList = (rows: [string, string][]) => (
     <dl className="flex flex-col divide-y rounded-[10px] border" style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg }}>
       {rows.map(([label, value]) => (
@@ -1286,9 +1482,9 @@ function GoldBuyMockup({
     </dl>
   );
   const choiceStyle = (selected: boolean) => ({
-    border: `${selected ? 2 : 1}px solid ${selected ? page.submitBg : page.inputBorder}`,
-    backgroundColor: selected ? page.fieldReadonlyBg : page.inputBg,
-    color: page.headline,
+    border: `${selected ? 2 : 1}px solid ${selected ? page.selectedBorder : page.inputBorder}`,
+    backgroundColor: selected ? page.selectedBg : page.inputBg,
+    color: selected ? page.selectedText : page.headline,
   });
 
   const finishPurchase = () => {
@@ -1471,7 +1667,7 @@ function GoldBuyMockup({
     );
   }
 
-  // ① 상품 · 수량 · 결제 계좌.
+  // ① 상품 · 수량 · 결제 계좌(⭐ PR-3 — 시세 띠 · 금괴 카드 2×2 · 신뢰 표시 · 꼬리말 · 아래 고정 결제 막대 — 시안 E).
   const handleNext = () => {
     const found = goldOrderError(productId, quantity) ?? withdrawError(ledger, account, String(total));
     setError(found);
@@ -1480,23 +1676,40 @@ function GoldBuyMockup({
   return (
     <>
       {goldIssuerBar}
-      <div className="flex flex-col gap-4 px-5 pb-6 pt-4">
-        <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
-          {copy.headline}
-        </h1>
-        {copy.bodyLines.map((line) => (
-          <p key={line} className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
-            {line}
-          </p>
-        ))}
-        <p className="text-[14px] tabular-nums" style={{ color: page.body }}>
-          {GOLD_COPY.priceNote} {goldWon(GOLD_PRICE_PER_GRAM)}
-        </p>
+      {/* 시세 띠 — 오늘 판매가 1g · 1돈 환산(같은 단가로 계산 · 새 숫자 0). */}
+      <div
+        className="grid grid-cols-[1fr_auto] gap-y-0.5 px-4 py-2 text-[12px] tabular-nums"
+        style={{ backgroundColor: site.band?.bg, color: site.band?.text }}
+      >
+        <span>{GOLD_COPY.priceNote}</span>
+        <b className="text-right text-[13.5px]" style={{ color: siteTokens.payBar?.amount }}>
+          {goldWon(GOLD_PRICE_PER_GRAM)}
+        </b>
+        <span>{GOLD_SITE_COPY.donLabel}</span>
+        <b className="text-right text-[13.5px]" style={{ color: siteTokens.payBar?.amount }}>
+          {goldWon(GOLD_PRICE_PER_GRAM * GOLD_SITE_COPY.donGrams)}
+        </b>
+      </div>
+      <div className="flex flex-col gap-4 px-4 pb-5 pt-[18px]">
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[11px] font-bold tracking-[0.14em]" style={{ color: siteTokens.heroMuted }}>
+            {GOLD_SITE_COPY.kicker}
+          </span>
+          <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
+            {copy.headline}
+          </h1>
+          {copy.bodyLines.map((line) => (
+            <p key={line} className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
+              {line}
+            </p>
+          ))}
+        </div>
         <div className="flex flex-col gap-2">
           <span id="gold-product-label" className="text-[15px] font-semibold" style={{ color: page.headline }}>
             {productLabelText}
           </span>
-          <div role="radiogroup" aria-labelledby="gold-product-label" className="flex flex-col gap-2">
+          {/* 금괴 카드 — 좁은 폭(340px 미만)은 한 줄에 하나. 고른 카드 = 두꺼운 금색 테두리 + 그림자. */}
+          <div role="radiogroup" aria-labelledby="gold-product-label" className="grid grid-cols-1 gap-2.5 min-[340px]:grid-cols-2">
             {GOLD_PRODUCTS.map((item) => {
               const selected = item.id === productId;
               return (
@@ -1509,15 +1722,45 @@ function GoldBuyMockup({
                     setProductId(item.id);
                     setError(undefined);
                   }}
-                  className="flex min-h-[52px] items-center justify-between gap-3 rounded-[10px] px-3.5 text-left text-base font-semibold"
-                  style={choiceStyle(selected)}
+                  className="flex min-h-[52px] flex-col items-stretch gap-1.5 rounded-[10px] p-2.5 text-left"
+                  style={{ ...choiceStyle(selected), boxShadow: selected ? "0 2px 8px rgba(168, 132, 58, 0.18)" : undefined }}
                 >
-                  <span>{item.label}</span>
-                  <span className="tabular-nums">{goldWon(goldProductPrice(item))}</span>
+                  <span
+                    aria-hidden="true"
+                    className="flex h-[50px] flex-col items-center justify-center rounded-[5px] text-[11px] font-extrabold leading-tight tracking-[0.08em]"
+                    style={{
+                      background: "linear-gradient(162deg, #F8E7B0 0%, #E0BD63 34%, #A8843A 66%, #EBCB78 100%)",
+                      boxShadow: "inset 0 -5px 0 rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.6)",
+                      color: "#5A4517",
+                      fontFamily: "var(--font-display)",
+                    }}
+                  >
+                    {goldWeightMark(item.grams)}
+                    <span className="text-[8px] tracking-[0.2em] opacity-80">{GOLD_SITE_COPY.barMark}</span>
+                  </span>
+                  <span className="text-[14px] font-bold leading-snug">{item.label}</span>
+                  <span className="text-[14px] font-bold tabular-nums">{goldWon(goldProductPrice(item))}</span>
+                  <span
+                    className="self-start rounded-[3px] px-1.5 text-[11px] font-bold"
+                    style={{ backgroundColor: siteTokens.badge?.bg, color: siteTokens.badge?.text }}
+                  >
+                    {GOLD_SITE_COPY.cardBadge}
+                  </span>
                 </button>
               );
             })}
           </div>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {GOLD_SITE_COPY.trust.map((item) => (
+            <span
+              key={item}
+              className="rounded-full border px-2.5 py-0.5 text-[12px] font-semibold"
+              style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.body }}
+            >
+              {item}
+            </span>
+          ))}
         </div>
         <div className="flex items-center justify-between gap-3">
           <span id="gold-quantity-label" className="text-[15px] font-semibold" style={{ color: page.headline }}>
@@ -1533,7 +1776,7 @@ function GoldBuyMockup({
                 setError(undefined);
               }}
               className="h-11 w-11 rounded-full border text-xl font-semibold disabled:opacity-40"
-              style={{ borderColor: page.inputBorder, color: page.headline }}
+              style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.headline }}
             >
               −
             </button>
@@ -1550,7 +1793,7 @@ function GoldBuyMockup({
                 setError(undefined);
               }}
               className="h-11 w-11 rounded-full border text-xl font-semibold disabled:opacity-40"
-              style={{ borderColor: page.inputBorder, color: page.headline }}
+              style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.headline }}
             >
               +
             </button>
@@ -1575,44 +1818,21 @@ function GoldBuyMockup({
             onClose={() => setAccountSheetOpen(false)}
           />
         )}
-        <p
-          className="flex items-baseline justify-between gap-3 rounded-[10px] border px-3.5 py-3 text-[15px]"
-          style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.body }}
-        >
-          <span>{GOLD_COPY.totalLabel}</span>
-          <span className="text-[18px] font-bold tabular-nums" style={{ color: page.headline }}>
-            {goldWon(total)}
-          </span>
-        </p>
-        {error && (
-          <p role="alert" className="text-[14px] font-semibold" style={{ color: page.errorText }}>
-            {error}
-          </p>
-        )}
-        <button
-          type="button"
-          onClick={handleNext}
-          className="min-h-[52px] rounded-[10px] text-base font-semibold"
-          style={{ backgroundColor: page.submitBg, color: page.submitText }}
-        >
-          {copy.submitLabel}
-        </button>
-        <p className="text-center text-[13px]" style={{ color: page.issuerFooter }}>
-          {shopFooter}
-        </p>
       </div>
+      <SiteFooter skin={site} name={issuerNameOf(copy.issuerLabel)} copyright={shopFooter} />
+      <SitePayBar
+        skin={site}
+        lifted={payBarLifted}
+        summary={product ? `${product.label} × ${quantity}${GOLD_COPY.quantityUnit}` : GOLD_COPY.totalLabel}
+        amount={goldWon(total)}
+        label={copy.submitLabel}
+        error={error}
+        onSubmit={handleNext}
+      />
     </>
   );
 }
 
-/**
- * ⭐ 2026-11-07(Edge 재시험 2 S7 · 사용자 결정 D-G1 · D-G2 E1-b "문자 링크 → 내 은행 화면") — 내 은행 현금 · 수표 출금 예약 화면(`CASH_LANDINGS`). 기관 고급 현금 예탁형 ·
- * 자산 보호 고급 현금형의 결말 "예금을 현금 · 수표로 찾아 직원에게 맡겨라"를 앱 안에서 겪게 한다(실제 은행 창구로 가지 않는다).
- * 흐름: ① 출금 계좌 · 금액 · 받으실 형태 → ② 금융사기 예방 문진표(출금 목적 · 예/아니요 3문항 — 근거 R7) → ③ 생체 인증 → ④ 예약 완료 · 예약 번호.
- * ②에서 하나라도 "예"면 출금 예약 보류 화면(112 · 1332 안내) — 보류 사실 하나만 올린다(`onHeld` 무인자).
- * 머리띠 = 참가자 "내 은행" 모바일뱅킹(BA-1 송금 화면과 같은 앱 이름). ⚠️ 현실과 다름: 실제 피해자는 문자 링크가 아니라 자기 은행 앱 · 창구로 간다(사용자 결정 E1-b).
- * ⛔ 금액 · 형태 · 목적 · 답은 이 컴포넌트 state와 `cashWithdraw.ts` 메모리 표를 벗어나지 않는다(G138 — 콜백 무인자 · 네트워크 · 저장소 0).
- */
 function CashWithdrawMockup({
   landingId,
   onClose,
@@ -1636,7 +1856,9 @@ function CashWithdrawMockup({
   skin: MessengerSkin;
 }) {
   const copy = CREDENTIAL_LANDING_COPY[landingId] ?? GENERIC_CREDENTIAL_COPY;
-  const page = LANDING_PAGE_TOKENS;
+  // ⭐ PR-3(판정표 P2) — 내 은행 계열 색(남색 · 흰 머리). 키 이름이 기본 토큰과 같아 아래 단계 코드는 그대로다.
+  const page: PurchasePalette = purchasePalette("bank");
+  const site = SITE_SKINS.bank;
   const ledger = bankIdentity?.ledgerKey ?? "";
   const [spoken] = useState<SpokenAccount>(() => spokenAccountNow?.() ?? {});
   const appBankName = spoken.bankName ?? bankIdentity?.myBankName ?? myBankNameFor(ledger);
@@ -1660,17 +1882,13 @@ function CashWithdrawMockup({
   const amountLabelText = copy.fields[0]?.label ?? "";
   const formLabelText = copy.fields[1]?.label ?? "";
 
-  const cashBankBar = (
-    <div
-      className="flex h-14 shrink-0 items-center gap-2.5 px-4 text-base font-semibold"
-      style={{ backgroundColor: page.issuerBarBg, color: page.issuerBarText }}
-    >
-      <PhoneIcon name="shield" size={24} />
-      {/* 이체 화면(`CredentialFormMockup`)과 같은 규칙 — 내 은행이 정해져 있으면 그 은행 모바일뱅킹, 아니면 발급처 라벨(렌더 게이트 · 메신저 진입).
-          판정표 S — 참가자가 거래 은행을 말했으면 그 은행(출금 계좌 줄과 같은 이름). */}
-      <span className="truncate">{bankIdentity?.myBankName ? `${appBankName} 모바일뱅킹` : issuerNameOf(copy.issuerLabel)}</span>
-    </div>
-  );
+  // 이체 화면(`CredentialFormMockup`)과 같은 규칙 — 내 은행이 정해져 있으면 그 은행 모바일뱅킹, 아니면 발급처 라벨(렌더 게이트 · 메신저 진입).
+  // 판정표 S — 참가자가 거래 은행을 말했으면 그 은행(출금 계좌 줄과 같은 이름).
+  const bankHeaderName = bankIdentity?.myBankName ? `${appBankName} 모바일뱅킹` : issuerNameOf(copy.issuerLabel);
+  // ⭐ PR-3 F1 — 꼬리말 이름 = 그 은행(내 은행이 없으면 발급처 이름).
+  const bankFooterName = bankIdentity?.myBankName ? appBankName : issuerNameOf(copy.issuerLabel);
+  // ⭐ PR-3 — 흰 머리 + 남색 고리 로고 · 오른쪽 메뉴 이름(시안 I).
+  const cashBankBar = <SiteHeader skin={site} name={bankHeaderName} aside={CASH_COPY.menuTitle} />;
   const rowList = (rows: [string, string][]) => (
     <dl className="flex flex-col divide-y rounded-[10px] border" style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg }}>
       {rows.map(([label, value]) => (
@@ -1684,9 +1902,9 @@ function CashWithdrawMockup({
     </dl>
   );
   const choiceStyle = (selected: boolean) => ({
-    border: `${selected ? 2 : 1}px solid ${selected ? page.submitBg : page.inputBorder}`,
-    backgroundColor: selected ? page.fieldReadonlyBg : page.inputBg,
-    color: page.headline,
+    border: `${selected ? 2 : 1}px solid ${selected ? page.selectedBorder : page.inputBorder}`,
+    backgroundColor: selected ? page.selectedBg : page.inputBg,
+    color: selected ? page.selectedText : page.headline,
   });
 
   const finishReservation = () => {
@@ -1872,10 +2090,12 @@ function CashWithdrawMockup({
     setError(found);
     if (!found) setStage("check");
   };
+  const amountHintText = amountHint(amountRaw);
   return (
     <>
       {cashBankBar}
-      <div className="flex flex-col gap-4 px-5 pb-6 pt-4">
+      {/* ⭐ PR-3 — 흰 카드 상자 안에 출금 계좌 · 금액 · 형태 · 버튼(시안 I). 문진표 · 생체 인증 · 예약 번호는 그대로. 방문 지점 칸 없음. */}
+      <div className="m-3 flex flex-col gap-4 rounded-[14px] p-4" style={{ backgroundColor: page.inputBg, boxShadow: "0 1px 2px rgba(17, 24, 39, 0.06)" }}>
         <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
           {copy.headline}
         </h1>
@@ -1888,7 +2108,7 @@ function CashWithdrawMockup({
           account={account}
           ledgerKey={ledger}
           onOpen={() => setAccountSheetOpen(true)}
-          colors={{ border: page.inputBorder, bg: page.inputBg, label: page.body, value: page.headline }}
+          colors={{ border: page.inputBorder, bg: page.fieldReadonlyBg, label: page.body, value: page.headline }}
         />
         {accountSheetOpen && (
           <WithdrawAccountSheet
@@ -1918,8 +2138,8 @@ function CashWithdrawMockup({
                 setError(undefined);
               }}
               placeholder={copy.fields[0]?.placeholder}
-              className="min-h-[52px] min-w-0 flex-1 rounded-[10px] px-3.5 text-base tabular-nums"
-              style={{ border: `1px solid ${page.inputBorder}`, backgroundColor: page.inputBg, color: page.headline }}
+              className="min-h-[52px] min-w-0 flex-1 rounded-none px-0.5 text-right text-[22px] font-extrabold tabular-nums placeholder:text-[15px] placeholder:font-normal"
+              style={{ border: 0, borderBottom: `2px solid ${site.accent}`, backgroundColor: page.inputBg, color: page.headline }}
             />
             <button
               type="button"
@@ -1933,6 +2153,12 @@ function CashWithdrawMockup({
               {CASH_COPY.allButton}
             </button>
           </span>
+          {/* 금액 아래 한글 단위(이체 화면과 같은 `amountHint` — 새 문구 0). */}
+          {amountHintText && (
+            <span className="text-right text-[13px] font-semibold" style={{ color: page.hintText }}>
+              {amountHintText}
+            </span>
+          )}
         </label>
         <div className="flex flex-col gap-2">
           <span id="cash-form-label" className="text-[15px] font-semibold" style={{ color: page.headline }}>
@@ -1970,10 +2196,8 @@ function CashWithdrawMockup({
         >
           {copy.submitLabel}
         </button>
-        <p className="text-center text-[13px]" style={{ color: page.issuerFooter }}>
-          {reserveFooter}
-        </p>
       </div>
+      <SiteFooter skin={site} name={bankFooterName} copyright={reserveFooter} />
     </>
   );
 }
@@ -1992,6 +2216,7 @@ function VoucherPurchaseMockup({
   bankIdentity,
   returnLabel,
   skin,
+  payBarLifted,
 }: {
   landingId: string;
   onClose: () => void;
@@ -2000,9 +2225,14 @@ function VoucherPurchaseMockup({
   bankIdentity?: { myBankName: string; ledgerKey: string };
   returnLabel: string;
   skin: MessengerSkin;
+  /** PR-3 B2 — iOS형 틀이면 결제 막대를 떠 있는 주소 막대 위로. */
+  payBarLifted: boolean;
 }) {
   const copy = CREDENTIAL_LANDING_COPY[landingId] ?? GENERIC_CREDENTIAL_COPY;
-  const page = LANDING_PAGE_TOKENS;
+  // ⭐ PR-3(판정표 P3) — 상품권 몰 계열 색. 키 이름이 기본 토큰과 같아 아래 단계 코드는 그대로다.
+  const page: PurchasePalette = purchasePalette("gift");
+  const site = SITE_SKINS.gift;
+  const siteTokens = PURCHASE_SITE_TOKENS.gift;
   const ledger = bankIdentity?.ledgerKey ?? "";
   const appBankName = bankIdentity?.myBankName ?? myBankNameFor(ledger);
   const [accounts] = useState(() => withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: fictionalBalanceFor(ledger) }));
@@ -2020,15 +2250,8 @@ function VoucherPurchaseMockup({
   const denominationLabelText = copy.fields[0]?.label ?? "";
   const quantityLabelText = copy.fields[1]?.label ?? "";
 
-  const voucherIssuerBar = (
-    <div
-      className="flex h-14 shrink-0 items-center gap-2.5 px-4 text-base font-semibold"
-      style={{ backgroundColor: page.issuerBarBg, color: page.issuerBarText }}
-    >
-      <PhoneIcon name="shield" size={24} />
-      <span className="truncate">{issuerNameOf(copy.issuerLabel)}</span>
-    </div>
-  );
+  // PR-3 — 리본 마크 + 둥근 굵은 로고(시안 F). 이름 = 종전 머리띠와 같은 발급처 이름(렌더 게이트 [T190]).
+  const voucherIssuerBar = <SiteHeader skin={site} name={issuerNameOf(copy.issuerLabel)} />;
   const rowList = (rows: [string, string][]) => (
     <dl className="flex flex-col divide-y rounded-[10px] border" style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg }}>
       {rows.map(([label, value]) => (
@@ -2160,7 +2383,7 @@ function VoucherPurchaseMockup({
     );
   }
 
-  // ① 권종 · 수량 · 결제 계좌.
+  // ① 권종 · 수량 · 결제 계좌(⭐ PR-3 — 상품권 실물 카드 · 권종 칩 4칸 · 즉시 발송 배지 · 꼬리말 · 아래 고정 결제 막대 — 시안 F).
   const handleNext = () => {
     const found = voucherOrderError(denomination, quantity) ?? withdrawError(ledger, account, String(total));
     setError(found);
@@ -2169,20 +2392,45 @@ function VoucherPurchaseMockup({
   return (
     <>
       {voucherIssuerBar}
-      <div className="flex flex-col gap-4 px-5 pb-6 pt-4">
-        <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
-          {copy.headline}
-        </h1>
-        {copy.bodyLines.map((line) => (
-          <p key={line} className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
-            {line}
-          </p>
-        ))}
+      {/* 상품권 실물 카드(장식) — 고른 권종 금액을 카드에 바로 보여 준다. 흰 글자 대비를 위해 시안보다 짙은 분홍 그라데이션(판정표 P C1). */}
+      <div
+        aria-hidden="true"
+        className="mx-4 mt-4 flex h-[150px] flex-col justify-between rounded-2xl p-4 text-white"
+        style={{
+          background:
+            "radial-gradient(circle at 85% 15%, rgba(255, 255, 255, 0.22) 0 22%, transparent 23%), linear-gradient(135deg, #C2255C, #A61E4D 55%, #862E9C)",
+          boxShadow: "0 8px 18px rgba(194, 37, 92, 0.28)",
+        }}
+      >
+        <span className="text-[18px] font-extrabold">{VOUCHER_BRAND}</span>
+        <span className="min-h-[34px] text-[26px] font-black tabular-nums">{denomination !== undefined ? voucherWon(denomination) : ""}</span>
+        <span className="flex justify-between text-[12px] font-semibold">
+          <span>{VOUCHER_SITE_COPY.cardKind}</span>
+          <span>{VOUCHER_SITE_COPY.cardPin}</span>
+        </span>
+      </div>
+      <div className="flex flex-col gap-4 px-4 pb-5 pt-4">
+        <div className="flex flex-col gap-1.5">
+          <span
+            className="self-start rounded-[4px] px-2 py-0.5 text-[12px] font-bold"
+            style={{ backgroundColor: siteTokens.badge?.bg, color: siteTokens.badge?.text }}
+          >
+            {VOUCHER_SITE_COPY.instantBadge}
+          </span>
+          <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
+            {copy.headline}
+          </h1>
+          {copy.bodyLines.map((line) => (
+            <p key={line} className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
+              {line}
+            </p>
+          ))}
+        </div>
         <div className="flex flex-col gap-2">
           <span id="voucher-denomination-label" className="text-[15px] font-semibold" style={{ color: page.headline }}>
             {denominationLabelText}
           </span>
-          <div role="radiogroup" aria-labelledby="voucher-denomination-label" className="grid grid-cols-2 gap-2">
+          <div role="radiogroup" aria-labelledby="voucher-denomination-label" className="grid grid-cols-2 gap-1.5 min-[360px]:grid-cols-4">
             {VOUCHER_DENOMINATIONS.map((value) => {
               const selected = value === denomination;
               return (
@@ -2195,11 +2443,11 @@ function VoucherPurchaseMockup({
                     setDenomination(value);
                     setError(undefined);
                   }}
-                  className="min-h-[52px] rounded-[10px] text-base font-semibold"
+                  className="min-h-[48px] rounded-[10px] px-1 text-[14px] font-bold"
                   style={{
-                    border: `${selected ? 2 : 1}px solid ${selected ? page.submitBg : page.inputBorder}`,
-                    backgroundColor: selected ? page.fieldReadonlyBg : page.inputBg,
-                    color: page.headline,
+                    border: `${selected ? 2 : 1}px solid ${selected ? page.selectedBorder : page.inputBorder}`,
+                    backgroundColor: selected ? page.selectedBg : page.inputBg,
+                    color: selected ? page.selectedText : page.headline,
                   }}
                 >
                   {denominationLabel(value)}
@@ -2221,8 +2469,8 @@ function VoucherPurchaseMockup({
                 setQuantity(Math.max(1, quantity - 1));
                 setError(undefined);
               }}
-              className="h-11 w-11 rounded-full border text-xl font-semibold disabled:opacity-40"
-              style={{ borderColor: page.inputBorder, color: page.headline }}
+              className="h-11 w-11 rounded-[10px] border text-xl font-semibold disabled:opacity-40"
+              style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.headline }}
             >
               −
             </button>
@@ -2237,8 +2485,8 @@ function VoucherPurchaseMockup({
                 setQuantity(Math.min(VOUCHER_MAX_QUANTITY, quantity + 1));
                 setError(undefined);
               }}
-              className="h-11 w-11 rounded-full border text-xl font-semibold disabled:opacity-40"
-              style={{ borderColor: page.inputBorder, color: page.headline }}
+              className="h-11 w-11 rounded-[10px] border text-xl font-semibold disabled:opacity-40"
+              style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.headline }}
             >
               +
             </button>
@@ -2263,32 +2511,17 @@ function VoucherPurchaseMockup({
             onClose={() => setAccountSheetOpen(false)}
           />
         )}
-        <p
-          className="flex items-baseline justify-between gap-3 rounded-[10px] border px-3.5 py-3 text-[15px]"
-          style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.body }}
-        >
-          <span>{VOUCHER_COPY.totalLabel}</span>
-          <span className="text-[18px] font-bold tabular-nums" style={{ color: page.headline }}>
-            {voucherWon(total)}
-          </span>
-        </p>
-        {error && (
-          <p role="alert" className="text-[14px] font-semibold" style={{ color: page.errorText }}>
-            {error}
-          </p>
-        )}
-        <button
-          type="button"
-          onClick={handleNext}
-          className="min-h-[52px] rounded-[10px] text-base font-semibold"
-          style={{ backgroundColor: page.submitBg, color: page.submitText }}
-        >
-          {copy.submitLabel}
-        </button>
-        <p className="text-center text-[13px]" style={{ color: page.issuerFooter }}>
-          {sellerFooter}
-        </p>
       </div>
+      <SiteFooter skin={site} name={issuerNameOf(copy.issuerLabel)} copyright={sellerFooter} />
+      <SitePayBar
+        skin={site}
+        lifted={payBarLifted}
+        summary={denomination !== undefined ? `${denominationLabel(denomination)} × ${quantity}장` : VOUCHER_COPY.totalLabel}
+        amount={voucherWon(total)}
+        label={copy.submitLabel}
+        error={error}
+        onSubmit={handleNext}
+      />
     </>
   );
 }
@@ -2373,7 +2606,10 @@ type LoanApplyProps = {
 };
 
 function LoanApplyMockup({ ledgerKey, lenderName, skin, returnLabel, onClose, onSubmit }: LoanApplyProps) {
-  const page = LANDING_PAGE_TOKENS;
+  // ⭐ PR-3(판정표 P4) — 대출 계열 색. 키 이름이 기본 토큰과 같아 아래 단계 코드는 그대로다.
+  const page: PurchasePalette = purchasePalette("loan");
+  const site = SITE_SKINS.loan;
+  const siteTokens = PURCHASE_SITE_TOKENS.loan;
   const [stage, setStage] = useState<LoanApplyStage>("intro");
   const [amount, setAmount] = useState("");
   const [purpose, setPurpose] = useState<string | undefined>(undefined);
@@ -2385,11 +2621,39 @@ function LoanApplyMockup({ ledgerKey, lenderName, skin, returnLabel, onClose, on
   const amountValue = Number(amount.replace(/[\s,]/g, "")) || 0;
   const hint = amountHint(amount);
 
-  const header = (
-    <div className="px-5 py-3 text-sm font-semibold" style={{ backgroundColor: page.issuerBarBg, color: page.issuerBarText }}>
-      {lenderName} 비대면 대출
-    </div>
+  // ⭐ PR-3 — 짙은 청록 머리(로고 = 문자 속 가상 캐피탈 이름 그대로) + 둥글게 내려오는 큰 제목 영역 · 진행 칩(시안 G). 금리 문구 추가 0.
+  const stepIndex = stage === "intro" || stage === "verify" ? 0 : stage === "limit" ? 1 : stage === "terms" || stage === "sign" ? 2 : -1;
+  const hero = (title: string) => (
+    <>
+      <SiteHeader skin={site} name={`${lenderName} 비대면 대출`} />
+      <div className="rounded-b-[24px] px-4 pb-[30px] pt-1" style={{ backgroundColor: site.headerBg, color: siteTokens.heroMuted }}>
+        <h1 className="mb-2.5 text-[23px] font-bold leading-snug [word-break:keep-all]" style={{ color: site.headerText }}>
+          {title}
+        </h1>
+        {stepIndex >= 0 && (
+          <ol className="flex flex-wrap gap-1.5 text-[12px] font-semibold">
+            {LOAN_SITE_STEPS.map((step, index) => (
+              <li
+                key={step}
+                aria-current={index === stepIndex ? "step" : undefined}
+                className="rounded-full px-2.5 py-0.5"
+                style={
+                  index === stepIndex
+                    ? { backgroundColor: site.highlight, color: siteTokens.heroChipOnText }
+                    : { backgroundColor: siteTokens.heroChipOff?.bg, color: siteTokens.heroChipOff?.text }
+                }
+              >
+                {step}
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </>
   );
+  /** 큰 제목 영역 위로 겹쳐 올라오는 흰 입력 카드. */
+  const cardClass = "relative mx-3 -mt-4 flex flex-col gap-4 rounded-2xl p-4";
+  const cardStyle = { backgroundColor: page.inputBg, boxShadow: "0 6px 16px rgba(14, 94, 82, 0.14)" };
   const primary = (label: string, onClick: () => void, disabled = false) => (
     <button
       type="button"
@@ -2427,11 +2691,8 @@ function LoanApplyMockup({ ledgerKey, lenderName, skin, returnLabel, onClose, on
   if (stage === "done") {
     return (
       <>
-        {header}
-        <div className="flex flex-col gap-4 px-5 pb-6 pt-8">
-          <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
-            대출 신청이 접수되었습니다.
-          </h1>
+        {hero("대출 신청이 접수되었습니다.")}
+        <div className={cardClass} style={cardStyle}>
           <p className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
             대출 실행 전 본인 확인을 위해 {lenderName}에서 확인 전화를 드릴 수 있습니다. 실행되면 문자로 알려 드립니다.
           </p>
@@ -2448,12 +2709,9 @@ function LoanApplyMockup({ ledgerKey, lenderName, skin, returnLabel, onClose, on
   if (stage === "terms" || stage === "sign") {
     return (
       <>
-        {header}
         <div inert={stage === "sign" ? true : undefined}>
-          <div className="flex flex-col gap-4 px-5 pb-6 pt-5">
-            <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
-              대출 약정 내용을 확인해 주세요
-            </h1>
+          {hero("대출 약정 내용을 확인해 주세요")}
+          <div className={cardClass} style={cardStyle}>
             {rows([
               ["대출 금액", loanWon(amountValue)],
               ["금리", `연 ${offer.ratePercent}% (고정)`],
@@ -2497,11 +2755,8 @@ function LoanApplyMockup({ ledgerKey, lenderName, skin, returnLabel, onClose, on
   if (stage === "limit") {
     return (
       <>
-        {header}
-        <div className="flex flex-col gap-4 px-5 pb-6 pt-5">
-          <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
-            최대 {loanWon(offer.limit)}까지 받을 수 있어요
-          </h1>
+        {hero(`최대 ${loanWon(offer.limit)}까지 받을 수 있어요`)}
+        <div className={cardClass} style={cardStyle}>
           {rows([
             ["대출 가능 한도", loanWon(offer.limit)],
             ["금리", `연 ${offer.ratePercent}%`],
@@ -2517,11 +2772,11 @@ function LoanApplyMockup({ ledgerKey, lenderName, skin, returnLabel, onClose, on
                 setError(undefined);
               }}
               placeholder="신청하실 금액을 입력하세요"
-              className="min-h-[48px] rounded-[10px] border px-3 text-base font-normal"
-              style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.inputText }}
+              className="min-h-[48px] rounded-none px-0.5 text-right text-[22px] font-extrabold tabular-nums placeholder:text-[15px] placeholder:font-normal"
+              style={{ border: 0, borderBottom: `2px solid ${site.accent}`, backgroundColor: page.inputBg, color: page.inputText }}
             />
             {hint && (
-              <span className="text-sm font-normal" style={{ color: page.hintText }}>
+              <span className="text-right text-sm font-semibold" style={{ color: page.hintText }}>
                 {hint}
               </span>
             )}
@@ -2542,9 +2797,9 @@ function LoanApplyMockup({ ledgerKey, lenderName, skin, returnLabel, onClose, on
                   }}
                   className="min-h-[44px] rounded-full border px-4 text-[15px]"
                   style={{
-                    borderColor: purpose === item ? page.submitBg : page.inputBorder,
-                    backgroundColor: purpose === item ? page.submitBg : page.inputBg,
-                    color: purpose === item ? page.submitText : page.headline,
+                    borderColor: purpose === item ? page.selectedBorder : page.inputBorder,
+                    backgroundColor: purpose === item ? page.selectedBg : page.inputBg,
+                    color: purpose === item ? page.selectedText : page.headline,
                   }}
                 >
                   {item}
@@ -2575,12 +2830,9 @@ function LoanApplyMockup({ ledgerKey, lenderName, skin, returnLabel, onClose, on
   // intro · verify(시트가 intro 위로 올라온다)
   return (
     <>
-      {header}
       <div inert={stage === "verify" ? true : undefined}>
-        <div className="flex flex-col gap-4 px-5 pb-6 pt-5">
-          <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
-            비대면 신용대출
-          </h1>
+        {hero("비대면 신용대출")}
+        <div className={cardClass} style={cardStyle}>
           <p className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
             본인 확인 후 대출 한도를 조회하고 바로 신청할 수 있습니다. 신청 내용은 실행 전 확인 절차를 거칩니다.
           </p>
@@ -2591,6 +2843,10 @@ function LoanApplyMockup({ ledgerKey, lenderName, skin, returnLabel, onClose, on
           ])}
           {primary("본인 확인하고 한도 조회", () => setStage("verify"))}
           {secondary(returnLabel, onClose)}
+        </div>
+        {/* F1 — 꼬리말 이름 · ⓒ = 문자 속 가상 캐피탈 이름(카탈로그 발급처 대신 — 이 화면의 사이트 이름). 값 = `siteSkins.ts` 대출 계열. */}
+        <div className="mt-5">
+          <SiteFooter skin={site} name={lenderName} copyright={`ⓒ ${lenderName}`} />
         </div>
       </div>
       {stage === "verify" && (

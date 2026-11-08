@@ -94,7 +94,8 @@ export const SITE_SKINS: Readonly<Record<SiteFamilyId, SiteSkin>> = {
       address: "누리달시 금빛구 윤슬로 112",
       phone: "02-0791-4406",
       phoneLabel: "고객센터",
-      email: "help@haedam-gold.invalid",
+      // PR-3 — 주소창 호스트(`haedam-gold.invalid`)를 품지 않는 도메인(렌더 게이트 [T190-2] "호스트는 주소창으로만" 신호 보존).
+      email: "help@haedamgold.invalid",
     },
   },
   bank: {
@@ -329,4 +330,145 @@ export function footerLines(footer: SiteFooter): string[] {
   lines.push([footer.address, `${footer.phoneLabel} ${footer.phone}`].filter(Boolean).join(" · "));
   if (footer.email) lines.push(footer.email);
   return lines;
+}
+
+// ── ⭐ 2026-11-08 웹 안의 웹 PR-3(구매형 E 금 · F 상품권 · I 내 은행 출금 · G 대출 — 시안 E · F · I · G) ─────────────────
+// 구매 화면 4종이 계열 기본값(위 `SITE_SKINS`) 밖에서 더 쓰는 색. 값만 둔다(그리는 것은 `MessengerFakeLanding.tsx`의 구매 화면).
+// ⛔ 시안 값 중 비텍스트 대비 3:1 미만이던 테두리 3개(금 카드 #E7DEC8 · 은행 형태 칸 #9CA3AF · 상품권 칩 #D9A9BB)는 더 진한 값으로 바꿨다
+//    (판정표 P C1 — `siteSkins.test.ts` [PR-3 대비]가 전부 잰다).
+
+/** 구매 화면 계열(판정표 P1 ~ P4). */
+export type PurchaseFamilyId = "gold" | "bank" | "gift" | "loan";
+
+export type PurchaseSiteTokens = {
+  /** 입력 카드 · 선택지 바탕. */
+  surface: string;
+  /** 보조 글자(본문 · 칸 설명) — `surface` · 계열 `pageBg` 둘 다 위에서 4.5:1. */
+  muted: string;
+  /** 선택지 · 입력 칸 테두리(비텍스트 3:1 — `surface` · `pageBg` 위). */
+  border: string;
+  /** 고른 선택지 테두리(2px) · 바탕 · 글자. */
+  selectedBorder: string;
+  selectedBg: string;
+  selectedText: string;
+  /** 안내 · 주의 상자 바탕(보조 글자 · 본문 글자 4.5:1). */
+  noteBg: string;
+  /** 금액 칸 아래 한글 단위 · 강조 글자(`surface` · `pageBg` 위 4.5:1). */
+  hint: string;
+  /** 배지(금 = 보증서 · 상품권 = 즉시 발송). */
+  badge?: { bg: string; text: string };
+  /** 아래 고정 결제 막대(금 · 상품권 — 판정표 B1). */
+  payBar?: { bg: string; text: string; amount: string; error: string; border?: string };
+  /** 대출 머리 아래 진행 칩(꺼진 칩). 켜진 칩 = 계열 `highlight` 바탕 위 `heroChipOnText`. */
+  heroChipOff?: { bg: string; text: string };
+  heroChipOnText?: string;
+  /** 큰 제목 영역 보조 글자(금 = 연한 바탕 위 영문 줄 · 대출 = 짙은 머리 위). */
+  heroMuted?: string;
+  /** 머리 로고 아래 작은 줄(금 영문 · 은행 메뉴 이름) — 계열 `headerBg` 위. */
+  headerSub?: string;
+};
+
+export const PURCHASE_SITE_TOKENS: Readonly<Record<PurchaseFamilyId, PurchaseSiteTokens>> = {
+  gold: {
+    surface: "#FFFFFF",
+    muted: "#5E5236",
+    border: "#9C8A5C",
+    selectedBorder: "#7A5E22",
+    selectedBg: "#FFF8E6",
+    selectedText: "#1F1A12",
+    noteBg: "#F3ECDB",
+    hint: "#7A5E22",
+    badge: { bg: "#F6EBCB", text: "#6E5212" },
+    payBar: { bg: "#15120D", text: "#CDBF9C", amount: "#F0D48A", error: "#FF9C8F" },
+    heroMuted: "#7A6A45",
+    headerSub: "#A99260",
+  },
+  bank: {
+    surface: "#FFFFFF",
+    muted: "#4B5563",
+    border: "#6B7280",
+    selectedBorder: "#1E3A5F",
+    selectedBg: "#EEF2F7",
+    selectedText: "#1E3A5F",
+    noteBg: "#EEF2F7",
+    hint: "#1E3A5F",
+    headerSub: "#4B5563",
+  },
+  gift: {
+    surface: "#FFFFFF",
+    muted: "#6E4B58",
+    border: "#B5638A",
+    selectedBorder: "#C2255C",
+    selectedBg: "#FFF0F5",
+    selectedText: "#2B1720",
+    noteBg: "#FFF0F5",
+    hint: "#C2255C",
+    badge: { bg: "#E3F5E8", text: "#1E6B34" },
+    payBar: { bg: "#FFFFFF", text: "#6E4B58", amount: "#2B1720", error: "#C0262D", border: "#F3D9E3" },
+  },
+  loan: {
+    surface: "#FFFFFF",
+    muted: "#4F625E",
+    border: "#7C918C",
+    selectedBorder: "#0E5E52",
+    selectedBg: "#0E5E52",
+    selectedText: "#FFFFFF",
+    noteBg: "#E4EFEC",
+    hint: "#0E5E52",
+    heroChipOff: { bg: "#2B7468", text: "#E6F4F0" },
+    heroChipOnText: "#0E3A33",
+    heroMuted: "#D5ECE7",
+  },
+};
+
+/** 판정표 P1 ~ P4 — 랜딩 id가 구매 계열이면 그 계열(정확 일치 조회 · `siteSkinFor`). 그 밖 = undefined. */
+export function purchaseFamilyOf(landingId?: string): PurchaseFamilyId | undefined {
+  const id = siteSkinFor(landingId)?.id;
+  return id === "gold" || id === "bank" || id === "gift" || id === "loan" ? id : undefined;
+}
+
+/**
+ * 구매 화면 단계(주문 확인 · 문진표 · 보류 · 완료 등)가 쓰는 색 한 벌 — 키는 `LANDING_PAGE_TOKENS`(`skinTokens.ts`)와 같은 이름이라 단계 코드가
+ * 기본 토큰 대신 이것을 받으면 그대로 계열 색이 된다(흐름 코드 무변경). 오류 글자는 기본 토큰과 같은 빨강(모든 계열 바탕 위 5:1 이상).
+ */
+export type PurchasePalette = {
+  pageBg: string;
+  headline: string;
+  body: string;
+  inputBorder: string;
+  inputBg: string;
+  inputText: string;
+  submitBg: string;
+  submitText: string;
+  issuerFooter: string;
+  fieldReadonlyBg: string;
+  errorText: string;
+  hintText: string;
+  selectedBorder: string;
+  selectedBg: string;
+  selectedText: string;
+};
+
+export const PURCHASE_ERROR_TEXT = "#C0262D";
+
+export function purchasePalette(family: PurchaseFamilyId): PurchasePalette {
+  const skin = SITE_SKINS[family];
+  const t = PURCHASE_SITE_TOKENS[family];
+  return {
+    pageBg: skin.pageBg,
+    headline: skin.text,
+    body: t.muted,
+    inputBorder: t.border,
+    inputBg: t.surface,
+    inputText: skin.text,
+    submitBg: skin.buttonBg,
+    submitText: skin.buttonText,
+    issuerFooter: t.muted,
+    fieldReadonlyBg: t.noteBg,
+    errorText: PURCHASE_ERROR_TEXT,
+    hintText: t.hint,
+    selectedBorder: t.selectedBorder,
+    selectedBg: t.selectedBg,
+    selectedText: t.selectedText,
+  };
 }

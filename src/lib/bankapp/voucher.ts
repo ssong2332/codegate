@@ -91,6 +91,13 @@ export function lastVoucherPurchase(ledgerKey: string, landingId: string): Vouch
 }
 
 /** 화면 문구(서버 카탈로그 `voucher-purchase`의 headline · bodyLines · submitLabel · successHeadline · issuerLabel과 같은 글자 — 드리프트 테스트). */
+/** ⭐ 2026-11-08 웹 안의 웹 PR-3(시안 F · 사용자 승인 계획) — 상품권 몰 첫 화면의 사이트 장식 문구(새 문구). 판정 · 금액 · 핀 발급에 쓰지 않는다. */
+export const VOUCHER_SITE_COPY = {
+  instantBadge: "구매 즉시 발송",
+  cardKind: "모바일 상품권",
+  cardPin: "핀 번호 발급",
+} as const;
+
 export const VOUCHER_COPY = {
   denominationLabel: "권종",
   quantityLabel: "수량",
