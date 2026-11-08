@@ -520,6 +520,20 @@ const OTP_REQUESTED = /인증\s*(?:번호|코드)[^.?!\n]{0,30}?(?:불러|말씀
 /** §129.13 (b) — 답의 4~8자리 숫자열("인증번호 128139 왔어요" — 숫자 뒤가 어미가 아니라 `extractSpokenCodes`는 못 뽑는다 · 그쪽은 무변경). */
 const OTP_DIGIT_RUN = /(?<![\d-])\d{4,8}(?![\d-])/;
 
+/** 판정표 O(2026-11-08 재시험 12) — 속은 순간 라벨이 인증번호 수법인가. */
+const OTP_LABEL = /인증\s*번호/;
+/** 판정표 O2 — 잔액을 밝힌 답의 대체 라벨(목록 안 자산 정보 수집류 · 예: '거래 은행·자산 정보 수집'). */
+const ASSET_INFO_LABEL = /자산|잔액|거래\s*은행/;
+/**
+ * 판정표 O — 답에 인증번호로 볼 내용이 있는가: 4~8자리 숫자열(뒤에 금액 · 날짜 · 시각 단위가 없을 때 — "1200만 원"은 코드가 아니다)
+ * 또는 `extractSpokenCodes`(숫자 띄어 읽기 · 한글 숫자 낭독). 사진 턴은 아니다.
+ */
+const OTP_CODE_IN_ANSWER = /(?<![\d,-])\d{4,8}(?![\d,-]|\s*(?:원|만|천|억|년|월|일|시|분|초|호|번지|살|개|명|층|번\s*(?:으로|에|째)))/;
+function isOtpCodeAnswer(reply: AnalysisMessage): boolean {
+  if (reply.photo === true) return false;
+  return OTP_CODE_IN_ANSWER.test(reply.textMasked) || extractSpokenCodes(reply.textMasked).length > 0;
+}
+
 /** L2 — 답의 내용 범주. 사진 턴은 판정하지 않는다(§131). */
 function answerContentCategory(scammerText: string, reply: AnalysisMessage): TacticCategory | undefined {
   if (reply.photo === true) return undefined;
@@ -1088,8 +1102,30 @@ export function analyzeConversation(
       ? scopeTactics.map(extractTacticLabel).find((label) => /상품권|핀\s*번호/.test(label))
       : undefined;
     if (pinLabel) tacticLabelsUsed.add(pinLabel);
-    const tactic =
+    const chosenTactic =
       pinLabel ?? secretLabel ?? (labelTactic ? extractTacticLabel(labelTactic) : (fallbackTactic ?? representative ?? "약화된 사기 수법"));
+    // ⭐ 2026-11-08 라이브 재시험 12(기관 사칭 고급 금 구매형 fv-g2ld — 인증번호 요구 뒤 "새마을은행에 1,200만 원 있어요."에 '인증번호 요구'에
+    // 응함) — 원인: 인증번호 요구 대사의 문구 키("방금 문자로")가 첫 키 라벨을 정하고, 답 내용과 무관하게 그 라벨이 붙었다. 판정표 O:
+    // | # | If(위에서 고른 라벨 · 답) | Then |
+    // |---|---|---|
+    // | O1 | 라벨에 '인증번호'가 없다 · 또는 답에 인증번호로 볼 내용(`isOtpCodeAnswer`)이 있다 | 그대로(종전) |
+    // | O2 | 라벨에 '인증번호'가 있고 답에 그런 내용이 없다 | 인증번호 라벨을 뺀 후보로 다시 고른다: (잔액 공개 답이면) 목록의 자산 · 잔액 · 거래 은행 라벨 → 답 내용 범주(L2) → 키 라벨 → 요구 어형 표 |
+    // | O3 | O2에서 후보가 없다 | 이 답은 속은 순간이 아니다(인증번호 요구에 응함 불인정) |
+    // ⚠️ 신원정보 · 거래 은행 · 자산 정보 라벨에는 이 표를 쓰지 않는다(범위 밖).
+    const otpLabelWithoutCode = OTP_LABEL.test(chosenTactic) && !isOtpCodeAnswer(userReply);
+    const nonOtpTactics = otpLabelWithoutCode ? scopeTactics.filter((t) => !OTP_LABEL.test(extractTacticLabel(t))) : [];
+    const nonOtpKey = otpLabelWithoutCode ? keyTactics.find((t) => !OTP_LABEL.test(extractTacticLabel(t))) : undefined;
+    const reLabel = otpLabelWithoutCode
+      ? ((BALANCE_DISCLOSURE.test(userReply.textMasked)
+          ? nonOtpTactics.map(extractTacticLabel).find((label) => ASSET_INFO_LABEL.test(label))
+          : undefined) ??
+        resolveAnswerCategoryTactic(labelSource.textMasked, userReply, nonOtpTactics) ??
+        (nonOtpKey ? extractTacticLabel(nonOtpKey) : undefined) ??
+        resolveDemandFallbackTactic(labelSource.textMasked, nonOtpTactics))
+      : undefined;
+    if (otpLabelWithoutCode && !reLabel) continue; // O3
+    if (reLabel) tacticLabelsUsed.add(reLabel);
+    const tactic = reLabel ?? chosenTactic;
     // AC-026 예시("15초 시점에 속았습니다")를 그대로 따르기 위해 turnIndex가 아니라 실제 경과
     // 시간(초)을 라벨로 쓴다 — MessageDoc.createdAt이 이미 존재하므로 정확한 초 단위 계산이
     // 가능하다(구현 판단, Mock 단계라 정밀 음성 타이밍 데이터는 없지만 메시지 write 시각은 실측값).
