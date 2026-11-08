@@ -188,7 +188,7 @@ type MessengerFakeLandingProps = {
    */
   bankIdentity?: { myBankName: string; ledgerKey: string };
   /**
-   * ⭐ 2026-11-08(라이브 재시험 7 · 사용자 결정 "말한 값에 맞추기") — 출금 예약 화면(`CASH_LANDINGS`)을 여는 순간 참가자가 통화에서 말한 거래 은행 · 잔액
+   * ⭐ 2026-11-08(라이브 재시험 7 · 사용자 결정 "말한 값에 맞추기" · S12 금 거래소 화면도 같은 규칙) — 출금 예약 화면(`CASH_LANDINGS`) · 금 거래소 화면(`GOLD_LANDINGS`)을 여는 순간 참가자가 통화에서 말한 거래 은행 · 잔액
    * (판정표 S — `bankApp.ts` `spokenAccountFrom`). 말하지 않은 쪽 · 부재 = 종전 고정 값. ⛔ 화면 안에서만 쓴다(콜백 · 네트워크 0 · G138).
    */
   spokenAccountNow?: () => SpokenAccount;
@@ -390,6 +390,7 @@ export default function MessengerFakeLanding({
             onCredentialSubmit={() => onCredentialSubmit?.()}
             onHeld={() => onLandingStep?.("landing_held")}
             bankIdentity={bankIdentity}
+            spokenAccountNow={spokenAccountNow}
             returnLabel={returnLabel}
             skin={skin}
           />
@@ -1117,6 +1118,7 @@ function GoldBuyMockup({
   onCredentialSubmit,
   onHeld,
   bankIdentity,
+  spokenAccountNow,
   returnLabel,
   skin,
 }: {
@@ -1127,14 +1129,19 @@ function GoldBuyMockup({
   /** ⛔ 무인자 — 고액 구매 확인에서 보류됐다는 사실 하나만 올린다(G138 · 사용자 결정 D-G4). */
   onHeld: () => void;
   bankIdentity?: { myBankName: string; ledgerKey: string };
+  /** 판정표 S12(2026-11-08 사용자 결정) — 출금 예약 화면과 같은 규칙: 여는 순간 참가자가 말한 거래 은행 · 잔액. ⛔ 결제 계좌 목록에만 쓴다(G138). */
+  spokenAccountNow?: () => SpokenAccount;
   returnLabel: string;
   skin: MessengerSkin;
 }) {
   const copy = CREDENTIAL_LANDING_COPY[landingId] ?? GENERIC_CREDENTIAL_COPY;
   const page = LANDING_PAGE_TOKENS;
   const ledger = bankIdentity?.ledgerKey ?? "";
-  const appBankName = bankIdentity?.myBankName ?? myBankNameFor(ledger);
-  const [accounts] = useState(() => withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: fictionalBalanceFor(ledger) }));
+  const [spoken] = useState<SpokenAccount>(() => spokenAccountNow?.() ?? {});
+  const appBankName = spoken.bankName ?? bankIdentity?.myBankName ?? myBankNameFor(ledger);
+  const [accounts] = useState(() =>
+    withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: spoken.balance ?? fictionalBalanceFor(ledger) }),
+  );
   const [accountId, setAccountId] = useState<WithdrawAccount["id"]>("main");
   const account = accounts.find((item) => item.id === accountId) ?? accounts[0]!;
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);

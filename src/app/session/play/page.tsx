@@ -4486,7 +4486,7 @@ export default function SessionCallPage() {
                   ...transcriptRef.current.filter((t) => t.role === "scammer").map((t) => t.text),
                 ])
           }
-          // ⭐ 2026-11-08(라이브 재시험 7 · 사용자 결정 "말한 값에 맞추기") — 출금 예약 화면의 출금 계좌 은행 · 잔액 = 참가자가 말한 값(판정표 S ·
+          // ⭐ 2026-11-08(라이브 재시험 7 · 사용자 결정 "말한 값에 맞추기") — 출금 예약 · 금 거래소 화면의 출금 계좌 은행 · 잔액 = 참가자가 말한 값(판정표 S · S12 ·
           // 참가자 대사만 값으로 · 사기범 대사는 잔액 질문 판정에만). 값은 화면 안에서만 쓰인다(G138 — 기록 경로 0).
           spokenAccountNow={() => spokenAccountFrom([...messages, ...transcriptRef.current])}
         />

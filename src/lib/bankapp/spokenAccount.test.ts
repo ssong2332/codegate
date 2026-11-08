@@ -9,12 +9,15 @@
 // | SA4 | 비정상 금액(1만 원 미만 · 10억 원 초과)은 건너뜀 · 여러 번 말하면 마지막 유효 값(S8 · S9) |
 // | SA5 | 실제 렌더 — 출금 예약 화면 머리띠 · 출금 계좌 줄 · 출금 가능 금액이 말한 값 / 말하지 않았으면 종전 고정 값 |
 // | SA6 | 배선 — 페이지가 대사(참가자 · 사기범 순서 그대로)로 화면을 여는 순간 값을 만들고, 값은 화면 안에서만 쓴다(네트워크 · 콜백 0 · G138) |
+// | SA7 | 금 거래소 화면도 같은 규칙(S12 · 2026-11-08 사용자 결정) — 결제 계좌 은행 · 출금 가능 금액 = 말한 값 / 말 없으면 고정 값 |
+// | SA8 | 100만 원 미만 잔액은 그대로 두고 출금 예약은 최소 금액에 걸린다(S8 · 2026-11-08 사용자 결정 "그대로 둠") |
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { renderLandingScreen } from "../mockscreenrender/renderHarness.ts";
 import { FICTIONAL_BANK_NAMES, fictionalBalanceFor, myBankNameFor, spokenAccountFrom } from "./bankApp.ts";
 import { withdrawAccountsFor } from "./withdrawAccounts.ts";
+import { cashReserveError } from "./cashWithdraw.ts";
 
 const scammer = (text: string) => ({ role: "scammer" as const, text });
 const user = (text: string) => ({ role: "user" as const, text });
@@ -120,6 +123,36 @@ test("[SA6] 배선 — 참가자 · 사기범 대사 순서대로 · 화면 안�
   assert.ok(component.includes("const [spoken] = useState<SpokenAccount>(() => spokenAccountNow?.() ?? {});"), "여는 순간 한 번 읽는다");
   // 값은 계좌 목록 · 머리띠에만 — 콜백 인자 · 네트워크 0(CW6이 콜백 무인자 · 네트워크 0을 함께 본다).
   for (const call of component.match(/(onCredentialSubmit|onHeld)\([^)]*\)/g) ?? []) assert.ok(call === "onCredentialSubmit()" || call === "onHeld()", call);
-  const gold = landing.slice(landing.indexOf("function GoldBuyMockup("), landing.indexOf("\nfunction ", landing.indexOf("function GoldBuyMockup(") + 10));
-  assert.equal(gold.includes("spokenAccountNow"), false, "판정표 S12 — 금 화면은 메인 결정 전까지 그대로");
+  // 판정표 S12(2026-11-08 사용자 결정 "금 거래소 구매 화면에도 같은 규칙") — 금 화면도 같은 게터 · 같은 함수.
+  const goldStart = landing.indexOf("function GoldBuyMockup(");
+  const gold = landing.slice(goldStart, landing.indexOf("\nfunction ", goldStart + 10));
+  assert.ok(gold.includes("const [spoken] = useState<SpokenAccount>(() => spokenAccountNow?.() ?? {});"), "금 화면도 여는 순간 한 번 읽는다");
+  for (const call of gold.match(/(onCredentialSubmit|onHeld)\([^)]*\)/g) ?? []) assert.ok(call === "onCredentialSubmit()" || call === "onHeld()", call);
+  assert.equal((landing.match(/spokenAccountNow=\{spokenAccountNow\}/g) ?? []).length, 2, "출금 예약 · 금 화면 두 곳에만 넘긴다");
+});
+
+const goldProps = (extra: Record<string, unknown> = {}) => cashProps({ title: "골드바 구매", landingId: "gold-buy", ...extra });
+
+test("[SA7] 금 거래소 화면(S12) — 결제 계좌 = 말한 은행 · 잔액 / 말 없으면 종전 고정 값", () => {
+  for (const id of ["gold-buy", "asset-gold-buy"]) {
+    const spoken = renderLandingScreen(goldProps({ landingId: id, spokenAccountNow: () => spokenAccountFrom(LIVE_TURNS) })).text;
+    assert.ok(spoken.includes("새솔은행"), `${id}: 결제 계좌 은행 = 말한 은행`);
+    assert.ok(spoken.includes("12,000,000원"), `${id}: 출금 가능 금액 = 말한 잔액`);
+    assert.equal(spoken.includes("늘봄은행"), false, `${id}: 고정 은행이 남으면 안 된다`);
+    assert.equal(spoken.includes(won(fictionalBalanceFor(LEDGER))), false, `${id}: 고정 잔액이 남으면 안 된다`);
+
+    const silent = renderLandingScreen(goldProps({ landingId: id, spokenAccountNow: () => spokenAccountFrom([]) })).text;
+    assert.ok(silent.includes("늘봄은행"), `${id}: 말 없으면 종전 은행`);
+    assert.ok(silent.includes(won(fictionalBalanceFor(LEDGER))), `${id}: 말 없으면 종전 고정 잔액`);
+    assert.equal(renderLandingScreen(goldProps({ landingId: id })).text, silent, `${id}: 공급원 없음 = 말 없음`);
+  }
+});
+
+test("[SA8] 판정표 S8(2026-11-08 사용자 결정 \"그대로 둠\") — 100만 원 미만 잔액도 그대로 보이고 출금 예약은 최소 금액에 걸린다(현실처럼 예약 불가)", () => {
+  const turns = [user("통장에 50만 원 있어요.")];
+  assert.deepEqual(spokenAccountFrom(turns), { balance: 500_000 });
+  const text = renderLandingScreen(cashProps({ spokenAccountNow: () => spokenAccountFrom(turns) })).text;
+  assert.ok(text.includes("500,000원"), "출금 가능 금액 = 말한 잔액 그대로");
+  // "전액"을 눌러도 최소 금액 안내(잔액 판정보다 먼저 — `cashReserveError`).
+  assert.match(cashReserveError("500,000", "cash") ?? "", /1,000,000원부터/);
 });

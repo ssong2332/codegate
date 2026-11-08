@@ -874,7 +874,7 @@ export default function InCallSmsOverlay({
                 }
                 // ⭐ 2026-11-07(Edge 시험 판 12) — 상품권 구매 화면의 결제 계좌 · 핀 발급 열쇠(계좌 문자가 아니라 `prefilledTransfer`가 없다).
                 bankIdentity={bankIdentity}
-                // ⭐ 2026-11-08(판정표 S) — 출금 예약 화면의 출금 계좌 은행 · 잔액 = 참가자가 말한 값(화면 안에서만).
+                // ⭐ 2026-11-08(판정표 S · S12) — 출금 예약 · 금 거래소 화면의 출금 계좌 은행 · 잔액 = 참가자가 말한 값(화면 안에서만).
                 spokenAccountNow={spokenAccountNow}
                 // T194-c-1(Q2) — 가짜 "권한 허용" 응낙 **사실 하나**를 페이지로 중계한다(인자 = 랜딩 id뿐 · 이 파일은 콜러블을 부르지 않는다).
                 onInstallConsent={() => {
