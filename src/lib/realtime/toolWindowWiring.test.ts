@@ -76,7 +76,8 @@ test("[백스톱 발동 · T191] 문자 백스톱 호출은 trigger:\"backstop\"
   assert.match(call, /trigger: "backstop",/);
   // §126 — 주장 질의면 말하는 도중 센 발화 수(응답 중 발화 포함)와 flush 수 중 큰 쪽.
   assert.match(call, /userTurns: smsClaimPendingRef\.current \? Math\.max\(counters\.userTurns, smsClaimUserTurnsRef\.current\) : counters\.userTurns,/);
-  assert.match(call, /scammerTranscriptTurns: counters\.scammerTranscriptTurns,/);
+  // ⭐ 2026-11-08(라이브 재시험 7) — 말하는 도중 "보냈다" 주장이면 아직 flush 전인 그 턴을 더한다(`claimedScammerTranscriptTurns` 판정 K6).
+  assert.match(call, /scammerTranscriptTurns: claimedScammerTranscriptTurns\(counters\.scammerTranscriptTurns, smsClaimRaisedMidTurnRef\.current\),/);
   assert.equal(/smsId|purpose/.test(call), false, "화면이 문자 id · 목적을 고르면 안 된다(설계 금지 X1 · X4)");
 });
 
@@ -146,7 +147,8 @@ test("[배선 · T191 G538] dispatchToolCall의 send_prepared_sms는 모델 purp
     sessionCode,
     /const claimedUserTurns = \(\) => handlersRef\.current\.getSessionUserTurns\(\) \+ \(userBuffer\.trim\(\) \? 1 : 0\);/,
   );
-  assert.match(branch, /scammerTranscriptTurns: modelToolScammerTurns,/);
+  // ⭐ 2026-11-08(#538 발견 1) — 앵커 입력도 부모 누적 getter(연결마다 0이던 지역 사본 폐기).
+  assert.match(branch, /scammerTranscriptTurns: sessionScammerTurns\(\),/);
   assert.match(branch, /trigger: "model_tool",/);
   assert.equal(branch.includes("smsId"), false);
 });

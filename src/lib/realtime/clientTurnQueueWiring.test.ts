@@ -139,11 +139,12 @@ test("[§82.3.4 G539 배선] 빈 turnComplete(N1)는 경계 콜백을 부르지 
     1,
     "경계 콜백 호출부는 빈 마감 판정 뒤 한 곳뿐이다",
   );
-  // `modelToolScammerTurns += 1`은 비어 있지 않은 사기범 전사 flush 두 곳(정상 마감 · 끊긴 조각)뿐이다.
-  assert.equal((code.match(/modelToolScammerTurns \+= 1;/g) ?? []).length, 2);
+  // ⭐ 2026-11-08(#538 발견 1) — 도구 경로의 사기범 전사 수는 지역 사본이 아니라 부모 누적 getter다(연결마다 0으로 돌아가던 결함).
+  // 부모 계수는 비어 있지 않은 사기범 전사 flush 두 곳(정상 마감 · 끊긴 조각)의 `onTranscriptTurn("scammer")` 안에서만 오른다.
+  assert.equal(/modelToolScammerTurns \+= 1;|let modelToolScammerTurns/.test(code), false, "지역 사본 0");
   for (const fn of ["const flushTranscript = ", "const flushScammerTurn = "]) {
-    const body = code.slice(code.indexOf(fn), code.indexOf(fn) + 400);
-    assert.ok(/if \(s\) \{\s*modelToolScammerTurns \+= 1;/.test(body), `${fn} — 비어 있을 때 오르면 안 된다`);
+    const body = code.slice(code.indexOf(fn), code.indexOf(fn) + 600);
+    assert.ok(/if \(s\) \{[\s\S]*?handlersRef\.current\.onTranscriptTurn\("scammer", s\);/.test(body), `${fn} — 비어 있을 때 부모에 넘기면 안 된다`);
   }
 });
 

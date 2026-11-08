@@ -173,6 +173,7 @@ import {
   INITIAL_TURN_COUNTERS,
   type InstructionDelivery,
 } from "@/lib/realtime/contextInjection";
+import { claimedScammerTranscriptTurns } from "@/lib/realtime/toolTurnTranscript";
 import {
   INITIAL_CONFIRM_RESULT_INJECTION_STATE,
   VERIFY_RECONNECT_MAX_ATTEMPTS,
@@ -640,6 +641,9 @@ export default function SessionCallPage() {
   // §121.7 ⓒ(메인 결정 "두 채널 발화 합산") — 통화 중 대화방 카톡도 사용자 발화로 센다(끊기 · 문자 도구 판정 입력). 전사 계수는 그대로 두고 더한다.
   const chatTurnsDuringCallRef = useRef(0);
   const getSessionUserTurns = useCallback(() => turnCountersRef.current.userTurns + chatTurnsDuringCallRef.current, []);
+  // ⭐ 2026-11-08(#538 발견 1) — 실시간 모델 도구(문자 · 확인 오퍼)의 앵커 입력 = 세션 누적 사기범 전사 수. 백스톱 질의(`counters.scammerTranscriptTurns`)
+  // · 화면 경로(`scammerTurnsRef`)와 같은 값이다. 다음 통화 · 재연결로 Live 컴포넌트가 다시 마운트돼도 이 ref는 이어진다.
+  const getSessionScammerTurns = useCallback(() => turnCountersRef.current.scammerTranscriptTurns, []);
   // §79.19 (3) — 부모 클라 항: 지시 큐 비어 있지 않음 ∨ 이번 턴 지시 처리 중 ∨ 교대 대기. ⛔ `toolPending`은 없다(G555).
   const getPendingInstruction = useCallback(
     () =>
@@ -1287,7 +1291,8 @@ export default function SessionCallPage() {
         const result = await deliverInCallSms({
           sessionId,
           userTurns: smsClaimPendingRef.current ? Math.max(counters.userTurns, smsClaimUserTurnsRef.current) : counters.userTurns,
-          scammerTranscriptTurns: counters.scammerTranscriptTurns,
+          // ⭐ 2026-11-08(라이브 재시험 7) — 말하는 도중 "보냈다" 주장(§126)이면 그 턴은 아직 flush 전이지만 곧 문서 1개가 된다(판정 K6 — 모델 도구와 같은 함수).
+          scammerTranscriptTurns: claimedScammerTranscriptTurns(counters.scammerTranscriptTurns, smsClaimRaisedMidTurnRef.current),
           trigger: "backstop",
           ...(smsClaimPendingRef.current ? { smsClaimed: true } : {}),
         });
@@ -3417,6 +3422,7 @@ export default function SessionCallPage() {
             turnPhaseRef={liveTurnPhaseRef}
             primedAudio={primedCallAudio}
             getSessionUserTurns={getSessionUserTurns}
+            getSessionScammerTurns={getSessionScammerTurns}
             getPendingInstruction={getPendingInstruction}
             isHangupLatched={isHangupLatched}
             onScammerHangupAccepted={handleScammerHangupAccepted}
