@@ -160,8 +160,28 @@ export function poisonedComponentSource(from: string, to: string): {
 } {
   const absolutePath = resolvePath(COMPONENT_PATH);
   const original = readFileSync(absolutePath, "utf8");
-  const poisoned = original.replace(from, to);
+  const poisoned = replaceOnceAnyLineEnding(original, from, to);
   return { absolutePath, original, poisoned, overrides: new Map([[absolutePath, poisoned]]) };
+}
+
+/**
+ * 한 군데 치환 — **줄 끝 무관**(2026-11-08 PR-3 통합 검증: `core.autocrlf=true` 새 체크아웃에서 컴포넌트가 CRLF라
+ * 여러 줄 앵커(`"…\n"`)를 못 찾아 역검증이 "오염 지점을 찾지 못했다"로 실패했다).
+ * | # | If | Then |
+ * |---|---|---|
+ * | E1 | 원본에 `from`이 글자 그대로 있다 | 종전처럼 그대로 치환(LF 체크아웃 · 한 줄 앵커 — 동작 무변경) |
+ * | E2 | 없고, `from`에 `\n`이 있으며 원본에 그 CRLF 형태가 있다 | CRLF 형태끼리 치환(`to`의 `\n`도 `\r\n`으로) |
+ * | E3 | 둘 다 없다 | 원본 그대로(호출부의 "오염이 실제로 만들어졌다" 단언이 잡는다) |
+ * ⛔ 원본 문자열 자체는 바꾸지 않는다(정규화 0 — 다른 호출부의 `original` 비교 무변경).
+ */
+export function replaceOnceAnyLineEnding(source: string, from: string, to: string): string {
+  if (source.includes(from)) return source.replace(from, to);
+  if (from.includes("\n")) {
+    const crlf = (text: string) => text.replace(/\r?\n/g, "\r\n");
+    const fromCrlf = crlf(from);
+    if (source.includes(fromCrlf)) return source.replace(fromCrlf, crlf(to));
+  }
+  return source;
 }
 
 const ENTITIES: Array<[RegExp, string]> = [

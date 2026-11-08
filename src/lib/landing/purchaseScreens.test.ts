@@ -8,13 +8,14 @@
 // | PS4 | 재현 — 금 시세 띠(1g · 1돈 같은 단가 계산) · 금괴 카드 4개 · 상품권 카드 · 즉시 발송 배지 · 대출 진행 칩(흐름 단계마다 켜지는 칩) |
 // | PS5 | 금지 — 6화면 첫 렌더에 세션 금지 낱말(G437) · 8자리 이상 숫자열 · 서비스 밖 안내(매장 · 수령 · 방문 · 영업점 · 금 보관 · 현금인출기) 0 |
 // | PS6 | 새 조각(머리 · 꼬리말 · 결제 막대) — 네트워크 · 저장소 0 · 결제 막대 버튼 = 종전 "다음" 동작 그대로(무인자) |
+// | PS7 | 오염 치환 헬퍼 = 줄 끝 무관(LF · CRLF 체크아웃 둘 다 — `core.autocrlf=true` 새 체크아웃 통합 검증 실패 재현) · 역검증 |
 //
 // ⚠️ 한계(정직 고지): 렌더 하네스는 `renderToStaticMarkup` — 누름 · sticky 실제 위치 · 그라데이션 모양은 보지 않는다(실기기 · 브라우저 확인 몫).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
-import { COMPONENT_PATH, poisonedComponentSource, renderLandingScreen } from "../mockscreenrender/renderHarness.ts";
+import { COMPONENT_PATH, poisonedComponentSource, renderLandingScreen, replaceOnceAnyLineEnding } from "../mockscreenrender/renderHarness.ts";
 import { PURCHASE_ERROR_TEXT, PURCHASE_SITE_TOKENS, SITE_SKINS, footerLines, purchaseFamilyOf, purchasePalette, type PurchaseFamilyId } from "./siteSkins.ts";
 import { pairContrast, type ContrastPair } from "../phone/skinTokens.ts";
 import { GOLD_PRICE_PER_GRAM, GOLD_PRODUCTS, GOLD_SITE_COPY } from "../bankapp/goldBuy.ts";
@@ -294,4 +295,22 @@ test("[PS6] 새 조각(머리 · 꼬리말 · 결제 막대) — 네트워크 ·
     const component = file.slice(s, file.indexOf("\nfunction ", s + 10));
     assert.ok(component.includes("onSubmit={handleNext}"), `${name}: 결제 막대 = 종전 "다음" 판정 그대로`);
   }
+});
+
+// ── PS7 오염 치환 헬퍼 줄 끝 무관 ───────────────────────────────────────────────────────────────────────
+
+test("[PS7] 오염 치환 헬퍼 — LF · CRLF 원본 모두 여러 줄 앵커를 한 번 치환 · 없으면 원본 그대로 · 역검증", () => {
+  const lf = "a\n      ? purchaseFamilyOf(landingId)\n      : undefined;\n";
+  const crlf = lf.replace(/\n/g, "\r\n");
+  const from = "      ? purchaseFamilyOf(landingId)\n";
+  const to = "      ? undefined\n";
+  assert.equal(replaceOnceAnyLineEnding(lf, from, to), "a\n      ? undefined\n      : undefined;\n", "E1 LF");
+  assert.equal(replaceOnceAnyLineEnding(crlf, from, to), "a\r\n      ? undefined\r\n      : undefined;\r\n", "E2 CRLF — 줄 끝 형태 유지");
+  assert.equal(replaceOnceAnyLineEnding(crlf, "없는 앵커\n", to), crlf, "E3 없으면 그대로");
+  assert.ok(replaceOnceAnyLineEnding(crlf, "purchaseFamilyOf", "X").includes("? X(landingId)"), "한 줄 앵커는 CRLF여도 그대로");
+  // 역검증 — 종전 방식(글자 그대로 replace)은 CRLF 원본에서 아무것도 바꾸지 못한다(통합 검증 실패의 원인).
+  assert.equal(crlf.replace(from, to), crlf);
+  // 실제 컴포넌트 파일(이 체크아웃의 줄 끝이 무엇이든)에서도 PS2 앵커가 한 곳 잡힌다.
+  const { original, poisoned } = poisonedComponentSource(from, to);
+  assert.notEqual(poisoned, original);
 });
