@@ -256,7 +256,8 @@ test("[배선 · UX D-131 (1)] self = 난이도 화면 · send = 챌린지 만�
   const difficulty = codeOnly("../../app/scenarios/difficulty/page.tsx");
   assert.match(difficulty, /const showPersonaInput = !isSendMode && personaCardInputVisible\(scenarioId, selected, scenario\?\.channel\);/);
   assert.match(difficulty, /<PersonaCardInputFields\s+mode="self"/);
-  assert.match(difficulty, /\.\.\.\(personaCardInput \? \{ personaCardInput \} : \{\}\),/);
+  // 2026-11-09 판정표 RQ — 난이도 화면은 원값에 카드 거래 은행 · 잔액(기관형 · 실제 은행 = "real")을 합친 `personaRequest`를 싣는다(여전히 원값만 · 완성 카드 0).
+  assert.match(difficulty, /\.\.\.\(personaRequest \? \{ personaCardInput: personaRequest \} : \{\}\),/);
   const create = codeOnly("../../app/challenge/create/page.tsx");
   assert.match(create, /const showPersonaInput = personaCardInputVisible\(scenarioId, difficultyLevel, scenario\?\.channel\);/);
   assert.match(create, /<PersonaCardInputFields\s+mode="send"/);
