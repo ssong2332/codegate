@@ -82,6 +82,7 @@ import {
   isEmptyTurnComplete,
   localSpeechStarted,
   sendsAsContextInjection,
+  silenceNudgeDelayMs,
   stepSilenceNudge,
   type InstructionDelivery,
 } from "./contextInjection";
@@ -1072,7 +1073,8 @@ export default function GeminiVoiceSession({
       silenceNudgeState = step.state;
       if (step.fire) {
         console.info(LIVE_TURN_LOG_PREFIX, formatSilenceNudgeLog({ sinceInjectionMs: nowMs - (armedAt ?? nowMs) }));
-        dispatchClientTurn({ type: "request", turn: { kind: "silence", text: SILENCE_NUDGE_TEXT }, nowMs });
+        // 2026-11-08 관찰 d — 문면은 대기를 건 주입 종류가 정한다(판정표 N: 문자 안내 · 화면 결과).
+        dispatchClientTurn({ type: "request", turn: { kind: "silence", text: step.text ?? SILENCE_NUDGE_TEXT }, nowMs });
         return;
       }
       if (silenceNudgeState.armedAt !== null) {
@@ -1100,9 +1102,10 @@ export default function GeminiVoiceSession({
       }).state;
       if (silenceNudgeState.armedAt !== null) {
         clearSilenceNudgeTimer();
+        // 2026-11-08 관찰 d — 대기는 판정표 N의 그 종류 값(문자 안내 8초 · 화면 결과 4초).
         silenceNudgeTimer = setTimeout(() => {
           if (!cancelled) runSilenceNudgeCheck();
-        }, SMS_MENTION_SILENCE_SEC * 1000);
+        }, silenceNudgeDelayMs(silenceNudgeState) ?? SMS_MENTION_SILENCE_SEC * 1000);
       }
       return true;
     };
