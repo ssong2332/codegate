@@ -3,7 +3,7 @@
 import type { VerifyInterceptItem } from "../scenarios/verifyIntercept";
 import type { VerifyInterceptDoc } from "../shared/types";
 import type { DeliverVerifyOfferResponse, VerifyOfferStage } from "./types";
-import { applyFictionalBank } from "../shared/fictionalBank";
+import { applySessionBankText } from "../session/cardBankDesk";
 
 /**
  * ⚠️ **여기서 나가는 필드가 곧 클라가 볼 수 있는 전부다**(AC-019/AC-024 구조적 금지의 마지막 관문).
@@ -20,10 +20,12 @@ export function buildVerifyInterceptDoc(
   offerAnchorScammerTurn: number,
   // §81 — 세션 가상 은행명. 창구 이름("○○은행 금융사고대응 확인창구")을 저장 시 치환한다(통화 오버레이·다시보기가 이 값을 그대로 보인다).
   fictionalBankName?: string,
+  // ⭐ 2026-11-09 판정표 BD(`session/cardBankDesk.ts`) — 카드 거래 은행이 실제 은행이면 은행 창구 이름을 이름 없는 표기로. 부재 = 종전.
+  unnamedCardBank = false,
 ): VerifyInterceptDoc {
   return {
     offerId: item.offerId,
-    deskLabel: fictionalBankName ? applyFictionalBank(item.deskLabel, fictionalBankName) : item.deskLabel,
+    deskLabel: applySessionBankText(item.deskLabel, fictionalBankName, unnamedCardBank),
     offeredAt,
     offerAnchorScammerTurn,
   };
@@ -49,14 +51,13 @@ export function buildVerifyInterceptDoc(
  */
 export function buildVerifyOfferResponse(
   item: VerifyInterceptItem,
-  input: { placed: boolean; stage?: VerifyOfferStage; fictionalBankName?: string },
+  input: { placed: boolean; stage?: VerifyOfferStage; fictionalBankName?: string; unnamedCardBank?: boolean },
 ): Omit<DeliverVerifyOfferResponse, "status" | "declineInstruction"> {
   const plan = resolveVerifyOfferPlan({ placed: input.placed, ...(input.stage ? { stage: input.stage } : {}) });
   if (!plan.includeInstruction) return { offerId: item.offerId };
   // §81 — 실시간 경로는 이 지시가 그대로 Live 세션에 들어간다(buildSystemPrompt를 거치지 않는다).
-  const announceInstruction = input.fictionalBankName
-    ? applyFictionalBank(item.announceInstruction, input.fictionalBankName)
-    : item.announceInstruction;
+  // 2026-11-09 판정표 BD — 첫 담당자가 말하는 창구 이름도 같은 값.
+  const announceInstruction = applySessionBankText(item.announceInstruction, input.fictionalBankName, input.unnamedCardBank === true);
   return { offerId: item.offerId, announceInstruction };
 }
 
@@ -67,8 +68,10 @@ export function buildVerifyOfferResponse(
 export function buildVerifyReconnectParts(
   item: VerifyInterceptItem,
   fictionalBankName?: string,
+  // 2026-11-09 판정표 BD — 수신 표시 · 넘겨받은 담당자 지시 · 전환 상태 줄도 같은 값.
+  unnamedCardBank = false,
 ): { reconnectedCallerLabel: string; reconnectInstruction: string; transferStateLine: string } {
-  const apply = (text: string): string => (fictionalBankName ? applyFictionalBank(text, fictionalBankName) : text);
+  const apply = (text: string): string => applySessionBankText(text, fictionalBankName, unnamedCardBank);
   return {
     reconnectedCallerLabel: apply(item.reconnectedCallerLabel),
     reconnectInstruction: apply(item.reconnectInstruction),
