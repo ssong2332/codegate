@@ -13,6 +13,7 @@ import { withSessionOtp } from "../scenarios/sessionOtp";
 import type { FlowVariantSms } from "../scenarios/flowVariants";
 import type { InCallSmsDoc, InCallSmsTriggerKind } from "../shared/types";
 import { buildInCallSmsDoc } from "./buildDoc";
+import { priorSenderLabelOf, sessionSenderLabel } from "./senderLabel";
 import { isAmountComparison, type AmountComparison } from "../roleplay/screenAction";
 import type { DeliveredSmsRecord, SmsGateStatus } from "./smsGate";
 import { resolveSmsGate } from "./smsGate";
@@ -74,8 +75,11 @@ export async function deliverSmsThroughGate(
     // §114 — 문서 본문 · Live 대조 1줄(호출부가 돌려받은 item으로 만든다)이 같은 세션 번호를 쓴다.
     const item = withSessionOtp(catalogItem, input.sessionId);
     const arrivedAt = (input.now ?? Timestamp.now)();
+    const doc = buildInCallSmsDoc(item, arrivedAt, input.anchorScammerTurn, input.scenarioId, input.fictionalBankName);
     tx.create(item.smsId, {
-      ...buildInCallSmsDoc(item, arrivedAt, input.anchorScammerTurn, input.scenarioId, input.fictionalBankName),
+      ...doc,
+      // 2026-11-08 판정표 L — 같은 번호로 먼저 온 문자가 있으면 그 이름(트랜잭션 안에서 읽은 목록 — 동시 발송도 같은 판정).
+      senderLabel: sessionSenderLabel(doc.senderLabel, delivered),
       purpose: gate.item.purpose,
       trigger: input.trigger,
       userTurnsAtArrival: input.userTurns,
@@ -125,7 +129,19 @@ function toDeliveredRecord(doc: FirebaseFirestore.QueryDocumentSnapshot): Delive
     ...(typeof doc.get("fakeLandingId") === "string" ? { fakeLandingId: doc.get("fakeLandingId") as string } : {}),
     // N1 — 이체 화면 제출의 요구액 대비 비교(값 밖 · 부재 = 키 없음).
     ...(isAmountComparison(doc.get("landingAmountComparison")) ? { landingAmountComparison: doc.get("landingAmountComparison") as AmountComparison } : {}),
+    // 2026-11-08 판정표 L — 발신 라벨 · 도착 시각(게이트 판정은 보지 않는다).
+    ...priorSenderLabelOf((field) => doc.get(field)),
   };
+}
+
+/** 2026-11-08 판정표 L — 게이트 밖 두 지점(시작 문자 · 안내 문자)이 쓰는 같은 번호 이름 맞추기(트랜잭션 밖 단순 조회 · 실패 = 카탈로그 라벨). */
+async function alignedSenderLabel(sessionRef: FirebaseFirestore.DocumentReference, catalogLabel: string): Promise<string> {
+  try {
+    const snap = await sessionRef.collection("inCallSms").get();
+    return sessionSenderLabel(catalogLabel, snap.docs.map((d) => priorSenderLabelOf((field) => d.get(field))));
+  } catch {
+    return catalogLabel;
+  }
 }
 
 /**
@@ -160,10 +176,11 @@ export async function deliverOpenerSms(
   scenarioId: string,
   fictionalBankName?: string,
 ): Promise<void> {
+  const doc = buildInCallSmsDoc(item, now, 0, scenarioId, fictionalBankName);
   await sessionRef
     .collection("inCallSms")
     .doc(item.smsId)
-    .create({ ...buildInCallSmsDoc(item, now, 0, scenarioId, fictionalBankName), userTurnsAtArrival: 0 });
+    .create({ ...doc, senderLabel: await alignedSenderLabel(sessionRef, doc.senderLabel), userTurnsAtArrival: 0 });
 }
 
 /**
@@ -179,8 +196,9 @@ export async function deliverServerNoticeSms(
   userTurns: number,
   fictionalBankName?: string,
 ): Promise<void> {
+  const doc = buildInCallSmsDoc(item, now, 0, scenarioId, fictionalBankName);
   await sessionRef
     .collection("inCallSms")
     .doc(item.smsId)
-    .create({ ...buildInCallSmsDoc(item, now, 0, scenarioId, fictionalBankName), userTurnsAtArrival: Math.max(0, Math.floor(userTurns)) });
+    .create({ ...doc, senderLabel: await alignedSenderLabel(sessionRef, doc.senderLabel), userTurnsAtArrival: Math.max(0, Math.floor(userTurns)) });
 }
