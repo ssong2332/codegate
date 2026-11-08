@@ -42,12 +42,14 @@ test("[SA1] 재현 — 새솔은행 · 1,200만 원 → 새솔은행 · 12,000,0
 });
 
 test("[SA2] 실제 은행명 — 마지막 언급이 실제 은행이면 은행은 고정 가상 은행 · 금액만 반영", () => {
-  assert.deepEqual(spokenAccountFrom([user("국민은행이고요, 잔액은 800만 원 정도요.")]), { balance: 8_000_000 });
+  // ⭐ 2026-11-08(판정표 A3) — 실제 은행 언급은 `realBank` 표식만 남는다(이름은 0 · 화면은 이름 없는 표기). 종전 기대값 `{ balance }` · `{}`에 표식을 더했다.
+  assert.deepEqual(spokenAccountFrom([user("국민은행이고요, 잔액은 800만 원 정도요.")]), { realBank: true, balance: 8_000_000 });
   for (const real of ["신한은행", "KB국민은행", "농협", "카카오뱅크", "토스뱅크", "케이뱅크", "우체국", "새마을금고", "하나은행", "우리은행"]) {
-    assert.deepEqual(spokenAccountFrom([user(`${real}이에요.`)]), {}, real);
+    // "은행" · "뱅크"가 붙은 꼴만 언급으로 센다(S2 한계) — 농협 · 우체국 · 새마을금고는 언급 아님 = 표식 0.
+    assert.deepEqual(spokenAccountFrom([user(`${real}이에요.`)]), /(?:은행|뱅크)$/.test(real) ? { realBank: true } : {}, real);
   }
   for (const real of ["신한은행", "KB국민은행", "카카오뱅크", "토스뱅크", "케이뱅크", "하나은행", "우리은행", "농협은행"]) {
-    assert.deepEqual(spokenAccountFrom([user("새솔은행이요."), user(`아 아니다, ${real}이에요.`)]), {}, `${real}로 고쳐 말함 → 고정`);
+    assert.deepEqual(spokenAccountFrom([user("새솔은행이요."), user(`아 아니다, ${real}이에요.`)]), { realBank: true }, `${real}로 고쳐 말함 → 이름 없는 표기`);
   }
   // ⚠️ 한계(판정표 S2 주석) — 실제 은행 이름 목록을 두지 않아 "은행" · "뱅크"가 붙지 않은 단독 이름으로 고쳐 말하면 앞의 가상 은행이 남는다.
   assert.deepEqual(spokenAccountFrom([user("새솔은행이요."), user("아 아니다, 농협이에요.")]), { bankName: "새솔은행" }, "한계 고정 — 바꾸면 이 줄과 주석을 함께 고칠 것");
@@ -128,7 +130,8 @@ test("[SA6] 배선 — 참가자 · 사기범 대사 순서대로 · 화면 안�
   const gold = landing.slice(goldStart, landing.indexOf("\nfunction ", goldStart + 10));
   assert.ok(gold.includes("const [spoken] = useState<SpokenAccount>(() => spokenAccountNow?.() ?? {});"), "금 화면도 여는 순간 한 번 읽는다");
   for (const call of gold.match(/(onCredentialSubmit|onHeld)\([^)]*\)/g) ?? []) assert.ok(call === "onCredentialSubmit()" || call === "onHeld()", call);
-  assert.equal((landing.match(/spokenAccountNow=\{spokenAccountNow\}/g) ?? []).length, 2, "출금 예약 · 금 화면 두 곳에만 넘긴다");
+  // 2026-11-08(사용자 결정 D2 — 출금 계좌가 나오는 화면 전부) — 종전 2곳(출금 예약 · 금) → 5곳(+ 대출 신청 · 상품권 · 이체 화면).
+  assert.equal((landing.match(/spokenAccountNow=\{spokenAccountNow\}/g) ?? []).length, 5, "출금 계좌가 나오는 화면 5곳에 넘긴다");
 });
 
 const goldProps = (extra: Record<string, unknown> = {}) => cashProps({ title: "골드바 구매", landingId: "gold-buy", ...extra });

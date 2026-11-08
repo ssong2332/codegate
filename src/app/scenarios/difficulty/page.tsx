@@ -56,6 +56,15 @@ import SelectScreenHeader from "@/components/SelectScreenHeader";
 import TrainingPrepScreen from "@/components/TrainingPrepScreen";
 import { ENTRY_BOARD_MS, PREP_ALL_DONE, advancePrepDone, entryBoardCopy } from "@/lib/design/e2Prep";
 import PersonaCardInputFields from "@/components/PersonaCardInputFields";
+import CardAccountFields from "@/components/CardAccountFields";
+import {
+  CARD_ACCOUNT_COPY,
+  EMPTY_CARD_ACCOUNT_FORM,
+  readCardAccountForm,
+  saveCardAccount,
+  type CardAccount,
+  type CardAccountForm,
+} from "@/lib/bankapp/withdrawAccounts";
 import {
   EMPTY_PERSONA_CARD_FORM,
   personaCardErrorLine,
@@ -95,6 +104,8 @@ export default function DifficultySelectPage() {
   const [pendingDestination, setPendingDestination] = useState<string | null>(null);
   // §88(UX D-131 (1)) — "이번 훈련 속 내 정보"(선택 · 기본 비움). 고급 × 대상 4종 × self일 때만 그린다(send는 UX-019가 받는다).
   const [personaForm, setPersonaForm] = useState<PersonaCardForm>(EMPTY_PERSONA_CARD_FORM);
+  // ⭐ 2026-11-08(사용자 결정 D1 ①) — 같은 카드 블록의 거래 은행 · 잔액(서버로 보내지 않는다 — 이 탭에만 · 판정표 K).
+  const [cardAccountForm, setCardAccountForm] = useState<CardAccountForm>(EMPTY_CARD_ACCOUNT_FORM);
   // UX D-141 — 내 정보 칸에 입력 중이면 시트 설명을 숨긴다(키보드 위 공간).
   const [typing, setTyping] = useState(false);
   // UX D-141 (5) — 세션이 만들어지면 훈련 화면으로 가기 전에 진입 경계 판("지금부터 훈련")을 잠깐(1.2초) 보인다.
@@ -187,7 +198,12 @@ export default function DifficultySelectPage() {
   }, [scenarioId, briefingOpen, briefingSignals]);
 
   /** self·보이스 / self·메신저(비에스컬레이션)의 세션 생성 — 난이도만 추가된 기존 로직 그대로. */
-  const startSelfSession = async (level: DifficultyLevel, sid: string, personaCardInput: PersonaCardInput | undefined) => {
+  const startSelfSession = async (
+    level: DifficultyLevel,
+    sid: string,
+    personaCardInput: PersonaCardInput | undefined,
+    cardAccount: CardAccount | undefined,
+  ) => {
     const isMessenger = scenario?.channel === "messenger";
     // "시작" = 새 훈련의 시작점. 직전 훈련을 "훈련 종료" 없이 빠져나온 경우 이전 사전 세션 id가
     // 남아 있을 수 있어 여기서 비우고 새 id를 발급한다(이관 전 ScenarioListView의 검증된 판단).
@@ -197,6 +213,8 @@ export default function DifficultySelectPage() {
     setSelectedDifficultyLevel(level);
     const sessionId = getOrCreatePendingSessionId();
     if (!sessionId) return;
+    // 판정표 K5 — 카드의 거래 은행 · 잔액은 이 탭에만(세션 id와 함께 · 값 없음 = 지움). ⛔ 요청 · 서버 0.
+    saveCardAccount(sessionId, cardAccount);
 
     const result = await createSession(
       {
@@ -244,6 +262,16 @@ export default function DifficultySelectPage() {
       }
       personaCardInput = read.input;
     }
+    // 판정표 K1 ~ K4 — 같은 블록이 보일 때만 읽는다.
+    let cardAccount: CardAccount | undefined;
+    if (showPersonaInput) {
+      const read = readCardAccountForm(cardAccountForm);
+      if (!read.ok) {
+        setStartError(CARD_ACCOUNT_COPY.invalid);
+        return;
+      }
+      cardAccount = read.card;
+    }
     if (familyAddressOptions && !familyAddress) {
       setStartError(FAMILY_ADDRESS_REQUIRED_LINE);
       return;
@@ -270,7 +298,7 @@ export default function DifficultySelectPage() {
         router.push("/scenarios/messenger/voice-select");
         return;
       }
-      await startSelfSession(selected, scenarioId, personaCardInput);
+      await startSelfSession(selected, scenarioId, personaCardInput, cardAccount);
     } catch (err) {
       // T191 S5(UX 계약 C-2 · UX-029 v1.34 (3)) — 서버의 고급 전용 거부는 같은 1줄로 알린다(⛔ 중급 폴백 0).
       // 재시도는 그대로 같은 버튼이다(P-4).
@@ -441,6 +469,7 @@ export default function DifficultySelectPage() {
               value={personaForm}
               onChange={setPersonaForm}
               disabled={state === "starting"}
+              extra={<CardAccountFields value={cardAccountForm} onChange={setCardAccountForm} disabled={state === "starting"} />}
             />
           </div>
         )}
