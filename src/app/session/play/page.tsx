@@ -167,6 +167,7 @@ import {
   type VerifyOfferPhase,
 } from "@/lib/verifyintercept";
 import { scammerClaimsSmsSent, shouldFireBackstop, shouldRequestSmsBackstop } from "@/lib/realtime/toolWindow";
+import { mergeClaimPurposes, smsClaimPurposes, type SmsClaimPurpose } from "@/lib/realtime/toolWindow";
 import {
   countTranscriptFlush,
   deliveryForInstruction,
@@ -702,6 +703,8 @@ export default function SessionCallPage() {
   const smsBackstopRef = useRef({ lastRequestedUserTurns: -1, lastClaimRequestedUserTurns: -1, nonePending: false, inFlight: false, wrapUpSent: false });
   // §104 — 사기범이 "문자를 보냈다"고 말했고 아직 그 문자가 오지 않았다(`scammerClaimsSmsSent`). 다음 백스톱 질의에 실린다 · 도착 · none_pending이면 내린다.
   const smsClaimPendingRef = useRef(false);
+  // 판정표 CL(2026-11-08 · B1) — 대기 중인 주장들이 가리키는 문자 목적(합집합). 주장이 내려가면 비운다.
+  const smsClaimPurposesRef = useRef<SmsClaimPurpose[]>([]);
   // §132.9 — 하한 전 "보냈다" 주장에 정정 1줄을 이미 넣었는가(주장이 내려가면 초기화).
   const smsClaimCorrectedRef = useRef(false);
   // §108 — 주장이 생긴 사기범 턴에 바로 백스톱을 묻게 하는 깨우기 값(값 자체는 쓰지 않는다).
@@ -827,6 +830,8 @@ export default function SessionCallPage() {
       smsClaimPendingRef.current = true;
       // §108 — 다음 사용자 발화를 기다리지 않고 지금 묻는다(아래 백스톱 effect의 의존성).
       setSmsClaimTick((n) => n + 1);
+      // 판정표 CL(B1) — 이 주장이 가리키는 문자 목적(백스톱 effect는 렌더 뒤에 돌아 이 값을 읽는다).
+      smsClaimPurposesRef.current = mergeClaimPurposes(smsClaimPurposesRef.current, smsClaimPurposes(text));
     }
     // ⭐ §99 — 탭이 백그라운드에서 정리돼 새로고침되면 메모리의 전사가 사라진다. 같은 탭 sessionStorage에 같이 적어 두고
     // 통화 복원(새로고침) 때 되살린다(아래 로드 effect). 쓰기 실패는 무시한다(비차단).
@@ -1295,6 +1300,7 @@ export default function SessionCallPage() {
           scammerTranscriptTurns: claimedScammerTranscriptTurns(counters.scammerTranscriptTurns, smsClaimRaisedMidTurnRef.current),
           trigger: "backstop",
           ...(smsClaimPendingRef.current ? { smsClaimed: true } : {}),
+          ...(smsClaimPendingRef.current && smsClaimPurposesRef.current.length > 0 ? { smsClaimedPurposes: [...smsClaimPurposesRef.current] } : {}),
         });
         setSmsError(null);
         // R1(#465) — 아직 마치지 않은 화면이 있으면 남은 문자가 없어도 다음 발화에 다시 묻는다(화면 기록 줄이 매 발화 온다).
@@ -1304,6 +1310,8 @@ export default function SessionCallPage() {
         if (result.status === "delivered" || result.status === "none_pending" || result.status === "goal_pending") smsClaimPendingRef.current = false;
         // §132.9 — 주장이 내려가면 정정 1회 표시도 초기화(다음 주장에 다시 1회).
         if (!smsClaimPendingRef.current) smsClaimCorrectedRef.current = false;
+        // 판정표 CL(B1) — 주장이 내려가면 대상 목록도 비운다.
+        if (!smsClaimPendingRef.current) smsClaimPurposesRef.current = [];
         // §53.6 (3) — 전환이 끝난 오퍼가 연 문자에는 announce 값이 없다(서버가 생략) — 그때는 주입하지 않는다.
         if (result.status === "delivered") {
           // PR-A2(audit-A R1) — 결과 신호 판정을 안내를 큐에 넣기 **전에** 한다(위 `offerConfirmResult` 주석).
@@ -1355,9 +1363,10 @@ export default function SessionCallPage() {
 
   // ⭐ §126 — 사기범이 말하는 도중 "문자를 보냈다"가 보였다(`GeminiVoiceSession` 출력 전사 · 턴당 1회). 턴 끝 flush를 기다리지 않고
   // 위 백스톱 effect를 깨워 주장 질의를 보낸다 — 게이트가 열려 있으면 문자가 그 말과 함께 도착한다.
-  const handleScammerSmsClaim = useCallback((claimedUserTurns: number) => {
+  const handleScammerSmsClaim = useCallback((claimedUserTurns: number, purposes: SmsClaimPurpose[]) => {
     smsClaimRaisedMidTurnRef.current = true;
     smsClaimPendingRef.current = true;
+    smsClaimPurposesRef.current = mergeClaimPurposes(smsClaimPurposesRef.current, purposes);
     smsClaimUserTurnsRef.current = Math.max(smsClaimUserTurnsRef.current, claimedUserTurns);
     setSmsClaimTick((n) => n + 1);
   }, []);

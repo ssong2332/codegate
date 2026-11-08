@@ -61,7 +61,8 @@ test("[§126] 주장 백스톱 — 문자 간격 1로 연다 · 주장이 없으
 test("[§126 배선] 발송 통로가 같은 명시 여부로 다시 판정한다 — 모델 도구 · 주장 백스톱만 명시", () => {
   const read = (rel: string) => readFileSync(path.join(__dirname, "../../../src/inCallSms", rel), "utf8").replace(/\r\n/g, "\n");
   const index = read("index.ts");
-  assert.ok(index.includes('const smsClaimed = trigger === "backstop" && request.data?.smsClaimed === true;'));
+  // 2026-11-08 판정표 CL(B1) — 이미 도착한 문자만 가리키는 주장은 백스톱 블록에서 거짓으로 내린다(`let`).
+  assert.ok(index.includes('let smsClaimed = trigger === "backstop" && request.data?.smsClaimed === true;'));
   assert.ok(index.includes('explicit: trigger !== "backstop" || smsClaimed,'));
   const delivery = read("smsDelivery.ts");
   assert.ok(delivery.includes("explicit: input.explicit,"));

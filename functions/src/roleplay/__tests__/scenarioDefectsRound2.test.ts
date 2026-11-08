@@ -325,7 +325,8 @@ test("[§104 문자 미도착] 사기범이 문자를 보냈다고 말했으면(
   assert.equal(planSmsBackstop({ declared, delivered, userTurns: 9 }).action, "deliver", "종전 발송 시점 그대로");
   const src = read("inCallSms/index.ts");
   // §126 — 주장은 백스톱 요청에서만 읽는다(발송 통로의 명시 요청 판정에도 쓴다).
-  assert.ok(src.includes('const smsClaimed = trigger === "backstop" && request.data?.smsClaimed === true;'));
+  // 2026-11-08 판정표 CL(B1) — 이미 도착한 문자만 가리키는 주장은 백스톱 블록에서 거짓으로 내린다(`let`).
+  assert.ok(src.includes('let smsClaimed = trigger === "backstop" && request.data?.smsClaimed === true;'));
   // §115 — 도착 기록을 한 번 읽어 백스톱 계획과 마무리 판정(`planGoalWrapUp`)이 같은 값을 쓴다.
   assert.ok(src.includes("const deliveredNow = await readDeliveredSms(sessionRef);"));
   // 화면 행동만 인정(2026-11-01) — 같은 계획 호출에 설치 보류 인자(SB)가 붙어 여러 줄이 됐다.

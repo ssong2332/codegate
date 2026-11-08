@@ -113,7 +113,7 @@ import {
   type TurnEndReason,
 } from "./liveLatency";
 import { LIVE_MIC_CONSTRAINTS, liveMicHandoff, stopStream } from "./micHandoff";
-import { scammerClaimsSmsSent } from "./toolWindow";
+import { scammerClaimsSmsSent, smsClaimPurposes, type SmsClaimPurpose } from "./toolWindow";
 import {
   FRESH_OUTPUT_RESUME_TIMEOUT_MS,
   connectOutputElementSink,
@@ -323,7 +323,7 @@ export type GeminiVoiceSessionProps = {
    * ⭐ §126(2026-10-24 실기 신고 *"문자가 바로 오지는 않아"*) — 사기범이 **말하는 도중** 출력 전사에 "문자를 보냈다"가 처음 보인 순간 1회(턴당).
    * 인자 = 그 시점 사용자 발화 수(`claimedUserTurns` — 도구 경로와 같은 값). 부모가 즉시 주장 백스톱을 묻는다(종전: 턴 끝 flush에서만).
    */
-  onScammerSmsClaim?: (userTurns: number) => void;
+  onScammerSmsClaim?: (userTurns: number, purposes: SmsClaimPurpose[]) => void;
   /**
    * H1(2026-11-01 U1) — 화자 전환 첫 발화(`relayGreeting`)를 Live에 **실제로 보낸** 순간 1회. 부모는 이때 발신자 라벨을
    * 확인 창구로 바꾼다(보류 큐가 앞 화자의 발화가 끝나기를 기다리는 동안 라벨이 먼저 바뀌지 않게). 부재 = 아무 일 없음.
@@ -1549,7 +1549,8 @@ export default function GeminiVoiceSession({
           // §126 — 말하는 도중 "문자를 보냈다"가 보이면 턴 끝을 기다리지 않고 부모에 알린다(문자가 말과 함께 도착).
           if (!smsClaimRaisedThisTurn && scammerClaimsSmsSent(stripLeakedThought(scammerBuffer))) {
             smsClaimRaisedThisTurn = true;
-            handlersRef.current.onScammerSmsClaim?.(claimedUserTurns());
+            // 판정표 CL(B1) — 주장이 가리키는 문자 목적(그 시점 버퍼 · 표기 판정)을 함께 넘긴다.
+            handlersRef.current.onScammerSmsClaim?.(claimedUserTurns(), smsClaimPurposes(stripLeakedThought(scammerBuffer)));
           }
           // §116 — 사고 문장이 보이면 이미 예약된 재생을 끊고, 한국어 대사가 다시 올 때까지 오디오를 예약하지 않는다.
           const gate = stepThoughtLeakGate(thoughtGate, { type: "transcript", text: sc.outputTranscription.text });
