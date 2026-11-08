@@ -146,7 +146,8 @@ test("[배선 · T191 G538] dispatchToolCall의 send_prepared_sms는 모델 purp
     sessionCode,
     /const claimedUserTurns = \(\) => handlersRef\.current\.getSessionUserTurns\(\) \+ \(userBuffer\.trim\(\) \? 1 : 0\);/,
   );
-  assert.match(branch, /scammerTranscriptTurns: modelToolScammerTurns,/);
+  // ⭐ 2026-11-08(#538 발견 1) — 앵커 입력도 부모 누적 getter(연결마다 0이던 지역 사본 폐기).
+  assert.match(branch, /scammerTranscriptTurns: sessionScammerTurns\(\),/);
   assert.match(branch, /trigger: "model_tool",/);
   assert.equal(branch.includes("smsId"), false);
 });
