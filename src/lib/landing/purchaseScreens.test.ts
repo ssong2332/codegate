@@ -122,9 +122,8 @@ const PURCHASE_ROWS: readonly { row: string; props: Record<string, unknown>; fam
 ];
 /** 판정표 P5 · 그 밖 — 계열을 입히지 않는다(지금 모양). */
 const UNCHANGED: readonly { row: string; props: Record<string, unknown> }[] = [
-  { row: "P5 맥락 없는 대출", props: base("loan-apply") },
-  { row: "P5 대환 전환", props: base("loan-refinance-apply") },
-  { row: "그 밖 택배", props: base("parcel-redelivery") },
+  // PR-4(2026-11-08) — P5 맥락 없는 대출 · 대환 · 택배는 PR-4 안내형 판정표 G(G4 · G3)가 계열을 입힌다(`guideScreens.test.ts` GS2가 고정).
+  // 이체 화면(G5 — 머리 결정 대기)만 여기서 "구매 계열이 새지 않는다"를 계속 본다.
   { row: "그 밖 이체", props: base("safe-account-transfer") },
 ];
 

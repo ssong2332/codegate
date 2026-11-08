@@ -45,7 +45,21 @@ import {
   type PurchaseFamilyId,
   type PurchasePalette,
   type SiteSkin,
+  // ⭐ PR-4 — 안내 화면(기관 · 환급 · 택배 · 설치) 계열 값.
+  GUIDE_SITE_TOKENS,
+  guideFormFamilyOf,
+  guidePalette,
 } from "../lib/landing/siteSkins";
+// ⭐ 2026-11-08 웹 안의 웹 PR-4 — 안내 화면 새 문구(잎 모듈 · 상대 경로).
+import {
+  AGENCY_SITE_COPY,
+  INSTALL_APP_NAMES,
+  INSTALL_PERMISSIONS,
+  INSTALL_PERMISSION_HEADING,
+  PARCEL_SITE_COPY,
+  REFUND_SITE_COPY,
+  type AgencySiteCopy,
+} from "../lib/landing/guideCopy";
 import type { MessengerSkin } from "../lib/messenger/detectSkin";
 // §101 추가 — 금액 검증 · 한글 단위 표기 · 필수 칸 안내(잎 모듈 · 상대 경로 — 렌더 하네스 관례).
 import { TRANSFER_LIMIT_NOTE, amountError, amountHint, requiredFieldError, transferLimitError } from "../lib/landing/amountInput";
@@ -287,8 +301,18 @@ export default function MessengerFakeLanding({
       (landingId === "loan-apply" && loanContext !== undefined))
       ? purchaseFamilyOf(landingId)
       : undefined;
-  const pageBg = purchaseFamily ? SITE_SKINS[purchaseFamily].pageBg : LANDING_PAGE_TOKENS.pageBg;
-  const progressColor = purchaseFamily ? SITE_SKINS[purchaseFamily].accent : LANDING_PAGE_TOKENS.issuerBarBg;
+  // ⭐ PR-4 판정표 G — 안내 화면(기관 · 환급 · 택배 · 맥락 없는 대출 · 설치)도 계열 바탕 · 진행 막대 색. 이체 화면(G5) · 표 밖 id(G7) = 종전.
+  const guideFamily =
+    landingKind === "app-install"
+      ? installCopyFor(landingId) !== undefined
+        ? ("install" as const)
+        : undefined
+      : purchaseFamily === undefined && landingKind === "credential-form"
+        ? guideFormFamilyOf(landingId, landingId !== undefined && BANK_TRANSFER_LANDINGS.includes(landingId))
+        : undefined;
+  const pageFamily = purchaseFamily ?? guideFamily;
+  const pageBg = pageFamily ? SITE_SKINS[pageFamily].pageBg : LANDING_PAGE_TOKENS.pageBg;
+  const progressColor = pageFamily ? SITE_SKINS[pageFamily].accent : LANDING_PAGE_TOKENS.issuerBarBg;
   // B2 — iOS형 틀이면 아래 고정 결제 막대를 떠 있는 주소 막대 위로.
   const payBarLifted = chrome.frame === "device-bottom";
 
@@ -1261,7 +1285,8 @@ const PAY_BAR_LIFT = "calc(66px + env(safe-area-inset-bottom))";
 /** T1 — 로고 글자 모양(글꼴 · 굵기 · 크기). */
 function siteLogoStyle(skin: SiteSkin): { fontFamily?: string; fontWeight: number; fontSize: string; letterSpacing?: string } {
   if (skin.logoFont === "serif") return { fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "21px", letterSpacing: "0.06em" };
-  if (skin.logoFont === "black") return { fontWeight: 900, fontSize: "18px", letterSpacing: "-0.02em" };
+  // PR-4 — 큰 글씨 전용 로고색(택배 주황 · 대비 3:1)은 WCAG 큰 글자(굵게 18.66px 이상)가 되도록 20px.
+  if (skin.logoFont === "black") return { fontWeight: 900, fontSize: skin.headerLargeTextOnly ? "20px" : "18px", letterSpacing: "-0.02em" };
   if (skin.logoFont === "rounded") return { fontWeight: 800, fontSize: "21px" };
   return { fontWeight: 700, fontSize: "16px" };
 }
@@ -1301,7 +1326,100 @@ function SiteMark({ skin }: { skin: SiteSkin }) {
       </span>
     );
   }
+  // ⭐ PR-4 — 안내 계열 마크(시안 A · D2 · B · C · H). 실제 휘장 · 상표 0 — 선 · 면 도형만.
+  if (skin.logoMark === "scale" || skin.logoMark === "shield") {
+    return (
+      <span
+        aria-hidden="true"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+        style={{ backgroundColor: skin.accent, color: skin.buttonText }}
+      >
+        {skin.logoMark === "shield" ? (
+          <PhoneIcon name="shield" size={20} />
+        ) : (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 4v16M7 20h10M5 7h14M5 7l-2.5 6h5zM19 7l-2.5 6h5z" />
+          </svg>
+        )}
+      </span>
+    );
+  }
+  if (skin.logoMark === "agency") {
+    return (
+      <span
+        aria-hidden="true"
+        className="inline-block h-[26px] w-[26px] shrink-0 rounded-lg"
+        style={{ background: `conic-gradient(from 210deg, ${skin.accent} 0 50%, #3D9BE0 0 75%, #9FD3F2 0)` }}
+      />
+    );
+  }
+  if (skin.logoMark === "box") {
+    return (
+      <span aria-hidden="true" className="relative inline-block h-[22px] w-[26px] shrink-0 rounded-[3px]" style={{ backgroundColor: skin.accent }}>
+        <span className="absolute left-[10px] top-0 h-[9px] w-[6px]" style={{ backgroundColor: "#FFD8A8" }} />
+      </span>
+    );
+  }
+  if (skin.logoMark === "app") {
+    const icon = GUIDE_SITE_TOKENS.install.appIcon!;
+    return (
+      <span
+        aria-hidden="true"
+        className="flex h-[78px] w-[78px] shrink-0 items-center justify-center rounded-[21px]"
+        style={{
+          background: `linear-gradient(145deg, ${icon.from}, ${icon.via} 58%, ${icon.to})`,
+          color: skin.buttonText,
+          boxShadow: "0 8px 16px rgba(36, 87, 197, 0.3)",
+        }}
+      >
+        <PhoneIcon name="shield" size={40} />
+      </span>
+    );
+  }
   return null;
+}
+
+/**
+ * ⭐ PR-4 G1 — 관공서 누리집 머리(시안 A): 맨 위 짙은 띠 → 원형 엠블럼 + 명조 기관명(+ 작은 줄) → 굵은 밑줄 → (있으면) 두 칸 단계.
+ * ⚠️ 기관명은 **한 줄 텍스트 노드**(렌더 게이트 [T190]). 띠 · 작은 줄 · 단계는 표(`AGENCY_SITE_COPY`)에 있는 id만.
+ */
+function AgencySiteHeader({ skin, name, copy, activeStep }: { skin: SiteSkin; name: string; copy?: AgencySiteCopy; activeStep: 0 | 1 }) {
+  return (
+    <div className="shrink-0" style={{ backgroundColor: skin.headerBg }}>
+      {copy && skin.band && (
+        <p className="px-4 py-1.5 text-[12px]" style={{ backgroundColor: skin.band.bg, color: skin.band.text }}>
+          {copy.band}
+        </p>
+      )}
+      <div className="flex items-center gap-2.5 px-4 pb-3 pt-3.5" style={{ borderBottom: `3px solid ${skin.accent}` }}>
+        <SiteMark skin={skin} />
+        <span className="flex min-w-0 flex-col leading-tight">
+          <span className="text-[18px] font-extrabold [word-break:keep-all]" style={{ color: skin.headerText, fontFamily: "var(--font-display)" }}>
+            {name}
+          </span>
+          {copy && (
+            <span className="mt-0.5 text-[12px] font-medium" style={{ color: GUIDE_SITE_TOKENS.agency.headerSub }}>
+              {copy.sub}
+            </span>
+          )}
+        </span>
+      </div>
+      {copy?.steps && (
+        <ol className="mx-4 mt-3.5 grid grid-cols-2 overflow-hidden rounded border" style={{ borderColor: skin.accent }}>
+          {copy.steps.map((label, index) => (
+            <li
+              key={label}
+              aria-current={index === activeStep ? "step" : undefined}
+              className="py-2 text-center text-[13px] font-bold"
+              style={index === activeStep ? { backgroundColor: skin.accent, color: skin.buttonText } : { color: skin.accent }}
+            >
+              {label}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -1337,7 +1455,7 @@ function SiteHeader({ skin, name, aside }: { skin: SiteSkin; name: string; aside
 }
 
 /** F1 — 사이트 꼬리말(이름 · 사업자 정보 줄 · ⓒ 줄). 값은 `siteSkins.ts`(실재와 겹칠 수 없는 임의 값 — PR-2 판정표). */
-function SiteFooter({ skin, name, copyright }: { skin: SiteSkin; name: string; copyright: string }) {
+function SiteFooter({ skin, name, copyright }: { skin: SiteSkin; name: string; copyright: ReactNode }) {
   return (
     <footer
       className="mt-auto flex flex-col gap-0.5 px-4 pb-5 pt-[18px] text-[12px] leading-relaxed [word-break:keep-all]"
@@ -2546,17 +2664,21 @@ function IdentityBox({
   error,
   page,
   children,
+  radius,
 }: {
   masked: boolean;
   error: boolean;
-  page: typeof LANDING_PAGE_TOKENS;
+  // PR-4 — 안내 계열 색 한 벌(`guidePalette`)도 받는다(키 구조만 본다).
+  page: { errorText: string; inputBorder: string; inputBg: string; inputText: string };
   children: React.ReactElement;
+  /** PR-4 — 계열 입력 칸 모서리(px). 부재 = 종전 10px. */
+  radius?: number;
 }) {
   if (!masked) return children;
   return (
     <span
       className="flex min-h-[52px] items-center gap-1 rounded-[10px] border px-3.5 focus-within:border-2"
-      style={{ borderColor: error ? page.errorText : page.inputBorder, backgroundColor: page.inputBg }}
+      style={{ borderColor: error ? page.errorText : page.inputBorder, backgroundColor: page.inputBg, borderRadius: radius }}
     >
       {children}
       <span aria-hidden="true" className="select-none text-[12px] font-normal tracking-[0.18em]" style={{ color: page.inputText }}>
@@ -2923,7 +3045,21 @@ function CredentialFormMockup({
     stepScreens && stepIndex > 0
       ? stepScreens[stepIndex - 1]
       : { headline: copy.headline, bodyLines: copy.bodyLines, fields: copy.fields, actionLabel: copy.submitLabel };
-  const page = LANDING_PAGE_TOKENS;
+  // ⭐ PR-4 판정표 G1 ~ G4 · G7 — 안내 계열 머리 · 색 · 꼬리말(이체 화면 G5 · 표 밖 id = 종전 `LANDING_PAGE_TOKENS` 그대로).
+  const guideFamily = guideFormFamilyOf(landingId, bankTransfer);
+  const site = guideFamily ? SITE_SKINS[guideFamily] : undefined;
+  const page = guideFamily
+    ? { ...LANDING_PAGE_TOKENS, ...(guideFamily === "loan" ? purchasePalette("loan") : guidePalette(guideFamily)) }
+    : LANDING_PAGE_TOKENS;
+  const corners =
+    guideFamily && guideFamily !== "loan"
+      ? GUIDE_SITE_TOKENS[guideFamily]
+      : { inputRadius: 10, buttonRadius: guideFamily === "loan" ? 12 : 10 };
+  const agencyCopy = guideFamily === "agency" && landingId ? AGENCY_SITE_COPY[landingId] : undefined;
+  const refundCopy = guideFamily === "refund" && landingId ? REFUND_SITE_COPY[landingId] : undefined;
+  const parcelCopy = guideFamily === "parcel" && landingId ? PARCEL_SITE_COPY[landingId] : undefined;
+  // 렌더 게이트 역검증 ① 앵커 — 이 화면의 ⓒ 줄은 이 노드 하나로만 그린다(종전 꼬리말 · 사이트 꼬리말 공용).
+  const issuerMark = <>{copy.issuerLabel}</>;
   // §130(UX D-161 (6)) — 마지막 이체 확인 화면은 앞 화면에서 넣은 금액을 다시 보여 준다(실제 이체 앱의 확인 화면 모양). 제출 전 확인이라
   // G255(완료 화면 되비추기 0)와 겹치지 않는다 — 완료 분기는 여전히 `values`를 읽지 않는다. 값은 이 화면 문자열로만 쓰인다(G138).
   const amountField = stepScreens?.flatMap((step) => step.fields ?? []).find((field) => field.amount);
@@ -2996,7 +3132,26 @@ function CredentialFormMockup({
     onCredentialSubmit?.();
   };
 
-  const issuerBar = (
+  // ⭐ PR-4 G1 ~ G4 — 안내 계열이면 그 사이트 머리(택배 = 아래 운송장 띠까지). 그 밖은 종전 남색 머리띠(이체 화면 N2 포함).
+  const parcelInvoice = parcelCopy && GUIDE_SITE_TOKENS.parcel.invoiceBand && (
+    <p
+      className="flex shrink-0 items-center justify-between gap-2 px-4 py-2.5 text-[13px]"
+      style={{ backgroundColor: GUIDE_SITE_TOKENS.parcel.invoiceBand.bg, color: GUIDE_SITE_TOKENS.parcel.invoiceBand.text }}
+    >
+      <span>{parcelCopy.invoiceLabel}</span>
+      <b className="tabular-nums tracking-[0.04em]">{parcelCopy.invoice}</b>
+    </p>
+  );
+  const issuerBar = site ? (
+    site.id === "agency" ? (
+      <AgencySiteHeader skin={site} name={issuerNameOf(copy.issuerLabel)} copy={agencyCopy} activeStep={submitted ? 1 : 0} />
+    ) : (
+      <>
+        <SiteHeader skin={site} name={issuerNameOf(copy.issuerLabel)} />
+        {parcelInvoice}
+      </>
+    )
+  ) : (
     <div
       className="flex h-14 shrink-0 items-center gap-2.5 px-4 text-base font-semibold"
       style={{ backgroundColor: page.issuerBarBg, color: page.issuerBarText }}
@@ -3317,20 +3472,105 @@ function CredentialFormMockup({
     );
   }
 
+  // §130.6(D10 남은 부분) — 본문도 낱말 단위로만 줄을 바꾼다(360폭 "아래에서 이체 / 를 확인해 주세요").
+  const bodyNodes = screen.bodyLines.map((line) => (
+    <p key={line} className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
+      {line}
+    </p>
+  ));
+  const refundTokens = GUIDE_SITE_TOKENS.refund;
+  const parcelTokens = GUIDE_SITE_TOKENS.parcel;
+
   return (
     <>
       {issuerBar}
+      {/* ⭐ PR-4 G2 — 환급 조회 결과 카드(시안 B · 금액 = 사용자 결정 O3 "넣기"). 장식 표시만 — 입력 · 콜백 0. */}
+      {refundCopy && (
+        <section
+          className="mx-4 mt-3.5 flex flex-col gap-1 rounded-2xl border px-4 pb-3.5 pt-4"
+          style={{ backgroundColor: page.inputBg, borderColor: "#DCE4EF" }}
+        >
+          <p className="text-[13px] font-semibold" style={{ color: page.body }}>
+            {refundCopy.label}
+          </p>
+          <p className="text-[30px] font-black leading-tight tabular-nums" style={{ color: refundTokens.resultAmount }}>
+            {refundCopy.amount}
+          </p>
+          <dl
+            className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-t border-dashed pt-2.5 text-[13px]"
+            style={{ borderColor: "#C9D6E6", color: page.body }}
+          >
+            {refundCopy.rows.map(([label, value]) => (
+              <div key={label} className="contents">
+                <dt>{label}</dt>
+                <dd className="text-right font-semibold" style={{ color: page.headline }}>
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <span
+            className="mt-1.5 self-start rounded-full px-2.5 py-0.5 text-[12px] font-bold"
+            style={{ backgroundColor: refundTokens.resultTag?.bg, color: refundTokens.resultTag?.text }}
+          >
+            {refundCopy.tag}
+          </span>
+        </section>
+      )}
       <div className="flex flex-col gap-2.5 px-5 pt-4">
-        {/* §130(UX D-161 (6)) — 낱말 단위로만 줄을 바꾼다(360폭에서 "…이체합니 / 다" 한 글자 줄바꿈). */}
-        <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
+        {/* ⭐ PR-4 G3 — 빨간 보류 배지(시안 C · O3 배지 = 넣기). */}
+        {parcelCopy && (
+          <span
+            className="self-start rounded px-2 py-0.5 text-[12px] font-extrabold"
+            style={{ backgroundColor: parcelTokens.holdBadge?.bg, color: parcelTokens.holdBadge?.text }}
+          >
+            {parcelCopy.status}
+          </span>
+        )}
+        {/* §130(UX D-161 (6)) — 낱말 단위로만 줄을 바꾼다(360폭에서 "…이체합니 / 다" 한 글자 줄바꿈). PR-4 G1 — 기관은 명조 제목. */}
+        <h1
+          className="text-xl font-bold leading-snug [word-break:keep-all]"
+          style={{ color: page.headline, fontFamily: guideFamily === "agency" ? "var(--font-display)" : undefined }}
+        >
           {screen.headline}
         </h1>
-        {/* §130.6(D10 남은 부분) — 본문도 낱말 단위로만 줄을 바꾼다(360폭 "아래에서 이체 / 를 확인해 주세요"). */}
-        {screen.bodyLines.map((line) => (
-          <p key={line} className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
-            {line}
-          </p>
-        ))}
+        {/* ⭐ PR-4 G3 — 배송 단계 타임라인(완료 · 완료 · 보류 — 색 + 글자로 함께 전한다). */}
+        {parcelCopy && parcelTokens.timeline && (
+          <ol className="mb-1 ml-1.5 mt-1 flex flex-col gap-3 border-l-2 pl-5" style={{ borderColor: parcelTokens.timeline.line }}>
+            {parcelCopy.steps.map((step) => (
+              <li
+                key={step.label}
+                className="relative text-[14px] font-semibold leading-snug"
+                style={{ color: step.state === "hold" ? parcelTokens.timeline!.holdText : page.headline }}
+              >
+                <span
+                  aria-hidden="true"
+                  className="absolute -left-[27px] top-0.5 h-3 w-3 rounded-full"
+                  style={{
+                    backgroundColor: step.state === "hold" ? parcelTokens.timeline!.hold : parcelTokens.timeline!.done,
+                    boxShadow: step.state === "hold" ? `0 0 0 3px ${parcelTokens.holdBadge?.bg}` : undefined,
+                  }}
+                />
+                {step.label}
+                <span className="block text-[12px] font-normal" style={{ color: parcelTokens.timeline!.sub }}>
+                  {step.sub}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+        {/* ⭐ PR-4 G1 — 기관 안내는 왼쪽 굵은 선 공지 상자 안에 본문. 그 밖은 종전 그대로. */}
+        {guideFamily === "agency" && site ? (
+          <div
+            role="note"
+            className="mt-1 flex flex-col gap-1.5 border border-l-4 px-3 py-2.5"
+            style={{ borderColor: "#C9D1E0", borderLeftColor: site.accent, backgroundColor: page.fieldReadonlyBg }}
+          >
+            {bodyNodes}
+          </div>
+        ) : (
+          bodyNodes
+        )}
         {/* P2 — 실제 이체 화면처럼 출금 계좌를 맨 위에 둔다. 2026-11-07 — 눌러서 고른다(가상 계좌 · 번호 가운데 가림 · 출금 가능 금액). */}
         {bankTransfer && (
           <div className="mt-1">
@@ -3419,7 +3659,7 @@ function CredentialFormMockup({
                 // §101 추가 — 제출 때 빈 칸 · 금액 오류를 칸 아래에 알린다(위 `errorFor`).
                 // §114 — 신원 칸(`format`)은 입력하는 동안 숫자만 남기고 자르며 휴대전화는 하이픈을 넣는다 · 자판도 형식이 정한다.
                 // §122(10) — 생년월일은 실제 본인확인 사이트 모양: 칸 안에 앞 6자리 + 뒷자리 첫 숫자(`900101-1`)를 받고 나머지 6칸은 가림 표시만.
-                <IdentityBox masked={field.format === "birthdate"} error={Boolean(error)} page={page}>
+                <IdentityBox masked={field.format === "birthdate"} error={Boolean(error)} page={page} radius={site ? corners.inputRadius : undefined}>
                   <input
                     type="text"
                     inputMode={field.format === "mobile" ? "tel" : field.format === "birthdate" ? "numeric" : field.inputMode}
@@ -3442,7 +3682,12 @@ function CredentialFormMockup({
                     style={
                       field.format === "birthdate"
                         ? { color: page.inputText }
-                        : { borderColor: error ? page.errorText : page.inputBorder, backgroundColor: page.inputBg, color: page.inputText }
+                        : {
+                            borderColor: error ? page.errorText : page.inputBorder,
+                            backgroundColor: page.inputBg,
+                            color: page.inputText,
+                            borderRadius: site ? corners.inputRadius : undefined,
+                          }
                     }
                   />
                 </IdentityBox>
@@ -3467,7 +3712,7 @@ function CredentialFormMockup({
         <button
           type="submit"
           className="min-h-[52px] rounded-[10px] text-base font-semibold transition-colors"
-          style={{ backgroundColor: page.submitBg, color: page.submitText }}
+          style={{ backgroundColor: page.submitBg, color: page.submitText, borderRadius: site ? corners.buttonRadius : undefined }}
         >
           {screen.actionLabel}
         </button>
@@ -3475,15 +3720,19 @@ function CredentialFormMockup({
           type="button"
           onClick={onClose}
           className="min-h-[48px] rounded-[10px] border px-6 py-2.5 text-base font-semibold"
-          style={{ borderColor: page.inputBorder, color: page.headline }}
+          style={{ borderColor: page.inputBorder, color: page.headline, borderRadius: site ? corners.buttonRadius : undefined }}
         >
           닫기
         </button>
-        {/* ⑧ 발급처 — 13px · #6B655C(흰 바탕 대비 약 5.8:1 · 옛 #C9C2B6 미달 Superseded). */}
-        <p className="text-center text-[13px]" style={{ color: page.issuerFooter }}>
-          {copy.issuerLabel}
-        </p>
+        {/* ⑧ 발급처 — 13px · #6B655C(흰 바탕 대비 약 5.8:1 · 옛 #C9C2B6 미달 Superseded). PR-4 — 안내 계열은 아래 사이트 꼬리말의 ⓒ 줄로. */}
+        {!site && (
+          <p className="text-center text-[13px]" style={{ color: page.issuerFooter }}>
+            {issuerMark}
+          </p>
+        )}
       </form>
+      {/* ⭐ PR-4 F1 — 안내 계열 사이트 꼬리말(이름 · 정보 줄 · ⓒ 줄 = 카탈로그 `issuerLabel`). 입력 화면 끝에만. */}
+      {site && <SiteFooter skin={site} name={issuerNameOf(copy.issuerLabel)} copyright={issuerMark} />}
     </>
   );
 }
@@ -3658,99 +3907,123 @@ function AppInstallMockup({
   // T194-a(§84.13.3 ③ ⓑ) — 상위가 이미 걸렀지만 이 서브 컴포넌트도 표 밖 id에서는 아무것도 그리지 않는다(기본 문구 폴백 0).
   if (!installCopy) return null;
 
+  // ⭐ 2026-11-08 웹 안의 웹 PR-4 G6 — 앱 소개 페이지(시안 H): 큰 앱 아이콘 + 앱 이름 + 만든 곳 → 제목 · 설명 → 요청하는 권한 목록 → 큰 파란 버튼 → 꼬리말.
+  // ⛔ 권한 목록은 그림일 뿐이다(실제 권한 API 호출 0 · AC-072). 단계(설치 → 권한 확인창 → 완료) · 콜백은 종전 그대로.
+  const skin = SITE_SKINS.install;
+  const tokens = GUIDE_SITE_TOKENS.install;
+  const appName = landingId ? INSTALL_APP_NAMES[landingId] : undefined;
+  const maker = issuerNameOf(installCopy.issuerLabel);
+  const primary = { backgroundColor: skin.buttonBg, color: skin.buttonText, borderRadius: tokens.buttonRadius };
+  const outline = { borderColor: tokens.border, color: skin.text, backgroundColor: tokens.surface, borderRadius: tokens.buttonRadius };
+
   return (
-    // T190-5 — 랜딩 본문 여백을 이 kind 안으로 옮겼다(공유 래퍼는 credential 화면의 전폭 기관 헤더 띠 때문에 여백 0).
-    <div className="flex flex-col gap-6 p-6">
-      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#F2EFE9]">
-        <span aria-hidden="true" className="text-2xl">
-          📱
-        </span>
+    <>
+      <div className="flex flex-col items-center gap-2.5 px-4 pb-[18px] pt-6 text-center" style={{ backgroundColor: tokens.surface }}>
+        <SiteMark skin={skin} />
+        {appName && (
+          <p className="text-[19px] font-extrabold tracking-[-0.02em]" style={{ color: skin.text }}>
+            {appName}
+          </p>
+        )}
+        {appName !== maker && (
+          <p className="-mt-1.5 text-[13px]" style={{ color: tokens.muted }}>
+            {maker}
+          </p>
+        )}
+        <h1 className="mt-1 text-[17px] font-bold leading-snug [word-break:keep-all]" style={{ color: skin.text }}>
+          {installCopy.headline}
+        </h1>
       </div>
-      <div className="-mt-4 flex flex-col gap-2">
-        <h1 className="text-xl font-bold leading-snug text-[#22303A]">{installCopy.headline}</h1>
+      <div className="flex flex-col gap-1.5 px-5 pt-3">
         {installCopy.bodyLines.map((line) => (
-          <p key={line} className="text-sm leading-relaxed text-[#6B655C]">
+          <p key={line} className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: tokens.muted }}>
             {line}
           </p>
         ))}
       </div>
 
-      {phase === "intro" && (
-        <div className="flex flex-col gap-4">
-          <button
-            type="button"
-            onClick={() => setPhase("installing")}
-            className="min-h-[52px] rounded-[10px] bg-[#41525E] text-base font-semibold text-white transition-colors hover:bg-[#374049]"
-          >
-            설치 진행하기
-          </button>
-          <p className="text-center text-[13px] text-[#6B655C]">{installCopy.issuerLabel}</p>
-          <button
-            type="button"
-            onClick={onClose}
-            className="min-h-[44px] rounded-[10px] border border-[#C9C2B6] px-6 py-2.5 text-base font-semibold text-[#22303A] hover:bg-white"
-          >
-            닫기
-          </button>
-        </div>
-      )}
+      <div className="flex flex-col gap-4 px-4 pb-6 pt-4">
+        {phase === "intro" && (
+          <>
+            <section className="rounded-[14px] px-3.5 py-1.5" style={{ backgroundColor: tokens.surface }}>
+              <h2 className="mb-0.5 mt-2 text-[13px] font-bold" style={{ color: tokens.muted }}>
+                {INSTALL_PERMISSION_HEADING}
+              </h2>
+              <ul>
+                {INSTALL_PERMISSIONS.map((permission, index) => (
+                  <li
+                    key={permission.label}
+                    className="flex items-center gap-3 py-2.5 text-[15px]"
+                    style={{ color: skin.text, borderTop: index > 0 ? "1px solid #EEF0F4" : undefined }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px]"
+                      style={{ backgroundColor: tokens.permissionIcon?.bg, color: tokens.permissionIcon?.fg }}
+                    >
+                      <PhoneIcon name={permission.icon} size={18} />
+                    </span>
+                    {permission.label}
+                  </li>
+                ))}
+              </ul>
+            </section>
+            <button type="button" onClick={() => setPhase("installing")} className="min-h-[52px] text-base font-semibold" style={primary}>
+              설치 진행하기
+            </button>
+            <button type="button" onClick={onClose} className="min-h-[48px] border px-6 py-2.5 text-base font-semibold" style={outline}>
+              닫기
+            </button>
+          </>
+        )}
 
-      {phase === "installing" && (
-        <div className="flex flex-col gap-4">
-          <p role="status" className="text-base font-semibold text-[#22303A]">
-            설치 중... {progress}%
-          </p>
-          {/* 진행 바 — 색만으로 상태를 전달하지 않도록 위 숫자 라벨과 함께 쓴다(접근성 규칙). */}
-          <div aria-hidden="true" className="h-2.5 w-full overflow-hidden rounded-full bg-[#E2DDD3]">
-            <div
-              className="h-full rounded-full bg-[#41525E] transition-[width] duration-200"
-              style={{ width: `${progress}%` }}
-            />
+        {phase === "installing" && (
+          <>
+            <p role="status" className="text-base font-semibold" style={{ color: skin.text }}>
+              설치 중... {progress}%
+            </p>
+            {/* 진행 바 — 색만으로 상태를 전달하지 않도록 위 숫자 라벨과 함께 쓴다(접근성 규칙). */}
+            <div aria-hidden="true" className="h-2.5 w-full overflow-hidden rounded-full" style={{ backgroundColor: tokens.noteBg }}>
+              <div
+                className="h-full rounded-full transition-[width] duration-200"
+                style={{ width: `${progress}%`, backgroundColor: skin.accent }}
+              />
+            </div>
+            <button type="button" onClick={onClose} className="min-h-[48px] border px-6 py-2.5 text-base font-semibold" style={outline}>
+              닫기
+            </button>
+          </>
+        )}
+
+        {phase === "permission" && (
+          <div className="flex flex-col gap-4 rounded-[16px] p-5" style={{ backgroundColor: tokens.surface }}>
+            {/* ⚠️ 실제 OS 권한 요청 다이얼로그가 **뜨지 않는다** — 화면 안에 그린 가짜 확인창이다. */}
+            <p className="text-base font-semibold" style={{ color: skin.text }}>
+              설치가 끝났습니다. 계속하려면 접근 권한을 허용해 주세요.
+            </p>
+            <button type="button" onClick={handleConsent} className="min-h-[52px] text-base font-semibold" style={primary}>
+              {installCopy.consentLabel}
+            </button>
+            <button type="button" onClick={onClose} className="min-h-[48px] border px-6 py-2.5 text-base font-semibold" style={outline}>
+              허용하지 않고 닫기
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="min-h-[44px] rounded-[10px] border border-[#C9C2B6] px-6 py-2.5 text-base font-semibold text-[#22303A] hover:bg-white"
-          >
-            닫기
-          </button>
-        </div>
-      )}
+        )}
 
-      {phase === "permission" && (
-        <div className="flex flex-col gap-4 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-5">
-          {/* ⚠️ 실제 OS 권한 요청 다이얼로그가 **뜨지 않는다** — 화면 안에 그린 가짜 확인창이다. */}
-          <p className="text-base font-semibold text-[#22303A]">
-            설치가 끝났습니다. 계속하려면 접근 권한을 허용해 주세요.
-          </p>
-          <button
-            type="button"
-            onClick={handleConsent}
-            className="min-h-[52px] rounded-[10px] bg-[#41525E] text-base font-semibold text-white transition-colors hover:bg-[#374049]"
-          >
-            {installCopy.consentLabel}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="min-h-[44px] rounded-[10px] border border-[#C9C2B6] px-6 py-2.5 text-base font-semibold text-[#22303A] hover:bg-white"
-          >
-            허용하지 않고 닫기
-          </button>
-        </div>
-      )}
-
-      {phase === "done" && (
-        <div className="flex flex-col gap-4 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-5">
-          <p role="status" className="text-lg font-semibold text-[#0E6B62]">
-            권한이 허용되었습니다.
-          </p>
-          {/* T187(§72 · AC-086 (d) · D-83) — 설치 뒤 부정 고지 삭제. 세션 후 사실 공개가 잇는다. */}
-          <Button type="button" onClick={onClose}>
-            {returnLabel}
-          </Button>
-        </div>
-      )}
-    </div>
+        {phase === "done" && (
+          <div className="flex flex-col gap-4 rounded-[16px] p-5" style={{ backgroundColor: tokens.surface }}>
+            <p role="status" className="text-lg font-semibold" style={{ color: skin.text }}>
+              권한이 허용되었습니다.
+            </p>
+            {/* T187(§72 · AC-086 (d) · D-83) — 설치 뒤 부정 고지 삭제. 세션 후 사실 공개가 잇는다. */}
+            <Button type="button" onClick={onClose}>
+              {returnLabel}
+            </Button>
+          </div>
+        )}
+      </div>
+      {/* F1 — 꼬리말(만든 곳 · 사업자 정보 · ⓒ 줄 = 카탈로그 `issuerLabel`). */}
+      <SiteFooter skin={skin} name={maker} copyright={installCopy.issuerLabel} />
+    </>
   );
 }
