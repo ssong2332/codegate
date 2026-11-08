@@ -843,7 +843,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
   // 아래 `GoldBuyMockup`(이 표의 칸 라벨은 상품 · 수량 선택 줄의 이름이고, 입력 칸 대신 버튼으로 고른다).
   "gold-buy": {
     headline: "해담골드 골드바 구매",
-    bodyLines: ["구매하신 골드바는 품질 보증서와 함께 구매 매장에서 수령합니다."],
+    bodyLines: ["구매하신 골드바에는 품질 보증서 번호가 발급됩니다."],
     fields: [
       { label: "상품", placeholder: "상품을 고르세요" },
       { label: "수량", placeholder: "수량을 고르세요" },
@@ -855,7 +855,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
   },
   "asset-gold-buy": {
     headline: "해담골드 금 실물 주문",
-    bodyLines: ["주문하신 금 실물은 보증서와 함께 구매 매장에서 받으실 수 있습니다."],
+    bodyLines: ["주문하신 금 실물에는 보증서 번호가 발급됩니다."],
     fields: [
       { label: "주문 상품", placeholder: "상품을 고르세요" },
       { label: "주문 수량", placeholder: "수량을 고르세요" },
@@ -1196,12 +1196,8 @@ function GoldBuyMockup({
             [GOLD_COPY.productRow, `${bought?.label ?? ""} × ${purchase.quantity}${GOLD_COPY.quantityUnit}`],
             [GOLD_COPY.amountRow, goldWon(purchase.total)],
             [GOLD_COPY.warrantyLabel, purchase.warranty],
-            [GOLD_COPY.pickupRow, GOLD_COPY.pickupValue],
             [GOLD_COPY.paidLabel, transferTimeText(purchase.purchasedAt)],
           ])}
-          <p className="text-[13px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
-            {GOLD_COPY.pickupNote}
-          </p>
           <Button type="button" onClick={onClose}>
             {returnLabel}
           </Button>
@@ -1269,7 +1265,6 @@ function GoldBuyMockup({
               [GOLD_COPY.sellerRow, GOLD_SHOP_NAME],
               [GOLD_COPY.payFromRow, accountLabel(account)],
               [GOLD_COPY.amountRow, goldWon(total)],
-              [GOLD_COPY.pickupRow, GOLD_COPY.pickupValue],
             ])}
             <section className="flex flex-col gap-3 rounded-[10px] px-3.5 py-3" style={{ backgroundColor: page.fieldReadonlyBg }}>
               <h2 className="text-[15px] font-bold" style={{ color: page.headline }}>
