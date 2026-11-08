@@ -57,7 +57,9 @@ export type PersonaCardKey =
   | "job"
   | "childName"
   | "childGrade"
-  | "childAcademy";
+  | "childAcademy"
+  // 2026-11-09 사용자 결정 — 시작 전 카드 '통장 잔액'(기관형 · 은행 사칭만 · `session/personaCard.ts` 판정표 BL). 거래 은행은 위 `bank` 키를 다시 쓴다(판정표 BK).
+  | "balance";
 export type PersonaCardItem = { key: PersonaCardKey; label: string; value: string };
 /**
  * §88(DECISIONS #199) — 카드를 넣은 사람. `self` = 자가 훈련 참가자 본인(`createSession`) · `sender` = 챌린지를 보낸 사람

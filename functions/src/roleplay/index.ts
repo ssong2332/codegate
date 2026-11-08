@@ -169,6 +169,7 @@ import { fixMessengerCallWording, fixPersonaIdRequest, personaAnchorInstruction,
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
+import { cardBalanceWonFrom } from "../session/cardBalanceFit";
 import { applyFictionalBank, resolveFictionalBankName } from "../shared/fictionalBank";
 
 export { generateOpeningLine } from "./openingLine";
@@ -390,6 +391,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       declared: smsDeclared,
       fictionalBankName,
       sessionId, // §114 — 세션별 인증번호
+      // 2026-11-09 판정표 BL3 — 카드 잔액이 있으면 잔액형 문자 금액을 맞춘다(부재 = 종전).
+      cardBalanceWon: cardBalanceWonFrom(session.personaCard?.items),
     };
     let smsDelivered: DeliveredSmsRecord[] = [];
     let smsDeliveredLoaded = false;

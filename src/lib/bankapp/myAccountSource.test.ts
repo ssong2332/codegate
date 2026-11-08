@@ -8,7 +8,7 @@
 // | MA3 | 실제 은행을 말함 → 이름 없는 표기(A3) · 렌더에 실제 은행 이름 0 · 고정 은행도 남지 않음 |
 // | MA4 | 판정표 K — 카드 칸 읽기 · 저장 · 다른 세션 값 0 · 저장소 이상 = 값 없음 |
 // | MA5 | 실제 렌더 — 상품권(신고 화면) · 금 · 출금 예약 · 이체 · 대출 신청 화면 모두 카드 값 / 말한 값을 쓴다 |
-// | MA6 | 배선 — 페이지 · 문자 오버레이 · 내 은행 송금 화면 · 난이도 화면 / 카드 값은 요청 · 서버로 가지 않는다(G138 · `fv-akj5` · `fv-6s5p` 무변경) |
+// | MA6 | 배선 — 페이지 · 문자 오버레이 · 내 은행 송금 화면 · 난이도 화면 / 카드 원값은 요청에 그대로 싣지 않는다(⭐ 2026-11-09 — 판정표 RQ를 거친 값만 · `cardAccountRequest.test.ts`) |
 // ⚠️ 소스를 읽는 단언은 줄 끝(CRLF/LF)과 무관하다(읽은 뒤 `\r\n` → `\n`).
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -214,7 +214,7 @@ test("[MA6] 배선 — 페이지 · 문자 오버레이 · 내 은행 송금 · 
   const difficulty = read("../../app/scenarios/difficulty/page.tsx");
   assert.ok(difficulty.includes("saveCardAccount(sessionId, cardAccount);"), "난이도 화면 — 이 탭에 저장");
   const request = difficulty.slice(difficulty.indexOf("const result = await createSession("), difficulty.indexOf("(stage) => setPrepDone"));
-  assert.ok(request.length > 0 && !/cardAccount|balance/i.test(request), "createSession 요청에 카드 은행 · 잔액 0(서버 · 사기범 프롬프트 무변경)");
+  assert.ok(request.length > 0 && !/cardAccount|balance/i.test(request), "createSession 요청에 카드 원값 0(⭐ 2026-11-09 — 판정표 RQ를 거친 `personaRequest`만)");
   assert.ok(difficulty.includes("extra={<CardAccountFields"), "같은 '내 정보' 블록 안");
   const api = read("../api/types.ts");
   assert.equal(/cardAccount/i.test(api), false, "API 타입에 카드 계좌 필드 0");

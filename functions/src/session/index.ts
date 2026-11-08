@@ -54,7 +54,7 @@ import { findFlowVariant } from "../scenarios/flowVariants";
 import { startCallerLabelFor } from "../callLegs/legPlan";
 import { logCallDiag, readCallDiag } from "../realtime/callDiag";
 import { findInCallSmsItem } from "../scenarios/inCallSms";
-import { resolvePersonaCardRequest } from "./personaCard";
+import { resolvePersonaCardRequest, sessionBankNameForCard } from "./personaCard";
 import { FAMILY_ADDRESS_INVALID_REASON, readFamilyAddress } from "../scenarios/familyAddress";
 import { emitPrepStage, type CreateSessionPrepChunk } from "./prepStages";
 import { readDocId } from "../shared/requestValidation";
@@ -278,7 +278,8 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
         : await assignFlowVariantForSession(db, request.auth.uid, scenarioId, resolvedDifficultyLevel);
       // §81 — 세션 가상 은행명을 오프닝 전에 고른다(오프닝 대사와 세션 문서가 같은 이름을 쓴다).
       // U3 — 변형 배정 뒤로 옮겼다: 예금주가 보이는 계좌면 그 묶음의 고정 은행(`smsGate.ts` `pickSessionBankName`).
-      const fictionalBankName = pickSessionBankName(scenarioId, variantAssignment.flowVariantId);
+      // 2026-11-09 판정표 BK2 — 은행 사칭 ∧ 카드 거래 은행 = 가상 은행이면 그 은행(U3보다 먼저 · `session/personaCard.ts`).
+      const fictionalBankName = sessionBankNameForCard(scenarioId, personaCard, pickSessionBankName(scenarioId, variantAssignment.flowVariantId));
       // §100 ① "훈련 내용" — 동의 · 한도 게이트 통과 + 흐름 변형 배정 + 사전 세션 id 확인이 끝났다.
       prepMs.scenarioMs = Date.now() - prepStartedAt;
       await emitPrepStage(response, "scenario");

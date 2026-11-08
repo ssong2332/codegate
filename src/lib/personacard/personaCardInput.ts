@@ -21,6 +21,10 @@ export type PersonaCardInput = {
   childName?: string;
   childGrade?: string;
   childAcademy?: string;
+  /** 2026-11-09 판정표 RQ(`@/lib/bankapp/withdrawAccounts`) — 가상 은행 이름 또는 `"real"`(실제 은행 · 이름 0). 기관형만. */
+  bank?: string;
+  /** 같은 표 RQ4 — 원 단위. 기관형만. */
+  balance?: number;
 };
 
 /** 입력 칸 상태(문자열 그대로 — 화면 상태). 월 · 일 = `""`(선택 안 함) 또는 `"1"`~`"12"` · `"1"`~`"31"`. 선택 칸 = `""` 또는 선택지 값. */

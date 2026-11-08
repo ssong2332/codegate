@@ -61,6 +61,7 @@ import {
   CARD_ACCOUNT_COPY,
   EMPTY_CARD_ACCOUNT_FORM,
   readCardAccountForm,
+  cardAccountRequestFields,
   saveCardAccount,
   type CardAccount,
   type CardAccountForm,
@@ -213,8 +214,11 @@ export default function DifficultySelectPage() {
     setSelectedDifficultyLevel(level);
     const sessionId = getOrCreatePendingSessionId();
     if (!sessionId) return;
-    // 판정표 K5 — 카드의 거래 은행 · 잔액은 이 탭에만(세션 id와 함께 · 값 없음 = 지움). ⛔ 요청 · 서버 0.
+    // 판정표 K5 — 카드의 거래 은행 · 잔액은 이 탭에도(세션 id와 함께 · 값 없음 = 지움 · 화면 내 계좌 원천).
     saveCardAccount(sessionId, cardAccount);
+    // 2026-11-09 판정표 RQ — 기관형이면 요청에도 싣는다(실제 은행 = "real" 표시만 · 협박형 = 0).
+    const accountFields = cardAccountRequestFields(cardAccount, personaKind === "identity");
+    const personaRequest = personaCardInput || accountFields ? { ...personaCardInput, ...accountFields } : undefined;
 
     const result = await createSession(
       {
@@ -224,7 +228,7 @@ export default function DifficultySelectPage() {
         difficultyLevel: level,
         ...(isMessenger ? { channel: "messenger" as const, surface: scenario?.surface } : {}),
         // §88 — 넣은 칸이 있을 때만 싣는다(비면 필드 부재 = 카드 0 = 사기범이 이름 · 생년월일을 묻는다).
-        ...(personaCardInput ? { personaCardInput } : {}),
+        ...(personaRequest ? { personaCardInput: personaRequest } : {}),
         // §110.5 — 호칭(대상 시나리오만 · 부재 = 종전 문면).
         ...(familyAddressOptions && familyAddress ? { familyAddress } : {}),
       },
@@ -469,7 +473,7 @@ export default function DifficultySelectPage() {
               value={personaForm}
               onChange={setPersonaForm}
               disabled={state === "starting"}
-              extra={<CardAccountFields value={cardAccountForm} onChange={setCardAccountForm} disabled={state === "starting"} />}
+              extra={<CardAccountFields value={cardAccountForm} onChange={setCardAccountForm} disabled={state === "starting"} known={personaKind === "identity"} />}
             />
           </div>
         )}
