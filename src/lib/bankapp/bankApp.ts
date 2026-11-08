@@ -16,7 +16,7 @@
 // | 비밀번호 | 2026-11-07 사용자 결정 (a)(BA3 갱신) — 입력 칸(<input>) 0 · 인증은 생체 인증 시트(`BankAuthSheet` · 지문 센서 누름 · 얼굴 자동 스캔) · 대체 수단 간편 비밀번호 = 매번 섞는 숫자 **버튼** 키패드 · 누른 값은 저장하지 않고 개수만 센다(6번 = 통과) · 네트워크 · 저장소로 나가는 값 0 |
 // | 출금 계좌 | 가상 계좌 3개 중 고른다(`withdrawAccounts.ts` — 첫 계좌 잔액 = `fictionalBalanceFor` · 잔액 · 1일 한도 판정표 W) |
 // | 클립보드 | 쓰지 않는다(기기 클립보드 API 0 · 앱 안 복사 0). 인증번호는 여전히 복사할 수 없다(AC-061 그대로) |
-// | 은행 이름 | 가상 은행명만(서버 `functions/src/shared/fictionalBank.ts` `FICTIONAL_BANK_NAMES`와 같은 목록 — 드리프트 테스트) · 실존 은행명 0 |
+// | 은행 이름 | 가상 은행명만(서버 `functions/src/shared/fictionalBank.ts` `FICTIONAL_BANK_NAMES`와 같은 목록 — 드리프트 테스트) · 실존 은행명 0 · ⭐ 2026-11-09 예외: 참가자의 '내 계좌' 줄은 실제 은행 이름 허용(`withdrawAccounts.ts` 판정표 P · H — 이 파일에는 실제 이름 0) |
 // ⚠️ 이 파일은 값을 import하지 않는다(테스트 러너가 확장자 없는 상대 import를 풀지 못한다). 금액 형식 · 1회 한도 판정은 화면이
 // `@/lib/landing/amountInput`(`amountError` · `transferLimitError` · `amountHint`)으로 먼저 하고, 잔액 판정만 여기 `balanceError`가 한다.
 
@@ -270,7 +270,12 @@ export function latestDemandAmount(scammerTexts: readonly string[]): string | un
 // | S10 | 사기범 대사 | 은행 · 잔액으로 쓰지 않는다(역할로 가름 — S6 질문 판정에만 쓴다) |
 // | S11 | 한쪽만 있음 | 있는 쪽만 반환 — 호출부가 없는 쪽을 고정 값으로 채운다 |
 // | S12 | 쓰는 화면 | 출금 예약(`CashWithdrawMockup`) · 금 거래소(`GoldBuyMockup` — 2026-11-08 사용자 결정 "같은 규칙") |
-// ⚠️ S2 한계: 실제 은행 이름을 목록으로 두지 않는다(이 파일은 `[BA-1 A5]`가 실존 은행명 0을 스캔한다) — "○○은행" · "○○뱅크" 꼴만 알아본다.
+// ⭐ 2026-11-09 사용자 결정(내 계좌 줄에 실제 은행 이름 허용) — S2′:
+// | # | If | Then |
+// |---|---|---|
+// | S2′ | 호출부가 알아보기 함수(`withdrawAccounts.ts` `realBankMentionsIn` — 실제 은행 표 R)를 넘겼고 그 함수가 대사 안 언급을 알아봄 | 그 언급도 '마지막 언급' 후보(끝 위치로 가린다 · 같은 끝이면 알아본 쪽) → `realBank` + `realBankName` |
+// | S2″ | 알아보기 함수 없음(종전 호출) | 종전 S2 그대로(아래 한계 포함) |
+// ⚠️ S2 한계(S2″에만 남는다): 실제 은행 이름을 이 파일에 목록으로 두지 않는다(이 파일은 `[BA-1 A5]`가 실존 은행명 0을 스캔한다) — "○○은행" · "○○뱅크" 꼴만 알아본다.
 //    "은행"이 붙지 않은 단독 이름(농협 · 우체국 등)은 언급으로 세지 않아, 가상 은행을 말한 뒤 그런 이름으로 고쳐 말하면 앞의 가상 은행이 남는다.
 //    띄어 쓴 "○○ 은행"은 가상 은행일 때만 센다("그럼 은행 가야 돼요?" · "우리 은행"은 언급 아님) · 붙여 쓴 꼴도 일반어 앞말(`BANK_MENTION_STOP` — "거래은행")은 세지 않는다.
 const FICTIONAL_BANK_STEMS = FICTIONAL_BANK_NAMES.map((name) => name.replace(/은행$/, ""));
@@ -284,20 +289,34 @@ const SPOKEN_BALANCE_MAX = 1_000_000_000;
 
 /**
  * `realBank` — ⭐ 2026-11-08(출금 계좌 값 출처 판정표 A3) 참가자가 마지막으로 말한 은행이 가상 목록 밖(S2)일 때만 `true`.
- * 화면은 은행 이름 대신 이름 없는 표기(`withdrawAccounts.ts` `NAMELESS_BANK_NAME`)를 쓴다 — 실제 은행 이름은 어디에도 싣지 않는다.
+ * 화면은 은행 이름 대신 이름 없는 표기(`withdrawAccounts.ts` `NAMELESS_BANK_NAME`)를 쓴다(A3b).
+ * `realBankName` — ⭐ 2026-11-09 S2′ 알아보기 함수가 알아본 실제 은행 표기(A3a — '내 계좌' 줄에만 · 판정표 P). 서버 · 콜백 0.
  */
-export type SpokenAccount = { bankName?: string; balance?: number; realBank?: true };
+export type SpokenAccount = { bankName?: string; balance?: number; realBank?: true; realBankName?: string };
 
-/** 한 참가자 대사의 마지막 은행 언급(S1 · S2). 언급 없음 = undefined · 실제 은행 = null. */
-function lastBankMentionIn(text: string): string | null | undefined {
-  let last: string | null | undefined;
+/** S2′ 알아보기 함수(대사 → 실제 은행 언급의 끝 위치 · 표기). 이 파일은 실제 은행 이름을 두지 않으므로 호출부가 넘긴다. */
+export type RealBankRecognizer = (text: string) => readonly { end: number; name: string }[];
+
+/** 한 대사의 마지막 은행 언급. `kind` = 가상(S1) · 실제(S2 · S2′ — `name`은 S2′만). */
+type BankMention = { kind: "fictional"; name: string } | { kind: "real"; name?: string };
+
+/** 한 참가자 대사의 마지막 은행 언급(S1 · S2 · S2′). 언급 없음 = undefined. */
+function lastBankMentionIn(text: string, recognize?: RealBankRecognizer): BankMention | undefined {
+  const found: { end: number; mention: BankMention }[] = [];
   for (const match of text.matchAll(BANK_MENTION)) {
     const prefix = match[1]!;
+    const end = (match.index ?? 0) + match[0].length;
     const stem = FICTIONAL_BANK_STEMS.find((candidate) => prefix.endsWith(candidate));
-    if (stem && match[0].endsWith("은행")) last = `${stem}은행`; // S1(앞에 조사 없이 붙어 있어도 — "통장은새솔은행")
-    else if (match[2] === "" && !BANK_MENTION_STOP.test(prefix)) last = null; // S2
+    if (stem && match[0].endsWith("은행")) found.push({ end, mention: { kind: "fictional", name: `${stem}은행` } }); // S1(앞에 조사 없이 붙어 있어도 — "통장은새솔은행")
+    else if (match[2] === "" && !BANK_MENTION_STOP.test(prefix)) found.push({ end, mention: { kind: "real" } }); // S2
   }
-  return last;
+  for (const { end, name } of recognize?.(text) ?? []) found.push({ end, mention: { kind: "real", name } }); // S2′
+  let last: { end: number; mention: BankMention } | undefined;
+  for (const item of found) {
+    const named = item.mention.kind === "real" && item.mention.name !== undefined;
+    if (!last || item.end > last.end || (item.end === last.end && named)) last = item; // 같은 끝 = 알아본 쪽(S2′)
+  }
+  return last?.mention;
 }
 
 /** 한 참가자 대사의 마지막 잔액 후보(S4 ~ S8). `askedBalance` = 바로 앞 대사가 잔액을 묻는 사기범 대사인가. */
@@ -338,22 +357,29 @@ function lastBalanceIn(text: string, askedBalance: boolean): number | undefined 
 }
 
 /** 대사(오래된 순 · 역할 포함)에서 참가자가 말한 거래 은행 · 잔액(판정표 S1 ~ S11). 말하지 않은 쪽은 빠진다. */
-export function spokenAccountFrom(turns: readonly { role: "scammer" | "user"; text: string }[]): SpokenAccount {
+export function spokenAccountFrom(turns: readonly { role: "scammer" | "user"; text: string }[], recognize?: RealBankRecognizer): SpokenAccount {
   let bankName: string | undefined;
   let realBank = false;
+  let realBankName: string | undefined;
   let balance: number | undefined;
   turns.forEach((turn, index) => {
     if (turn.role !== "user") return; // S10
-    const mention = lastBankMentionIn(turn.text);
+    const mention = lastBankMentionIn(turn.text, recognize);
     if (mention !== undefined) {
-      bankName = mention ?? undefined; // S1 · S2 · S9
-      realBank = mention === null; // S2 → 판정표 A3(이름 없는 표기)
+      bankName = mention.kind === "fictional" ? mention.name : undefined; // S1 · S2 · S9
+      realBank = mention.kind === "real"; // S2 → 판정표 A3b(이름 없는 표기) · S2′ → A3a(그 표기)
+      realBankName = mention.kind === "real" ? mention.name : undefined;
     }
     const previous = turns[index - 1];
     const value = lastBalanceIn(turn.text, previous?.role === "scammer" && BALANCE_QUESTION.test(previous.text));
     if (value !== undefined) balance = value; // S9
   });
-  return { ...(bankName ? { bankName } : {}), ...(realBank ? { realBank: true as const } : {}), ...(balance !== undefined ? { balance } : {}) };
+  return {
+    ...(bankName ? { bankName } : {}),
+    ...(realBank ? { realBank: true as const } : {}),
+    ...(realBankName ? { realBankName } : {}),
+    ...(balance !== undefined ? { balance } : {}),
+  };
 }
 
 /** 완료 화면 시각("오후 3:07" — 기기 시계 · 화면에만). */

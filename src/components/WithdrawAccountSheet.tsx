@@ -6,7 +6,7 @@
 // ⚠️ 상대 경로로만 import한다 — `MessengerFakeLanding`의 렌더 게이트 하네스가 CJS require로 따라와 `@/` 별칭을 풀지 못한다.
 // ⚠️ 모션은 CSS 키프레임만(`globals.css` `bank-sheet-*` — reduced-motion이면 정지 · G457).
 import { useEffect, useRef } from "react";
-import { accountLabel, availableText, type WithdrawAccount } from "../lib/bankapp/withdrawAccounts";
+import { accountLabel, availableText, bankInitial, type WithdrawAccount } from "../lib/bankapp/withdrawAccounts";
 
 type Props = {
   accounts: readonly WithdrawAccount[];
@@ -60,7 +60,7 @@ export function WithdrawAccountRow({
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[14px] font-bold text-white"
         style={{ backgroundColor: bankDotColor(account.bankName) }}
       >
-        {account.bankName.slice(0, 1)}
+        {bankInitial(account.bankName)}
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="text-[13px]" style={{ color: colors.label }}>
@@ -141,7 +141,7 @@ export default function WithdrawAccountSheet({ accounts, selectedId, ledgerKey, 
                             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[15px] font-bold text-white"
                             style={{ backgroundColor: bankDotColor(account.bankName) }}
                           >
-                            {account.bankName.slice(0, 1)}
+                            {bankInitial(account.bankName)}
                           </span>
                           <span className="flex min-w-0 flex-1 flex-col">
                             <span className="truncate text-[15px] font-semibold text-[#111827]">

@@ -26,7 +26,16 @@ import {
   type BankAppStage,
   type TransferTarget,
 } from "@/lib/bankapp/bankApp";
-import { accountLabel, recordWithdrawal, withdrawAccountsFor, withdrawError, type WithdrawAccount } from "@/lib/bankapp/withdrawAccounts";
+import {
+  accountLabel,
+  MY_BANK_NEUTRAL_APP_NAME,
+  myBankAppName,
+  myBankBrand,
+  recordWithdrawal,
+  withdrawAccountsFor,
+  withdrawError,
+  type WithdrawAccount,
+} from "@/lib/bankapp/withdrawAccounts";
 import { TRANSFER_LIMIT_NOTE, amountError, amountHint, transferLimitError } from "@/lib/landing/amountInput";
 import { detectMessengerSkin, type MessengerSkin } from "@/lib/messenger/detectSkin";
 import { CALL_BAR_TOKENS } from "@/lib/phone/skinTokens";
@@ -191,7 +200,7 @@ export default function BankAppOverlay({ call, myBankName, balance, singleAccoun
       ) : (
         <span className="w-2" />
       )}
-      <span className="min-w-0 flex-1 truncate text-base font-semibold">{myBankName} 송금</span>
+      <span className="min-w-0 flex-1 truncate text-base font-semibold">{myBankAppName(myBankName, "송금")}</span>
       {stage !== "done" && (
         <button type="button" onClick={onClose} className="min-h-[44px] px-3 text-[15px] font-semibold">
           {COPY.close}
@@ -380,7 +389,7 @@ export default function BankAppOverlay({ call, myBankName, balance, singleAccoun
       ref={panelRef}
       role="dialog"
       aria-modal="true"
-      aria-label={`${myBankName} 송금`}
+      aria-label={myBankAppName(myBankName, "송금")}
       className="fixed inset-0 z-50 mx-auto flex h-dvh w-full max-w-[430px] flex-col"
       style={{ backgroundColor: APP.bg }}
     >
@@ -405,7 +414,7 @@ export default function BankAppOverlay({ call, myBankName, balance, singleAccoun
       {sheet === "auth" && (
         <BankAuthSheet
           method={authMethod}
-          appName={myBankName}
+          appName={myBankBrand(myBankName) || MY_BANK_NEUTRAL_APP_NAME}
           summary={`${holder}님께 ${amountWon} 보내기`}
           onSuccess={authenticate}
           onCancel={() => setSheet(null)}

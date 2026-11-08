@@ -21,6 +21,7 @@ import { FICTIONAL_BANK_NAMES, fictionalBalanceFor, myBankNameFor, spokenAccount
 import {
   CARD_ACCOUNT_BANK_OPTIONS,
   NAMELESS_BANK_NAME,
+  REAL_BANK_NAMES,
   loadCardAccount,
   readCardAccountForm,
   resolveMyAccount,
@@ -116,7 +117,8 @@ test("[MA3] 실제 은행을 말함 → '주거래은행' 표기 · 실제 이�
 });
 
 test("[MA4] 판정표 K — 카드 칸 읽기 · 저장 · 다른 세션 0 · 저장소 이상", () => {
-  assert.deepEqual(CARD_ACCOUNT_BANK_OPTIONS, FICTIONAL_BANK_NAMES, "고르기 목록 = 가상 은행 목록(실제 은행 고를 길 0)");
+  // ⭐ 2026-11-09 사용자 결정 — 고르기 목록 = 실제 은행(표 R) 다음 가상 은행(종전: 가상 은행만). 자유 입력 0은 그대로.
+  assert.deepEqual(CARD_ACCOUNT_BANK_OPTIONS, [...REAL_BANK_NAMES, ...FICTIONAL_BANK_NAMES], "고르기 목록 = 실제 은행 + 가상 은행");
   assert.deepEqual(readCardAccountForm({ bankName: "", balanceManwon: "" }), { ok: true, card: undefined }, "K1");
   assert.deepEqual(readCardAccountForm({ bankName: "새솔은행", balanceManwon: "1,200" }), { ok: true, card: { bankName: "새솔은행", balance: 12_000_000 } }, "K2 · K3");
   assert.deepEqual(readCardAccountForm({ bankName: "", balanceManwon: "100000" }), { ok: true, card: { balance: 1_000_000_000 } }, "K3 상한 = 10억");
@@ -200,7 +202,7 @@ test("[MA5] 렌더 — 출금 계좌가 나오는 화면 전부 카드 값 → �
 test("[MA6] 배선 — 페이지 · 문자 오버레이 · 내 은행 송금 · 난이도 화면 · 서버로 가지 않는다", () => {
   const page = read("../../app/session/play/page.tsx");
   assert.ok(page.includes('cardAccountNow={() => loadCardAccount(sessionId ?? "")}'), "통화 화면 → 문자 오버레이");
-  assert.ok(page.includes("card: loadCardAccount(sid),") && page.includes("spoken: spokenAccountFrom([...messages, ...transcriptRef.current]),"), "내 은행 송금 화면도 같은 판정");
+  assert.ok(page.includes("card: loadCardAccount(sid),") && page.includes("spoken: spokenAccountFrom([...messages, ...transcriptRef.current], realBankMentionsIn),"), "내 은행 송금 화면도 같은 판정");
   assert.ok(page.includes("singleAccount={bankTransfer.mine.single}"), "내 은행 송금 화면 C1");
   const overlay = read("../../components/InCallSmsOverlay.tsx");
   assert.ok(overlay.includes("cardAccountNow={cardAccountNow}"));
