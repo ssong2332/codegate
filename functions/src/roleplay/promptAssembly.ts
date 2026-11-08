@@ -10,6 +10,7 @@ import { personaCardPromptValue } from "../scenarios/personaCardCatalog";
 import { resolveChildGenderRule } from "../scenarios/messengerChildImpersonationKakao.prompt";
 import { applyFamilyAddressText, buildFamilyAddressBlock, type FamilyAddressPrompt } from "../scenarios/familyAddress";
 import { applyFictionalBank, EXAMPLE_ACCOUNT_NUMBER } from "../shared/fictionalBank";
+import { cardBalanceWonFrom, fitPromptAmounts } from "../session/cardBalanceFit";
 import { applyPersonaCardIdentityConfirm } from "./personaCardIdentity";
 
 // 사용자 신고(2026-07-25) — "사람과 대화한다는 느낌이 안 든다", "대화가 자연스럽지 않다",
@@ -984,7 +985,8 @@ export const PERSONA_CARD_BLOCK_TAIL_THREAT = `목록에 없는 이름·나이·
 const CHILD_CARD_KEYS: readonly PersonaCardItem["key"][] = ["childName", "childGrade", "childAcademy"];
 // 2026-11-09 판정표 BL2(`session/personaCard.ts`) — 카드에 통장 잔액 행이 있을 때만 블록 끝에 1줄(없으면 블록 바이트 무변경).
 // BL3(문자 속 고정 금액)은 사용자 결정 대기라 이 줄은 말로 새로 부르는 금액만 묶는다.
-export const PERSONA_CARD_BALANCE_RULE = `**잔액**: 목록의 통장 잔액은 이미 알고 있는 값처럼 확인하듯 꺼낼 수 있다. 말로 새로 부르는 요구 금액은 그 잔액을 넘지 않게 하고, 잔액을 전부 옮기라고 할 때는 그 금액을 말한다.`;
+// ⭐ BL3 결정(2026-11-09 "카드 잔액 있을 때만 맞춤") — 문자 · 수법의 옮길 금액은 조립 끝 `fitPromptAmounts`가 이미 맞춘 값으로 바꾼다. 이 줄은 그 밖에 말로 새로 부르는 금액만.
+export const PERSONA_CARD_BALANCE_RULE = `**잔액**: 목록의 통장 잔액은 이미 알고 있는 값처럼 확인하듯 꺼낼 수 있다. 위에 적힌 옮길 금액은 그대로 쓰고, 그 밖에 말로 새로 부르는 요구 금액은 그 잔액을 넘지 않게 한다.`;
 
 /**
  * 카드 행이 1개 이상일 때만 블록을 만든다(빈 배열 = 블록 0 — 부재와 같은 결과). 값은 프롬프트용 값(`personaCardPromptValue` —
@@ -1264,7 +1266,9 @@ export function buildSystemPrompt(
     : opts.sessionAccountNumber
       ? applySessionAccount(withCard, opts.sessionAccountNumber)
       : withCard;
-  return opts.fictionalBankName ? applyFictionalBank(withAccount, opts.fictionalBankName) : withAccount;
+  const withBank = opts.fictionalBankName ? applyFictionalBank(withAccount, opts.fictionalBankName) : withAccount;
+  // ⭐ 2026-11-09 판정표 BL3 — 카드 잔액이 있으면 잔액형 금액 표기(수법 · 단계의 "980만 원" 등)를 문자와 같은 맞춘 금액으로(부재 = 바이트 무변경).
+  return fitPromptAmounts(withBank, cardBalanceWonFrom(opts.personaCard));
 }
 
 const USER_INPUT_OPEN = "[훈련참가자입력:데이터시작]";

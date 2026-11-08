@@ -43,6 +43,8 @@ export type SmsDeliveryInput = {
   fictionalBankName?: string;
   /** §114 — 세션 id. 인증번호 문자의 번호를 세션별로 바꾼다(`withSessionOtp`). 부재면 카탈로그 번호(종전). */
   sessionId?: string;
+  /** ⭐ 2026-11-09 판정표 BL3 — 카드 잔액(원 · `cardBalanceWonFrom`). 부재 = 종전 금액. */
+  cardBalanceWon?: number;
   /** 테스트 주입용(기본 `Timestamp.now()`). */
   now?: () => FirebaseFirestore.Timestamp;
 };
@@ -78,7 +80,7 @@ export async function deliverSmsThroughGate(
     // §114 — 문서 본문 · Live 대조 1줄(호출부가 돌려받은 item으로 만든다)이 같은 세션 번호를 쓴다.
     const item = withSessionOtp(catalogItem, input.sessionId);
     const arrivedAt = (input.now ?? Timestamp.now)();
-    const doc = buildInCallSmsDoc(item, arrivedAt, input.anchorScammerTurn, input.scenarioId, input.fictionalBankName);
+    const doc = buildInCallSmsDoc(item, arrivedAt, input.anchorScammerTurn, input.scenarioId, input.fictionalBankName, input.cardBalanceWon);
     tx.create(item.smsId, {
       ...doc,
       // 2026-11-08 판정표 L — 같은 번호로 먼저 온 문자가 있으면 그 이름(트랜잭션 안에서 읽은 목록 — 동시 발송도 같은 판정).

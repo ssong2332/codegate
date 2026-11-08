@@ -17,7 +17,9 @@ import {
   cardAccountRequestFields,
   isRealBankName,
   type CardAccount,
+  withdrawError,
 } from "./withdrawAccounts.ts";
+import { amountFromSmsBody, latestDemandAmount, recordTransferAndCompare } from "./bankApp.ts";
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 
@@ -62,4 +64,31 @@ test("[CR4] 배선 — 난이도 화면 · 안내", () => {
   assert.ok(fields.includes("{known ? CARD_ACCOUNT_COPY.hintKnown : CARD_ACCOUNT_COPY.hint}"));
   assert.ok(CARD_ACCOUNT_COPY.hintKnown.includes("상대도 이미 알고"));
   assert.equal(/모의|훈련용/.test(CARD_ACCOUNT_COPY.hintKnown), false);
+});
+
+// ── ⭐ BL3(2026-11-09 사용자 결정 "카드 잔액 있을 때만 맞춤") — 화면 쪽 기준 일치 ───────────────────────────────────────────────
+// 서버(`functions/src/session/cardBalanceFit.ts`)는 카드 잔액 300만 원이면 보호계좌 문자 '금액: 4,120,000원' → '금액: 3,000,000원'을 보낸다(`personaCardAccount.test.ts` BF2).
+// | # | 고정하는 것 |
+// |---|---|
+// | CR5 | 맞춘 문자 → 이체 화면 금액(`amountFromSmsBody`) · N1 비교(같음 · 적음) · W3(잔액 안이라 통과) / 맞추기 전 문자는 W3에 걸린다(재현) |
+// | CR6 | 드리프트 — 서버 1회 한도 = 화면 1회 한도(1,000만 원) |
+
+test("[CR5] 맞춘 문자 — 이체 화면 금액 · N1 · W3가 같은 기준", () => {
+  const card = { id: "main" as const, balance: 3_000_000 };
+  const fitted = "[금융사고대응] 보호계좌 이체 안내\n예금주: 문성호\n새솔은행 100-2043-7788-21\n금액: 3,000,000원";
+  const amount = amountFromSmsBody(fitted)!;
+  assert.equal(amount, "3,000,000");
+  assert.equal(latestDemandAmount(["보호계좌로 300만 원 옮기셔야 출금이 막힙니다."]), amount, "말로 한 요구액 = 문자 금액");
+  assert.equal(withdrawError("cr5-a", card, amount), undefined, "W3 통과(잔액 안)");
+  assert.equal(recordTransferAndCompare("cr5-a", { accountNumber: "100-2043-7788-21", amount }, amount), "equal");
+  assert.equal(recordTransferAndCompare("cr5-b", { accountNumber: "100-2043-7788-21", amount }, "1,000,000"), "less", "적게 보냄 = N1 less");
+  // 재현 — 맞추기 전 문자 금액(412만)은 카드 잔액 300만 원이면 W3에 걸려 요구대로 보낼 수 없었다.
+  assert.equal(withdrawError("cr5-c", card, "4,120,000"), "출금 가능 금액보다 많습니다.");
+});
+
+test("[CR6] 드리프트 — 1회 한도", () => {
+  const server = read("../../../functions/src/session/cardBalanceFit.ts");
+  assert.ok(server.includes("export const TRANSFER_LIMIT_PER_ONCE = 10_000_000;"));
+  const input = read("../landing/amountInput.ts");
+  assert.ok(input.includes("export const TRANSFER_LIMIT_PER_TRANSACTION = 10_000_000;"), "화면 1회 한도 1,000만 원");
 });

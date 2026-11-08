@@ -14,6 +14,7 @@ import {
   extractTransferAmount,
   hasBankPlaceholder,
 } from "../shared/fictionalBank";
+import { fitSmsBodyAmount } from "../session/cardBalanceFit";
 
 /**
  * ⚠️ **여기서 나가는 필드가 곧 클라가 볼 수 있는 전부다**(AC-060 구조적 금지의 마지막 관문).
@@ -30,7 +31,10 @@ export function buildInCallSmsDoc(
   // §81 — 세션 가상 은행명. 카탈로그 본문의 자리표시자 "OO은행"을 이 이름으로 바꿔 **저장한다**(문자함·리포트·
   // 다시보기가 같은 이름을 본다). 부재면 카탈로그 원문 그대로(종전).
   fictionalBankName?: string,
+  // ⭐ 2026-11-09 판정표 BL3(`session/cardBalanceFit.ts`) — 카드 잔액(원). 있으면 잔액형 문자의 '금액:' 줄 · `transferAmount`를 맞춘 금액으로. 부재 = 종전.
+  cardBalanceWon?: number,
 ): InCallSmsDoc {
+  if (cardBalanceWon !== undefined) item = { ...item, body: fitSmsBodyAmount(item.body, cardBalanceWon) };
   // §81.6 — 가상 은행 자리표시자 줄의 계좌번호(없으면 undefined). 아래 accountNumber 필드에서 한 번만 쓴다.
   const accountNumber = extractAccountNumber(item.body);
   const opensBankTransfer = item.fakeLandingId !== undefined && isBankTransferLanding(item.fakeLandingId);
