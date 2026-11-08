@@ -152,6 +152,11 @@ export function withdrawAccountsFor(input: {
 // |---|---|---|
 // | H1 | 내 은행 = 가상 은행 · `NAMELESS_BANK_NAME` | 종전 그대로("{은행} 모바일뱅킹" · "{은행} 송금" · 꼬리말 "{은행}") |
 // | H2 | 내 은행 = 표 R 실제 은행 | 은행 이름을 빼고 "모바일뱅킹" · "송금" · 꼬리말 "모바일뱅킹"(⚠️ 문구 제안) |
+// 판정표 I — 머리글자 동그라미 글자(`bankInitial` · 2026-11-09 사용자 결정 — 영문 머리글자 "K" · "N" · "S" · "i" 대신 한글).
+// | # | If | Then |
+// |---|---|---|
+// | I1 | 내 은행 = 표 R 실제 은행 | 그 행의 '머리글자' 열(한글 한 글자 — 영문 표기 앞머리는 건너뛴 은행 이름 첫 글자 · 씨티 = "씨" · iM뱅크 = 읽는 소리 "아") |
+// | I2 | 그 밖(가상 은행 · `NAMELESS_BANK_NAME`) | 이름의 첫 한글 글자(종전 첫 글자와 같다 — 모두 한글로 시작) · 한글이 없으면 첫 글자 |
 // ⛔ 실제 은행 이름 글자는 이 파일의 표 R 블록(아래 "실제 은행 표 R 시작" ~ "끝") 한 곳에만 둔다 — `realBankScope.test.ts`가 src 전체를 스캔한다
 //    (예외 = 이 블록 · 통화 자막 가드 사본 `realtime/liveTranscriptGuard.ts`(실존명을 지우는 쪽) · 시험 · 주석).
 
@@ -163,28 +168,29 @@ export const NAMELESS_BANK_NAME = "주거래은행";
 // 지역 · 단위농협도 'NH농협은행' 한 표기로 묶는다(추정 — 참가자는 둘을 가르지 않는다)). '알아보는 말' = 통화 자막에서 이 은행을 가리키는 꼴(판정표 S2′).
 // 짧은 이름(신한 · 신협 · 수협)은 한글 낱말 안에 박히지 않게 앞 경계를 둔다 · 띄어 쓴 "우리 은행" · "하나 은행"은 일반어라 세지 않는다 ·
 // 카드사 말("신한카드" · "농협카드")은 은행 언급이 아니다 · 단독 "우체국"은 택배와 겹쳐 뒤에 통장 · 계좌 · 예금 · 대답 어미가 올 때만 센다 · 단독 "토스"는 세지 않는다.
-const REAL_BANKS: readonly { name: string; alias: string }[] = [
-  { name: "KB국민은행", alias: "(?:KB\\s?)?국민\\s?은행|KB\\s?국민|KB\\s?은행" },
-  { name: "신한은행", alias: "신한\\s?은행|(?<![가-힣])신한(?!\\s?(?:카드|금융|라이프|투자|캐피탈))" },
-  { name: "우리은행", alias: "우리은행" },
-  { name: "하나은행", alias: "(?:KEB\\s?)?하나은행|KEB\\s?하나" },
-  { name: "NH농협은행", alias: "(?:(?:지역|단위)\\s?)?(?:NH\\s?)?농협(?!\\s?(?:카드|생명|손해))(?:\\s?은행)?|농축협" },
-  { name: "IBK기업은행", alias: "IBK(?:\\s?기업)?(?:\\s?은행)?|(?:중소\\s?)?기업은행" },
-  { name: "카카오뱅크", alias: "카카오\\s?뱅크|카뱅" },
-  { name: "토스뱅크", alias: "토스\\s?뱅크" },
-  { name: "케이뱅크", alias: "케이\\s?뱅크|K\\s?뱅크" },
-  { name: "우체국", alias: "우체국(?=\\s?(?:통장|계좌|예금|은행|뱅킹|이에요|이예요|이요|입니다|이고|이랑|에\\s?(?:있|넣|돈)))" },
-  { name: "새마을금고", alias: "새마을\\s?금고" },
-  { name: "신협", alias: "(?<![가-힣])신협" },
-  { name: "Sh수협은행", alias: "(?<![가-힣])(?:Sh\\s?)?수협(?:\\s?은행)?" },
-  { name: "SC제일은행", alias: "(?:SC\\s?)?제일\\s?은행|SC\\s?제일|SC\\s?은행|스탠다드\\s?차타드(?:\\s?은행)?" },
-  { name: "한국씨티은행", alias: "(?:한국\\s?)?[씨시]티\\s?은행" },
-  { name: "iM뱅크", alias: "i\\s?M\\s?뱅크|아이엠\\s?뱅크|(?:DGB\\s?)?대구\\s?은행" },
-  { name: "부산은행", alias: "(?:BNK\\s?)?부산\\s?은행" },
-  { name: "경남은행", alias: "(?:BNK\\s?)?경남\\s?은행" },
-  { name: "광주은행", alias: "광주\\s?은행" },
-  { name: "전북은행", alias: "전북\\s?은행" },
-  { name: "제주은행", alias: "제주\\s?은행" },
+// '머리글자' = 계좌 선택 시트 · 출금 계좌 줄의 동그라미 글자(판정표 I — 2026-11-09 사용자 결정 "영문 대신 한글 첫 글자" · 색은 기본 남색 그대로).
+const REAL_BANKS: readonly { name: string; initial: string; alias: string }[] = [
+  { name: "KB국민은행", initial: "국", alias: "(?:KB\\s?)?국민\\s?은행|KB\\s?국민|KB\\s?은행" },
+  { name: "신한은행", initial: "신", alias: "신한\\s?은행|(?<![가-힣])신한(?!\\s?(?:카드|금융|라이프|투자|캐피탈))" },
+  { name: "우리은행", initial: "우", alias: "우리은행" },
+  { name: "하나은행", initial: "하", alias: "(?:KEB\\s?)?하나은행|KEB\\s?하나" },
+  { name: "NH농협은행", initial: "농", alias: "(?:(?:지역|단위)\\s?)?(?:NH\\s?)?농협(?!\\s?(?:카드|생명|손해))(?:\\s?은행)?|농축협" },
+  { name: "IBK기업은행", initial: "기", alias: "IBK(?:\\s?기업)?(?:\\s?은행)?|(?:중소\\s?)?기업은행" },
+  { name: "카카오뱅크", initial: "카", alias: "카카오\\s?뱅크|카뱅" },
+  { name: "토스뱅크", initial: "토", alias: "토스\\s?뱅크" },
+  { name: "케이뱅크", initial: "케", alias: "케이\\s?뱅크|K\\s?뱅크" },
+  { name: "우체국", initial: "우", alias: "우체국(?=\\s?(?:통장|계좌|예금|은행|뱅킹|이에요|이예요|이요|입니다|이고|이랑|에\\s?(?:있|넣|돈)))" },
+  { name: "새마을금고", initial: "새", alias: "새마을\\s?금고" },
+  { name: "신협", initial: "신", alias: "(?<![가-힣])신협" },
+  { name: "Sh수협은행", initial: "수", alias: "(?<![가-힣])(?:Sh\\s?)?수협(?:\\s?은행)?" },
+  { name: "SC제일은행", initial: "제", alias: "(?:SC\\s?)?제일\\s?은행|SC\\s?제일|SC\\s?은행|스탠다드\\s?차타드(?:\\s?은행)?" },
+  { name: "한국씨티은행", initial: "씨", alias: "(?:한국\\s?)?[씨시]티\\s?은행" },
+  { name: "iM뱅크", initial: "아", alias: "i\\s?M\\s?뱅크|아이엠\\s?뱅크|(?:DGB\\s?)?대구\\s?은행" },
+  { name: "부산은행", initial: "부", alias: "(?:BNK\\s?)?부산\\s?은행" },
+  { name: "경남은행", initial: "경", alias: "(?:BNK\\s?)?경남\\s?은행" },
+  { name: "광주은행", initial: "광", alias: "광주\\s?은행" },
+  { name: "전북은행", initial: "전", alias: "전북\\s?은행" },
+  { name: "제주은행", initial: "제", alias: "제주\\s?은행" },
 ];
 // ── 실제 은행 표 R 끝 ────────────────────────────────────────────────────────────────────────────────
 
@@ -208,6 +214,13 @@ export function realBankMentionsIn(text: string): { end: number; name: string }[
     for (const match of text.matchAll(pattern)) found.push({ end: (match.index ?? 0) + match[0].length, name });
   }
   return found;
+}
+
+/** 판정표 I — 계좌 동그라미 머리글자(I1 표 R '머리글자' · I2 첫 한글 글자). */
+export function bankInitial(bankName: string): string {
+  const real = REAL_BANKS.find((bank) => bank.name === bankName);
+  if (real) return real.initial;
+  return bankName.match(/[가-힣]/)?.[0] ?? bankName.slice(0, 1);
 }
 
 /** 판정표 H — 머리 · 앱 이름에 쓰는 내 은행 이름(H1 = 그 이름 · H2 실제 은행 = 빈 문자열). */

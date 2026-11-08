@@ -16,7 +16,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { poisonedComponentSource, renderLandingScreen } from "../mockscreenrender/renderHarness.ts";
 import { FICTIONAL_BANK_NAMES, fictionalBalanceFor, myBankNameFor, spokenAccountFrom } from "./bankApp.ts";
@@ -26,6 +26,7 @@ import {
   MY_BANK_NEUTRAL_APP_NAME,
   NAMELESS_BANK_NAME,
   REAL_BANK_NAMES,
+  bankInitial,
   loadCardAccount,
   myBankAppName,
   myBankBrand,
@@ -357,4 +358,48 @@ test("[RB7] 배선 — 카드 칸 = 실제 → 가상 묶음 · 카드 값 그 �
   const landing = readRel("src/components/MessengerFakeLanding.tsx");
   for (const call of landing.match(/(onCredentialSubmit|onHeld|onSubmit|onSubmitted)\([^)]*\)/g) ?? []) assert.ok(!/realBank|bankName|mine/i.test(call), `콜백에 값 0: ${call}`);
   assert.equal(/realBank/.test(readRel("src/components/BankAppOverlay.tsx")), false, "송금 앱은 판정된 이름만 받는다");
+});
+
+// ── RB8 판정표 I 머리글자(2026-11-09 사용자 결정 — 영문 대신 한글 첫 글자) ─────────────────────────────────────────
+const INITIALS: Record<string, string> = {
+  KB국민은행: "국", 신한은행: "신", 우리은행: "우", 하나은행: "하", NH농협은행: "농", IBK기업은행: "기", 카카오뱅크: "카",
+  토스뱅크: "토", 케이뱅크: "케", 우체국: "우", 새마을금고: "새", 신협: "신", Sh수협은행: "수", SC제일은행: "제",
+  한국씨티은행: "씨", iM뱅크: "아", 부산은행: "부", 경남은행: "경", 광주은행: "광", 전북은행: "전", 제주은행: "제",
+};
+/** 동그라미(rounded-full) 안 한 글자들. */
+const dotInitials = (markup: string) => [...markup.matchAll(/rounded-full[^>]*>([^<]{1,2})<\/span>/g)].map((match) => match[1]);
+const SHEET_PATH = resolve("src/components/WithdrawAccountSheet.tsx");
+
+test("[RB8] 판정표 I — 실제 은행 동그라미 = 한글 한 글자(I1) · 가상 · 주거래은행 = 종전 첫 글자(I2) + 역검증", () => {
+  // I1 — 표 R 전 행이 표 I에 있고, 모두 한글 한 글자.
+  assert.deepEqual([...REAL_BANK_NAMES].sort(), Object.keys(INITIALS).sort(), "표 R 21행 = 표 I 21행");
+  for (const name of REAL_BANK_NAMES) {
+    assert.equal(bankInitial(name), INITIALS[name], `${name} → ${INITIALS[name]}`);
+    assert.match(bankInitial(name), /^[가-힣]$/, `${name}: 한글 한 글자(영문 0)`);
+  }
+  // I2 — 가상 8곳 · 주거래은행 = 종전 첫 글자 그대로 · 한글 없는 이름은 첫 글자.
+  for (const name of [...FICTIONAL_BANK_NAMES, NAMELESS_BANK_NAME]) assert.equal(bankInitial(name), name.slice(0, 1), `${name}: 종전과 같다`);
+  assert.equal(bankInitial("ABC"), "A");
+  // 역검증 — 종전 규칙(첫 글자)이면 영문 4곳이 남고, 표 없이 '첫 한글'만 쓰면 씨티 · iM뱅크가 틀린다.
+  assert.deepEqual(REAL_BANK_NAMES.filter((name) => /^[A-Za-z]$/.test(name.slice(0, 1))).length, 6, "종전 첫 글자 = 영문 6곳(K · N · I · S · S · i)");
+  const firstHangul = (name: string) => name.match(/[가-힣]/)?.[0];
+  assert.deepEqual(REAL_BANK_NAMES.filter((name) => firstHangul(name) !== INITIALS[name]), ["한국씨티은행", "iM뱅크"], "표가 첫 한글과 다른 행");
+
+  // 렌더 — 신고 화면(보호계좌 이체)의 출금 계좌 줄 동그라미.
+  const props = SCREENS[0]![1];
+  for (const name of ["KB국민은행", "NH농협은행", "IBK기업은행", "Sh수협은행", "SC제일은행", "iM뱅크", "한국씨티은행"]) {
+    const result = renderLandingScreen({ ...props, cardAccountNow: () => ({ bankName: name }) });
+    const dots = dotInitials(result.markup);
+    assert.ok(dots.includes(INITIALS[name]!), `${name}: 동그라미 '${INITIALS[name]}' (실제 ${JSON.stringify(dots)})`);
+    assert.equal(dots.some((dot) => /[A-Za-z]/.test(dot!)), false, `${name}: 영문 동그라미 0`);
+  }
+  const fictional = dotInitials(renderLandingScreen({ ...props, cardAccountNow: () => ({ bankName: "보담은행" }) }).markup);
+  assert.ok(fictional.includes("보"), "가상 은행 = 종전 첫 글자");
+
+  // 역검증 — 동그라미를 종전 첫 글자로 되돌린 사본은 걸린다.
+  const original = readFileSync(SHEET_PATH, "utf8");
+  const poisoned = original.split("{bankInitial(account.bankName)}").join("{account.bankName.slice(0, 1)}");
+  assert.notEqual(poisoned, original, "오염 지점이 있다");
+  const leaked = dotInitials(renderLandingScreen({ ...props, cardAccountNow: () => ({ bankName: REAL }) }, new Map([[SHEET_PATH, poisoned]])).markup);
+  assert.ok(leaked.includes("K") && !leaked.includes("국"), `사본 = 'K'(판정이 잡는다 · ${JSON.stringify(leaked)})`);
 });
