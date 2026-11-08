@@ -70,6 +70,9 @@ export type DeliveredSmsRecord = {
   fakeLandingId?: string;
   /** N1 — 이 문자가 연 이체 화면의 마지막 제출이 요구액보다 적은가 · 같은가 · 많은가(문서 `landingAmountComparison`). 게이트 판정은 보지 않는다. */
   landingAmountComparison?: AmountComparison;
+  /** 2026-11-08 판정표 L(`senderLabel.ts`) — 저장된 발신 라벨 · 도착 시각(ms). 게이트 판정은 보지 않는다(같은 번호 이름 맞추기만). */
+  senderLabel?: string;
+  arrivedAtMs?: number;
 };
 
 export type SmsGateStatus = "allowed" | "not_allowed" | "already_delivered" | "too_early" | "too_soon";
