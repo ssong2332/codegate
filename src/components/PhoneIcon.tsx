@@ -23,6 +23,8 @@ export type PhoneIconName =
   | "send-up"
   // 사용자 결정(2026-10-18 · UX D-116) — 메신저에서 연 가짜 랜딩 브라우저 바 왼쪽 ✕(닫기).
   | "close"
+  // ⭐ 2026-11-08 웹 안의 웹 PR-1 — 가짜 랜딩 안드로이드형 주소 막대의 사이트 정보 아이콘(조정 막대 모양 · 자물쇠 대신 — 시안 1절).
+  | "tune"
   // §113.2(UX D-151 (2)) — 대화방 입력줄 왼쪽 '+'(사진 보내기).
   | "plus"
   // 2026-10-27 — One UI 9 통화 화면(`OneUiCallControls`) 재현용. 녹음 · 블루투스 · 반짝이 · 영상 · 자막 · 대기는 장식(동작 없음).
@@ -153,6 +155,14 @@ function glyph(name: PhoneIconName) {
         <>
           <path d="M6 6l12 12" />
           <path d="M18 6L6 18" />
+        </>
+      );
+    case "tune":
+      return (
+        <>
+          <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+          <circle cx="16" cy="7" r="2" />
+          <circle cx="10" cy="17" r="2" />
         </>
       );
     case "plus":
