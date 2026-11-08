@@ -100,6 +100,7 @@ import { planOtpFollowUp } from "./otpFollowUp";
 import { OTP_HOLD_INSTRUCTION, claimMatchesPurpose, combineReplyGuards, otpDemandGuardFor, replyClaimsSmsSent } from "./smsClaim";
 import { extractEscalationSignal } from "./escalationSignal";
 import { installDoneCallNextInstruction, installLeadsToCall } from "./installCallNext";
+import { callScreensDoneRule, linkScreensAllDone } from "./callScreensDone";
 import {
   callPhaseMockTacticHints,
   callPhaseScenarioPrompt,
@@ -592,6 +593,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     let mockConsentLandingId: string | undefined;
     // Edge 재시험 3 표 T2(`installCallNext.ts`) — 설치 뒤 통화가 설계인 메신저 링크 설치를 이미 알렸는가.
     let installCallAnnounced = false;
+    // Edge 재시험 5 판정표 S(`callScreensDone.ts`) — 연 링크 화면을 전부 마쳤는가(넘어온 통화의 폴백 턴이 쓴다 · 못 읽으면 거짓 = 종전).
+    let linkScreensDone = false;
     // T194-a(리뷰 m1) — 카탈로그 소속이 아니라 **이 세션에서 도달 가능한** 설치 항목이 있을 때만 읽는다. 도달 불가 항목은
     // `recordMockScreenEvent`가 응낙 문서를 만들지 않으므로(G588 · ⑤) 동작은 같고, parcel 초급 · 중급의 매 턴 읽기 1회가 사라진다.
     if (listAppInstallMockScreens(session.scenarioId).some((item) => isMockScreenReachable(session, item))) {
@@ -602,6 +605,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         const pending = mockSnap.docs.find(
           (doc) => Boolean(doc.get("consentedAt")) && !doc.get("consentAnnouncedAt"),
         );
+        linkScreensDone = linkScreensAllDone(mockSnap.docs.map((doc) => doc.data()));
         installCallAnnounced = mockSnap.docs.some(
           (doc) =>
             Boolean(doc.get("consentAnnouncedAt")) &&
@@ -802,6 +806,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         screenPlan?.instruction,
         confirmPlan?.instruction,
         escalatedCallInstruction,
+        // Edge 재시험 5 판정표 S — Live와 같은 판정 · 같은 문면(넘어온 통화 ∧ 링크 화면 결말 루트 ∧ 통화 중 문자 없음 ∧ 화면 다 마침).
+        callScreensDoneRule({
+          escalatedCall,
+          noAccountRoute: routeEndsWithoutAccount(session.scenarioId, session.flowVariantId),
+          inCallSms: sessionDeclaresInCallSms(session.scenarioId, session.flowVariantId),
+          allScreensDone: linkScreensDone,
+        }),
         repeatBreakInstruction(repeatBreakKind),
         beginnerRetreatInstruction(beginnerRetreatKind),
         callAfterExcuseInstruction,
