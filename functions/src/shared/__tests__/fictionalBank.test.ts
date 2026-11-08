@@ -158,8 +158,9 @@ test("[은행명] 배선 — 세션 생성 2곳이 저장·오프닝에 전달, 
   assert.match(src("inCallSms/index.ts"), /buildInCallSmsResponse\(item, \{ placed, fictionalBankName \}\)/);
   assert.match(src("realtime/index.ts"), /fictionalBankName: resolveFictionalBankName\(/);
   const verify = src("verifyIntercept/index.ts");
-  assert.match(verify, /buildVerifyInterceptDoc\(item, Timestamp\.now\(\), anchor, fictionalBankName\)/);
-  assert.match(verify, /buildVerifyOfferResponse\(item, \{ placed, \.\.\.\(stage \? \{ stage \} : \{\}\), fictionalBankName \}\)/);
+  // 2026-11-09 판정표 BD(`session/cardBankDesk.ts`) — 카드 거래 은행 = 실제 은행이면 창구 이름 없는 표기(인자 추가 · 같은 은행명 원천).
+  assert.match(verify, /buildVerifyInterceptDoc\(item, Timestamp\.now\(\), anchor, fictionalBankName, cardBankUnnamed\(session\.personaCard\?\.items\)\)/);
+  assert.match(verify, /buildVerifyOfferResponse\(item, \{\s*placed,\s*\.\.\.\(stage \? \{ stage \} : \{\}\),\s*fictionalBankName,/);
   assert.match(verify, /reconnectInstruction: reconnectParts\.reconnectInstruction,/);
   assert.match(verify, /reconnectedCallerLabel: reconnectParts\.reconnectedCallerLabel,/);
   assert.match(src("roleplay/openingLine.ts"), /applyFictionalBank\(realNameReplacedText, fictionalBankName\)/);
