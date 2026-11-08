@@ -41,6 +41,8 @@ type Props = {
   myBankName: string;
   /** 고정 가상 잔액(BA4 — 화면에만 · 서버 0). 출금 계좌 목록의 첫 계좌(이 은행 입출금) 잔액이다. */
   balance: number;
+  /** ⭐ 2026-11-08 판정표 C1(`withdrawAccounts.ts`) — 참가자 쪽 값(카드 · 말한 값)이 있으면 그 계좌 하나만. 부재 = C2(종전 3개). */
+  singleAccount?: boolean;
   /**
    * 기기 스킨(인증 수단 — iOS형 = 얼굴 · 그 밖 = 지문). 부재 = 이 기기 UA로 감지(`detectMessengerSkin` — 세션 문서 · 수동 선택은 호출부가 넘길 때만 반영).
    */
@@ -77,13 +79,13 @@ const APP = {
   notice: "#EEF2F7",
 } as const;
 
-export default function BankAppOverlay({ call, myBankName, balance, skin, target, ledgerKey, onClose, onSubmitted }: Props) {
+export default function BankAppOverlay({ call, myBankName, balance, singleAccount, skin, target, ledgerKey, onClose, onSubmitted }: Props) {
   const [stage, setStage] = useState<BankAppStage>("recipient");
   // 출금 계좌(목록은 세션마다 결정적 · 기본 = 이 은행 입출금) · 열린 시트(계좌 선택 · 생체 인증 — 동시에 하나).
   const ledger = ledgerKey ?? "";
   const accounts = useMemo(
-    () => withdrawAccountsFor({ seed: ledger, appBankName: myBankName, primaryBalance: balance, avoidBankName: target.bankName }),
-    [ledger, myBankName, balance, target.bankName],
+    () => withdrawAccountsFor({ seed: ledger, appBankName: myBankName, primaryBalance: balance, avoidBankName: target.bankName, single: singleAccount }),
+    [ledger, myBankName, balance, target.bankName, singleAccount],
   );
   const [accountId, setAccountId] = useState<WithdrawAccount["id"]>("main");
   const fromAccount = accounts.find((item) => item.id === accountId) ?? accounts[0]!;

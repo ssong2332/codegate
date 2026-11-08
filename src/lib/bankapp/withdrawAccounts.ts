@@ -78,8 +78,10 @@ export function withdrawAccountsFor(input: {
   appBankName: string;
   primaryBalance: number;
   avoidBankName?: string;
+  /** 판정표 C1 — 첫 계좌 하나만(다른 은행 계좌 숨김). 부재 = C2(종전 3개). */
+  single?: boolean;
 }): WithdrawAccount[] {
-  const { seed, appBankName, primaryBalance, avoidBankName } = input;
+  const { seed, appBankName, primaryBalance, avoidBankName, single } = input;
   const others: string[] = [];
   const start = hash(`other-banks:${seed}`) % BANKS.length;
   for (let i = 0; i < BANKS.length && others.length < 2; i += 1) {
@@ -88,7 +90,7 @@ export function withdrawAccountsFor(input: {
   }
   // 다른 은행 잔액: 1번 = 200만 ~ 900만 · 2번 = 30만 ~ 400만(10만 원 단위) — 첫 계좌(1,000만 이상)보다 늘 적다.
   const otherBalance = (key: string, min: number, max: number) => (min + (hash(`${key}:${seed}`) % (max - min + 1))) * 100_000;
-  return [
+  const all: WithdrawAccount[] = [
     { id: "main", bankName: appBankName, productName: "입출금통장", maskedNumber: maskedNumberFor(seed, "main"), balance: primaryBalance, own: true },
     {
       id: "other-1",
@@ -107,6 +109,69 @@ export function withdrawAccountsFor(input: {
       own: false,
     },
   ];
+  return single ? all.slice(0, 1) : all;
+}
+
+// ── ⭐ 2026-11-08 실기기 신고(검찰 고급 상품권 화면에 참가자와 무관한 은행 · 금액 3개) · 사용자 결정 D1 ~ D3 ─────────────────────────
+// 판정표 A — 출금 계좌(첫 계좌)의 값 출처. 은행 · 잔액 **칸마다 따로** 정한다(앞 행이 먼저 · ⚠️ 칸마다 따로 = 이 세션 판단 — PR 본문에 보고).
+// | # | If | Then |
+// |---|---|---|
+// | A1 | 카드 은행(시작 전 '이번 훈련 속 내 정보' 선택 칸 · 가상 은행 목록 안) 있음 | 은행 = 카드 은행 |
+// | A2 | A1 아님 ∧ 통화에서 말한 가상 은행 있음(판정표 S1) | 은행 = 말한 은행 |
+// | A3 | A1 · A2 아님 ∧ 통화에서 마지막으로 말한 은행이 가상 목록 밖(판정표 S2 · 실제 은행 등) | 은행 = 이름 없는 표기 `NAMELESS_BANK_NAME`("주거래은행" — ⚠️ 문구 제안) |
+// | A4 | 그 밖 | 은행 = 고정 값(화면이 넘긴 세션 고정 가상 은행 — 종전) |
+// | A5 | 카드 잔액(1만 원 ~ 10억 원) 있음 | 잔액 = 카드 잔액 |
+// | A6 | A5 아님 ∧ 통화에서 말한 잔액 있음(판정표 S4 ~ S9 · 범위 S8 그대로) | 잔액 = 말한 잔액 |
+// | A7 | 그 밖 | 잔액 = 고정 값(`fictionalBalanceFor` — 종전) |
+// 판정표 C — 계좌 수(D3).
+// | # | If | Then |
+// |---|---|---|
+// | C1 | A1 · A2 · A3 · A5 · A6 중 하나라도 해당(참가자 쪽 값이 하나라도 있음) | 그 계좌 하나만(다른 은행 계좌 숨김) |
+// | C2 | 그 밖(값 0) | 종전 3개(이 앱 은행 1 + 다른 은행 2) |
+// 기존 규칙과의 관계(바꾸지 않음): 출금 가능 금액 · 1일 한도 = 판정표 W 그대로(요구액보다 잔액이 적으면 W3로 이체가 막힌다 — C1이면 다른 계좌로 바꿀 수도 없다 = 현실과 같다) ·
+// 출금 예약 최소 100만 원(S8 결정 "그대로 둠") 그대로 · 실제 은행 이름은 화면에 0(A3) · 값은 화면 안에서만(서버 · 콜백 0 · G138).
+
+/** A3 — 참가자가 실제 은행을 말했을 때 은행 이름 대신 쓰는 이름 없는 표기(실존 기관명 아님 · 일반어). */
+export const NAMELESS_BANK_NAME = "주거래은행";
+
+/** 시작 전 카드에 넣은 거래 은행 · 잔액(둘 다 선택). */
+export type CardAccount = { bankName?: string; balance?: number };
+/** 통화에서 말한 값(`bankApp.ts` `SpokenAccount`와 같은 모양 — 잎 모듈이라 타입만 다시 둔다). */
+export type SpokenAccountValues = { bankName?: string; balance?: number; realBank?: true };
+
+/** A5 · S8과 같은 잔액 범위(1만 원 ~ 10억 원). */
+export const MY_ACCOUNT_BALANCE_MIN = 10_000;
+export const MY_ACCOUNT_BALANCE_MAX = 1_000_000_000;
+
+function validBalance(value: number | undefined): number | undefined {
+  return value !== undefined && Number.isSafeInteger(value) && value >= MY_ACCOUNT_BALANCE_MIN && value <= MY_ACCOUNT_BALANCE_MAX ? value : undefined;
+}
+
+export type MyAccount = {
+  /** 머리띠 · 첫 계좌 은행 이름(가상 은행 또는 `NAMELESS_BANK_NAME`). */
+  bankName: string;
+  balance: number;
+  /** C1 — 이 계좌 하나만 보인다. */
+  single: boolean;
+};
+
+/** 판정표 A · C. `fixedBankName` · `fixedBalance` = 화면이 종전에 쓰던 값(A4 · A7). */
+export function resolveMyAccount(input: {
+  card?: CardAccount;
+  spoken?: SpokenAccountValues;
+  fixedBankName: string;
+  fixedBalance: number;
+}): MyAccount {
+  const { card, spoken, fixedBankName, fixedBalance } = input;
+  const cardBank = card?.bankName && BANKS.includes(card.bankName) ? card.bankName : undefined; // A1
+  const spokenBank = spoken?.bankName && BANKS.includes(spoken.bankName) ? spoken.bankName : undefined; // A2
+  const namelessBank = spoken?.realBank ? NAMELESS_BANK_NAME : undefined; // A3
+  const cardBalance = validBalance(card?.balance); // A5
+  const spokenBalance = validBalance(spoken?.balance); // A6
+  const bankName = cardBank ?? spokenBank ?? namelessBank ?? fixedBankName; // A4
+  const balance = cardBalance ?? spokenBalance ?? fixedBalance; // A7
+  const single = [cardBank, spokenBank, namelessBank, cardBalance, spokenBalance].some((value) => value !== undefined); // C1 · C2
+  return { bankName, balance, single };
 }
 
 /** 표시용 한 줄("새솔은행 352-****-7781"). */
@@ -183,4 +248,90 @@ export function recordWithdrawal(ledgerKey: string, accountId: WithdrawAccount["
 /** 출금 가능 금액 표기("12,340,000원"). */
 export function availableText(ledgerKey: string, account: Pick<WithdrawAccount, "id" | "balance">): string {
   return won(availableBalance(ledgerKey, account));
+}
+
+// ── ⭐ 2026-11-08(사용자 결정 D1 ①) — 시작 전 '이번 훈련 속 내 정보' 카드의 거래 은행 · 잔액 칸(선택) ─────────────────────────────
+// 판정표 K(카드 칸 → 값 · 저장).
+// | # | If | Then |
+// |---|---|---|
+// | K1 | 두 칸 모두 비움 | 카드 값 없음(저장된 값 지움) → 판정표 A2 ~ A7 |
+// | K2 | 거래 은행 = 가상 은행 목록 안(고르기만 — 자유 입력 0 · 실제 은행 고를 수 없음) | 은행 = 그 이름 |
+// | K3 | 잔액 = 만 원 단위 숫자(쉼표 · 띄어쓰기 허용) · 1 ~ 100,000(= 1만 원 ~ 10억 원 · 판정표 S8과 같은 범위) | 잔액 = 숫자 × 10,000 |
+// | K4 | 잔액이 숫자 아님 · 범위 밖 · 목록 밖 은행 | 진행 안 함 + `CARD_ACCOUNT_COPY.invalid` 1줄 |
+// | K5 | 저장 | 이 탭 `sessionStorage`에 세션 id와 함께(서버 · 요청 · 리포트 0 — 사기범에게 알리지 않는다 · `fv-akj5` · `fv-6s5p` 무변경) |
+// | K6 | 읽기 | 저장된 세션 id = 지금 세션 id일 때만(다른 세션 값 0) · 저장소를 못 쓰면(사생활 보호 모드 등) 값 없음 |
+// | K7 | 보이는 곳 | 카드 입력 블록이 보일 때만(대상 10종 × 고급 × 통화형 × 내가 하는 훈련) — 챌린지 보내기 · 메신저 = 칸 0 |
+
+/** 카드 은행 선택지(서버 `FICTIONAL_BANK_NAMES`와 같은 목록 · 순서 — `bankApp.ts`와 대조 테스트). */
+export const CARD_ACCOUNT_BANK_OPTIONS: readonly string[] = BANKS;
+
+export const CARD_ACCOUNT_COPY = {
+  bankLabel: "거래 은행",
+  bankNone: "선택 안 함",
+  balanceLabel: "통장 잔액 (만 원)",
+  balancePlaceholder: "예: 1200",
+  hint: "거래 은행과 잔액은 통화 중 열리는 은행 · 결제 화면의 내 계좌에만 쓰입니다. 비워 두면 통화에서 말한 값이나 정해진 값으로 보입니다.",
+  invalid: "통장 잔액은 만 원 단위 숫자로 1부터 100000까지 넣어 주세요. 예: 1200(= 1,200만 원)",
+} as const;
+
+export type CardAccountForm = { bankName: string; balanceManwon: string };
+export const EMPTY_CARD_ACCOUNT_FORM: CardAccountForm = { bankName: "", balanceManwon: "" };
+
+export type CardAccountFormResult = { ok: true; card: CardAccount | undefined } | { ok: false };
+
+/** 판정표 K1 ~ K4. */
+export function readCardAccountForm(form: CardAccountForm): CardAccountFormResult {
+  const card: CardAccount = {};
+  if (form.bankName) {
+    if (!BANKS.includes(form.bankName)) return { ok: false }; // K4
+    card.bankName = form.bankName; // K2
+  }
+  const raw = form.balanceManwon.replace(/[\s,]/g, "");
+  if (raw) {
+    if (!/^\d{1,6}$/.test(raw)) return { ok: false }; // K4
+    const balance = Number(raw) * 10_000;
+    if (validBalance(balance) === undefined) return { ok: false }; // K4
+    card.balance = balance; // K3
+  }
+  return { ok: true, card: Object.keys(card).length > 0 ? card : undefined }; // K1
+}
+
+const CARD_ACCOUNT_STORAGE_KEY = "fv.cardAccount.v1";
+
+type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+function sessionStore(): StorageLike | undefined {
+  try {
+    return typeof window === "undefined" ? undefined : window.sessionStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+/** K5 — 세션 id와 함께 저장(값 없음 = 지움). `store`는 시험용. */
+export function saveCardAccount(sessionId: string, card: CardAccount | undefined, store: StorageLike | undefined = sessionStore()): void {
+  if (!store) return;
+  try {
+    if (!card || !sessionId) store.removeItem(CARD_ACCOUNT_STORAGE_KEY);
+    else store.setItem(CARD_ACCOUNT_STORAGE_KEY, JSON.stringify({ sessionId, ...card }));
+  } catch {
+    // 저장소를 못 쓰면 카드 값 없이 진행(K6).
+  }
+}
+
+/** K6 — 지금 세션의 카드 값(없음 · 다른 세션 · 모양 이상 = undefined). */
+export function loadCardAccount(sessionId: string, store: StorageLike | undefined = sessionStore()): CardAccount | undefined {
+  if (!store || !sessionId) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(store.getItem(CARD_ACCOUNT_STORAGE_KEY) ?? "null");
+    if (!parsed || typeof parsed !== "object") return undefined;
+    const { sessionId: savedId, bankName, balance } = parsed as Record<string, unknown>;
+    if (savedId !== sessionId) return undefined;
+    const card: CardAccount = {};
+    if (typeof bankName === "string" && BANKS.includes(bankName)) card.bankName = bankName;
+    if (typeof balance === "number" && validBalance(balance) !== undefined) card.balance = balance;
+    return Object.keys(card).length > 0 ? card : undefined;
+  } catch {
+    return undefined;
+  }
 }

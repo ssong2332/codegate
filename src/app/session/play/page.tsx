@@ -224,7 +224,7 @@ import {
 import { buildRecents, officialNumberForTitle, type PhoneCallLog } from "@/lib/callLegs/phoneApp";
 import BankAppOverlay from "@/components/BankAppOverlay";
 import { fictionalBalanceFor, isBankAppEnabled, latestDemandAmount, myBankNameFor, spokenAccountFrom, type TransferTarget } from "@/lib/bankapp/bankApp";
-import { disburseLoan, loanDisbursedAmount } from "@/lib/bankapp/withdrawAccounts";
+import { disburseLoan, loadCardAccount, loanDisbursedAmount, resolveMyAccount, type MyAccount } from "@/lib/bankapp/withdrawAccounts";
 import { LOAN_DISBURSED_SMS_ID, LOAN_SAFE_TRANSFER_LANDING_ID } from "@/lib/bankapp/loanFlow";
 import { readDebugFlagSearch } from "@/lib/realtime/debugFlags";
 import VerifyCallOverlay from "@/components/VerifyCallOverlay";
@@ -735,7 +735,8 @@ export default function SessionCallPage() {
   // 판독은 진단 패널과 같은 방식(`AudioDebugPanel` — 서버 렌더 = 꺼짐 · 브라우저 = 주소 쿼리 + 탭 저장 값).
   const bankAppEnabled = useSyncExternalStore(noopSubscribeBankApp, readBankAppEnabled, readBankAppEnabledOnServer);
   const [bankAppOpen, setBankAppOpen] = useState(false);
-  const [bankTransfer, setBankTransfer] = useState<{ smsId: string; target: TransferTarget } | null>(null);
+  // ⭐ 2026-11-08 — `mine` = 여는 순간 정한 출금 계좌 은행 · 잔액 · 계좌 수(판정표 A · C — 카드 값 → 말한 값 → 고정 값).
+  const [bankTransfer, setBankTransfer] = useState<{ smsId: string; target: TransferTarget; mine: MyAccount } | null>(null);
   const [verifyDialing, setVerifyDialing] = useState(false);
   // H1(2026-11-01 U1) — 확인 창구 넘김 지시가 큐 · 보류 큐에 있고 아직 Live에 나가지 않았다(`onRelayGreetingSent`가 끈다).
   const [speakerSwitchPending, setSpeakerSwitchPending] = useState(false);
@@ -2739,7 +2740,14 @@ export default function SessionCallPage() {
   const handleOpenBankApp = (smsId: string, target: TransferTarget) => {
     if (isEndLatched(callEndingRef.current)) return;
     handleRecordSmsEvent(smsId, "link_tapped");
-    setBankTransfer({ smsId, target });
+    const sid = sessionId ?? "";
+    const mine = resolveMyAccount({
+      card: loadCardAccount(sid),
+      spoken: spokenAccountFrom([...messages, ...transcriptRef.current]),
+      fixedBankName: myBankNameFor(sid, target.bankName),
+      fixedBalance: fictionalBalanceFor(sid),
+    });
+    setBankTransfer({ smsId, target, mine });
     setSmsOverlayOpen(false);
     setVerifyOverlayOpen(false);
     setBankAppOpen(true);
@@ -4516,6 +4524,8 @@ export default function SessionCallPage() {
           // ⭐ 2026-11-08(라이브 재시험 7 · 사용자 결정 "말한 값에 맞추기") — 출금 예약 · 금 거래소 화면의 출금 계좌 은행 · 잔액 = 참가자가 말한 값(판정표 S · S12 ·
           // 참가자 대사만 값으로 · 사기범 대사는 잔액 질문 판정에만). 값은 화면 안에서만 쓰인다(G138 — 기록 경로 0).
           spokenAccountNow={() => spokenAccountFrom([...messages, ...transcriptRef.current])}
+          // ⭐ 2026-11-08(실기기 신고 · 판정표 A1 · A5) — 시작 전 카드에 넣은 거래 은행 · 잔액(이 탭 저장소 · 이 세션 값만 · 서버 0). 말한 값보다 먼저.
+          cardAccountNow={() => loadCardAccount(sessionId ?? "")}
         />
       )}
 
@@ -4524,8 +4534,9 @@ export default function SessionCallPage() {
       {bankAppEnabled && bankAppOpen && bankTransfer && (
         <BankAppOverlay
           call={{ callerLabel, elapsedLabel: formatCallElapsed(callDisplaySec) }}
-          myBankName={myBankNameFor(sessionId ?? "", bankTransfer.target.bankName)}
-          balance={fictionalBalanceFor(sessionId ?? "")}
+          myBankName={bankTransfer.mine.bankName}
+          balance={bankTransfer.mine.balance}
+          singleAccount={bankTransfer.mine.single}
           target={bankTransfer.target}
           ledgerKey={sessionId ?? ""}
           onClose={() => setBankAppOpen(false)}

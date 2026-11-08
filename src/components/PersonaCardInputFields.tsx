@@ -7,7 +7,7 @@
 //    포커스는 옮기지 않고(키보드 팝업 0) 제목만 스크린리더에 읽힌다. "끝까지 스크롤해야 버튼 활성화" 방식은 쓰지 않는다.
 // ⭐ §93(UX D-136) — 카드 종류(`kind`)가 칸을 정한다: 기관형 = 이름 · 출생 연도 · 생일 · 사는 곳 / 본인 협박형 = + 하는 일 /
 //    자녀 협박형 = 자녀 이름 · 자녀 학년 · 자녀가 다니는 학원만(자녀 칸은 자녀 납치 협박에만).
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   PERSONA_BIRTH_DAY_OPTIONS,
   PERSONA_BIRTH_MONTH_OPTIONS,
@@ -30,12 +30,14 @@ type PersonaCardInputFieldsProps = {
   value: PersonaCardForm;
   onChange: (next: PersonaCardForm) => void;
   disabled?: boolean;
+  /** ⭐ 2026-11-08 — 같은 블록 안 고지(`privacy`) 위에 덧붙일 칸(거래 은행 · 잔액 — `CardAccountFields`). 부재 = 종전 그대로. */
+  extra?: ReactNode;
 };
 
 const FIELD_CLASS =
   "min-h-[52px] rounded-[8px] border-[1.5px] border-line-strong bg-white px-4 py-3 text-[18px] text-ink focus:border-brand focus-visible:outline-[3px] focus-visible:outline-offset-1 focus-visible:outline-brand disabled:opacity-50";
 
-export default function PersonaCardInputFields({ mode, kind = "identity", value, onChange, disabled }: PersonaCardInputFieldsProps) {
+export default function PersonaCardInputFields({ mode, kind = "identity", value, onChange, disabled, extra }: PersonaCardInputFieldsProps) {
   const id = useId();
   const titleId = `${id}-title`;
   const birthdayHintId = `${id}-birthday-hint`;
@@ -231,6 +233,8 @@ export default function PersonaCardInputFields({ mode, kind = "identity", value,
           ) : null}
         </>
       )}
+
+      {extra}
 
       <p className="text-[16px] leading-relaxed text-ink-sub">{PERSONA_INPUT_COPY.privacy}</p>
     </section>

@@ -45,7 +45,9 @@ test("[B2] 완료 영수증 — 은행 앱 · 웹 이체 화면 모두 받는 �
 });
 
 test("[B3] 웹 이체 화면 머리띠 = 내 은행(받는 계좌 은행 아님) · 두 진입 표면 모두 내 은행을 넘긴다", () => {
-  assert.ok(landing.includes("bankTransfer && prefilledTransfer?.myBankName ? `${prefilledTransfer.myBankName} 모바일뱅킹` : issuerNameOf(copy.issuerLabel)"));
+  // 2026-11-08 — 머리띠 이름 = 판정표 A로 정한 첫 출금 계좌 은행(`appBankName` — 카드 · 말한 값 · 없으면 종전 `prefilledTransfer.myBankName`).
+  assert.ok(landing.includes("bankTransfer && prefilledTransfer?.myBankName ? `${appBankName} 모바일뱅킹` : issuerNameOf(copy.issuerLabel)"));
+  assert.ok(landing.includes("fixedBankName: prefilledTransfer?.myBankName ?? myBankNameFor(ledger, prefilledTransfer?.bankName),"), "값이 없으면 종전 내 은행");
   assert.ok(!landing.includes("`${prefilledTransfer.bankName} 모바일뱅킹`"), "받는 계좌 은행명으로 머리띠를 쓰지 않는다");
   assert.ok(room.includes("myBankName: myBankNameFor(sessionId ?? \"\", fakeLanding.bankName),"), "메신저 칩");
   assert.ok(page.includes("bankIdentity={{ myBankName: myBankNameFor(sessionId ?? \"\", sortedSms.find((sms) => sms.bankName)?.bankName), ledgerKey: sessionId ?? \"\" }}"), "통화 중 문자");

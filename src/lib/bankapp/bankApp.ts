@@ -282,7 +282,11 @@ const BALANCE_QUESTION = /잔액|잔고|예금|예치|얼마(?:나|정도)?\s*(?
 const SPOKEN_BALANCE_MIN = 10_000;
 const SPOKEN_BALANCE_MAX = 1_000_000_000;
 
-export type SpokenAccount = { bankName?: string; balance?: number };
+/**
+ * `realBank` — ⭐ 2026-11-08(출금 계좌 값 출처 판정표 A3) 참가자가 마지막으로 말한 은행이 가상 목록 밖(S2)일 때만 `true`.
+ * 화면은 은행 이름 대신 이름 없는 표기(`withdrawAccounts.ts` `NAMELESS_BANK_NAME`)를 쓴다 — 실제 은행 이름은 어디에도 싣지 않는다.
+ */
+export type SpokenAccount = { bankName?: string; balance?: number; realBank?: true };
 
 /** 한 참가자 대사의 마지막 은행 언급(S1 · S2). 언급 없음 = undefined · 실제 은행 = null. */
 function lastBankMentionIn(text: string): string | null | undefined {
@@ -336,16 +340,20 @@ function lastBalanceIn(text: string, askedBalance: boolean): number | undefined 
 /** 대사(오래된 순 · 역할 포함)에서 참가자가 말한 거래 은행 · 잔액(판정표 S1 ~ S11). 말하지 않은 쪽은 빠진다. */
 export function spokenAccountFrom(turns: readonly { role: "scammer" | "user"; text: string }[]): SpokenAccount {
   let bankName: string | undefined;
+  let realBank = false;
   let balance: number | undefined;
   turns.forEach((turn, index) => {
     if (turn.role !== "user") return; // S10
     const mention = lastBankMentionIn(turn.text);
-    if (mention !== undefined) bankName = mention ?? undefined; // S1 · S2 · S9
+    if (mention !== undefined) {
+      bankName = mention ?? undefined; // S1 · S2 · S9
+      realBank = mention === null; // S2 → 판정표 A3(이름 없는 표기)
+    }
     const previous = turns[index - 1];
     const value = lastBalanceIn(turn.text, previous?.role === "scammer" && BALANCE_QUESTION.test(previous.text));
     if (value !== undefined) balance = value; // S9
   });
-  return { ...(bankName ? { bankName } : {}), ...(balance !== undefined ? { balance } : {}) };
+  return { ...(bankName ? { bankName } : {}), ...(realBank ? { realBank: true as const } : {}), ...(balance !== undefined ? { balance } : {}) };
 }
 
 /** 완료 화면 시각("오후 3:07" — 기기 시계 · 화면에만). */
