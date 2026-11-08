@@ -236,7 +236,7 @@ test("GeminiRealtimeProvider: 발화 종료 침묵 대기(silenceDurationMs)를 
   }
 });
 
-test("GeminiRealtimeProvider: 신고 ④ 대응 — 발화 시작 민감도(startOfSpeechSensitivity)를 LOW로, prefixPaddingMs를 150ms로 토큰에 고정한다(§50.8.5 300ms → 2026-11-08 관찰 e 판정표 E2)", async () => {
+test("GeminiRealtimeProvider: 신고 ④ 대응 — 발화 시작 민감도(startOfSpeechSensitivity)를 LOW로, prefixPaddingMs를 300ms로 토큰에 고정한다(§50.8.5)", async () => {
   const capture = captureTokenRequest();
   try {
     const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
@@ -260,8 +260,7 @@ test("GeminiRealtimeProvider: 신고 ④ 대응 — 발화 시작 민감도(star
     // 오판되기 쉬웠다(자기-끊김의 원인, §50.8.1 창②③). LOW로 낮추고 prefixPaddingMs로 시작
     // 판정에 여유를 둔다.
     assert.equal(aad?.startOfSpeechSensitivity, "START_SENSITIVITY_LOW");
-    // ⭐ 2026-11-08(관찰 e · 판정표 E2) — 300 → 150(LOW 유지 · 위 provider 주석의 미리 적은 대응). 띄어 읽은 숫자 음절 200~330ms가 시작으로 안 잡혔다.
-    assert.equal(aad?.prefixPaddingMs, 150);
+    assert.equal(aad?.prefixPaddingMs, 300);
   } finally {
     capture.restore();
   }

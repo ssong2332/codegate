@@ -4,8 +4,8 @@
 // 판정표 E
 // | # | 관찰 | 원인(근거) | 조치 | 이 파일 |
 // |---|---|---|---|---|
-// | E1 | 두 문장 중 뒷문장 통째 누락 | 문장 사이 쉼(Heami 860~870ms) > 발화 끝 침묵 400ms → 턴 종료 → 응답 오디오가 오면 반이중 게이트가 뒷문장을 버림 | `silenceDurationMs` 1000 | [E1] |
-// | E2 | 띄어 읽은 숫자 → "6요" | 음절 200~330ms < 발화 시작 문턱 300ms(추정) · 음절 사이 쉼 500~580ms > 400ms | `prefixPaddingMs` 150 · E1의 1000ms | [E2] |
+// | E1 | 두 문장 중 뒷문장 통째 누락 | 문장 사이 쉼(Heami 860~870ms) > 발화 끝 침묵 400ms → 턴 종료 → 응답 오디오가 오면 반이중 게이트가 뒷문장을 버림 | `silenceDurationMs` 1000(실 키: 버림 2/2 → 0/2) | [E1] |
+// | E2 | 띄어 읽은 숫자 → "6요" | 시작 문턱 추정(음절 200~330ms < 300ms)은 실 키 실측에서 기각 — 400/300에서도 6자리 전부 전사. Edge 원인 미확정 | 조치 없음 · `prefixPaddingMs` 300 유지 | [E2] |
 // | E3 | "칠팔오일삼육이요" → 전사 "7851362" · "번호가 일치하지 않습니다" | 말끝 "이요"의 "이"를 숫자 2로 받아씀(어미 "요"도 사라짐) | 대조 후보 C2(끝 2 뺀 L자리) · Live 대조 1줄 문장 | [E3-*] |
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -53,12 +53,13 @@ test("[E1] 문장 사이 쉼 — 운영값 400ms는 두 문장을 가르고(재�
   assert.ok(NOW.silenceDurationMs - Math.max(...HEAMI.twoSentencesName.pausesMs, ...HEAMI.twoSentencesBank.pausesMs) >= 100);
 });
 
-test("[E2] 띄어 읽은 숫자 — 운영값은 음절 4개가 시작 문턱 미만 · 음절마다 턴 종료(재현) · 수정 뒤 0 · 한 턴", () => {
+// 2026-11-08 실 키 실측(`live-mic-probe` 3세션 · 같은 Heami 클립) — 띄어 읽은 숫자 전사: 400/300 "7 8 5 1 3 6" · 1000/300 "7 8 5 1 3 6" · 1000/150 "785136".
+// ⇒ 300ms 미만 음절 4개가 있어도 시작 문턱은 인식을 막지 않았다(추정 기각) — 문턱은 바꾸지 않는다.
+test("[E2] 띄어 읽은 숫자 — 시작 문턱 추정은 실측에서 기각 · 300 유지 · 1000ms 침묵은 음절 사이 쉼을 한 턴으로 묶는다", () => {
   const clip = HEAMI.spacedDigits;
-  assert.equal(NOW.prefixPaddingMs, 150);
-  assert.equal(shortSyllables(clip.speechMs, BEFORE.prefixPaddingMs), 4, "재현 — 칠 · 팔 · 오 · 일이 300ms 미만");
-  assert.equal(splitsTurn(clip.pausesMs, BEFORE.silenceDurationMs), true, "재현 — 쉼 500~580ms > 400ms");
-  assert.equal(shortSyllables(clip.speechMs, NOW.prefixPaddingMs), 0, "수정 뒤 — 가장 짧은 음절 200ms ≥ 150ms");
+  assert.equal(NOW.prefixPaddingMs, BEFORE.prefixPaddingMs, "근거 없는 변경 0 — 300 유지");
+  assert.equal(shortSyllables(clip.speechMs, BEFORE.prefixPaddingMs), 4, "300ms 미만 음절 4개(그래도 실측 전사 6자리 — 추정 기각의 근거)");
+  assert.equal(splitsTurn(clip.pausesMs, BEFORE.silenceDurationMs), true, "수정 전 — 쉼 500~580ms ≥ 400ms");
   assert.equal(splitsTurn(clip.pausesMs, NOW.silenceDurationMs), false, "수정 뒤 — 쉼 580ms < 1000ms");
   // 붙여 읽기는 쉼이 없어 E1 · E2와 무관하다(그 결함은 E3).
   assert.deepEqual(HEAMI.joinedDigits.pausesMs, []);
