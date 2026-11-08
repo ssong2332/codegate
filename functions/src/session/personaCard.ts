@@ -8,11 +8,20 @@
 // ⭐ 술어 · 검증은 `createSession` · `createChallenge` 안에서 **한 번** 평가되고, 결과는 세션 · 챌린지 문서 `personaCard` 필드의
 //    존재/부재로만 남는다. 다른 경로(프롬프트 조립 · 통화 화면 · 리포트)는 다시 평가하지 않고 필드만 읽는다(§84.3.1).
 import type { DifficultyLevel } from "../shared/difficulty";
-import { hasBankPlaceholder } from "../shared/fictionalBank";
+import { FICTIONAL_BANK_NAMES, hasBankPlaceholder } from "../shared/fictionalBank";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import type { MessengerChannel, PersonaCard, PersonaCardInputBy, PersonaCardItem, PersonaCardKey } from "../shared/types";
 import {
+  BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID,
+} from "../scenarios/publicMeta";
+import {
+  personaBalanceText,
   personaCardKind,
+  PERSONA_BALANCE_MAX,
+  PERSONA_BALANCE_MIN,
+  PERSONA_BALANCE_UNIT,
+  PERSONA_BANK_REAL_INPUT,
+  PERSONA_BANK_UNNAMED_VALUE,
   PERSONA_BIRTH_YEAR_INPUT_MIN,
   PERSONA_BIRTH_YEAR_INPUT_MIN_AGE,
   PERSONA_CARD_INPUT_KEYS_BY_KIND,
@@ -59,7 +68,33 @@ export type PersonaCardInput = {
   childName?: string;
   childGrade?: string;
   childAcademy?: string;
+  /** 판정표 BK — 가상 은행 이름 또는 `"real"`(실제 은행 — 이름은 오지 않는다). */
+  bank?: string;
+  /** 판정표 BL — 원 단위(1만 원 단위 · 1만 ~ 10억). */
+  balance?: number;
 };
+
+// ── ⭐ 2026-11-09 사용자 결정 — 시작 전 카드 '거래 은행 · 통장 잔액'을 사기범이 아는 값으로 ─────────────────────────────────────────
+// 근거: 재시험 14(PR #564) — 은행 사칭 고급에서 카드 = 실제 은행 · 2,000만 원인데 첫마디 "저희 새솔은행 금융사고대응팀"(세션 은행 = 보호계좌
+// 예금주 문성호에 묶인 고정 은행 U3) → 화면의 내 계좌 은행과 어긋났다.
+// 계열: B = 은행 사칭(사칭 은행 = 내 은행 · bank-security-verify-scam) / K = 그 밖의 기관형 7종(카드 종류 identity) / T = 협박형 2종.
+// 판정표 BK — 거래 은행(앞 행이 먼저).
+// | # | If | Then |
+// |---|---|---|
+// | BK1 | 카드 은행 없음 | 종전(세션 은행 = `pickSessionBankName` · 카드 행 0 · 조립 결과 바이트 무변경) |
+// | BK2 | B ∧ 가상 은행 | 세션 은행 = 카드 은행(U3 예금주 고정보다 먼저 — 사용자 결정) → 자기소개 · 문자 · 보호계좌 줄이 같은 이름 · 카드 행 "거래 은행: {이름}" |
+// | BK3 | B ∧ 실제 은행 | 세션 은행 = 종전(가상 · 보호계좌 문자 그대로) · 카드 행 값 `PERSONA_BANK_UNNAMED_VALUE` → 프롬프트 "저희 은행"으로만(자기소개 "저희 은행 금융사고대응팀") |
+// | BK4 | K ∧ 가상 은행 | 카드 행 "거래 은행: {이름}"(세션 은행 = 종전) |
+// | BK5 | K ∧ 실제 은행 | 카드 행 값 `PERSONA_BANK_UNNAMED_VALUE` → 프롬프트 "고객님 거래 은행"으로만 |
+// | BK6 | T(협박형) · 챌린지(받는 분 카드) | 받지 않는다(보내면 `not-applicable` — 클라는 기관형 · 내가 하는 훈련에서만 싣는다) |
+// 판정표 BL — 잔액.
+// | # | If | Then |
+// |---|---|---|
+// | BL1 | 잔액 없음 | 종전(행 0) |
+// | BL2 | B · K ∧ 잔액 있음 | 카드 행 "통장 잔액: 약 {N}" + 블록 줄 `PERSONA_CARD_BALANCE_RULE`(말로 새로 부르는 요구액 ≤ 잔액) |
+// | BL3 | 문자 속 고정 금액 | ⏸ 사용자 결정 대기 — 지금은 종전 그대로(카탈로그 무변경). 정해지면 `personaBalanceWon`으로 카드 잔액을 읽는다 |
+// | BL4 | T | 받지 않는다(BK6과 같다) |
+// ⛔ 실제 은행 이름은 요청 · 세션 문서 · 프롬프트 · 리포트 어디에도 없다(클라 판정표 P6 유지) — 요청 값은 `"real"` 표시뿐이다.
 
 /** 출생 연도 상한(올해 − 14). 테스트 재현을 위해 연도를 주입받는다. */
 export function personaBirthYearMax(nowYear: number): number {
@@ -92,7 +127,7 @@ export function readPersonaCardInput(raw: unknown, nowYear: number = new Date().
   if (raw === undefined || raw === null) return { ok: true, input: undefined };
   if (typeof raw !== "object" || Array.isArray(raw)) return { ok: false };
   const { name, birthYear, birthMonth, birthDay, region, ...rest } = raw as Record<string, unknown>;
-  const { job, childName, childGrade, childAcademy, ...unknownKeys } = rest;
+  const { job, childName, childGrade, childAcademy, bank, balance, ...unknownKeys } = rest;
   if (Object.keys(unknownKeys).length > 0) return { ok: false };
   const input: PersonaCardInput = {};
 
@@ -135,6 +170,15 @@ export function readPersonaCardInput(raw: unknown, nowYear: number = new Date().
   if (readChildGrade) input.childGrade = readChildGrade;
   if (readChildAcademy) input.childAcademy = readChildAcademy;
 
+  // 판정표 BK · BL — 거래 은행(가상 은행 이름 · "real") · 잔액(원 · 1만 원 단위 · 1만 ~ 10억).
+  const readBank = readOptionField(bank, [...FICTIONAL_BANK_NAMES, PERSONA_BANK_REAL_INPUT]);
+  if (readBank === false) return { ok: false };
+  if (readBank) input.bank = readBank;
+  if (balance !== undefined && balance !== null) {
+    if (!isIntegerIn(balance, PERSONA_BALANCE_MIN, PERSONA_BALANCE_MAX) || balance % PERSONA_BALANCE_UNIT !== 0) return { ok: false };
+    input.balance = balance;
+  }
+
   return { ok: true, input: Object.keys(input).length > 0 ? input : undefined };
 }
 
@@ -168,6 +212,8 @@ function inputCardKeys(input: PersonaCardInput): PersonaCardKey[] {
   if (input.childName) keys.push("childName");
   if (input.childGrade) keys.push("childGrade");
   if (input.childAcademy) keys.push("childAcademy");
+  if (input.bank) keys.push("bank");
+  if (input.balance !== undefined) keys.push("balance");
   return keys;
 }
 
@@ -217,6 +263,11 @@ export function buildPersonaCard({ input, inputBy }: BuildPersonaCardInput): Per
   if (input.childName) items.push({ key: "childName", label: PERSONA_CARD_LABELS.childName, value: input.childName });
   if (input.childGrade) items.push({ key: "childGrade", label: PERSONA_CARD_LABELS.childGrade, value: input.childGrade });
   if (input.childAcademy) items.push({ key: "childAcademy", label: PERSONA_CARD_LABELS.childAcademy, value: input.childAcademy });
+  if (input.bank) {
+    const value = input.bank === PERSONA_BANK_REAL_INPUT ? PERSONA_BANK_UNNAMED_VALUE : input.bank; // BK3 · BK5 / BK2 · BK4
+    items.push({ key: "bank", label: PERSONA_CARD_LABELS.bank, value });
+  }
+  if (input.balance !== undefined) items.push({ key: "balance", label: PERSONA_CARD_LABELS.balance, value: personaBalanceText(input.balance) });
   return items.length > 0 ? { v: 2, inputBy, items } : undefined;
 }
 
@@ -245,7 +296,21 @@ export function resolvePersonaCardRequest(
   if (!personaCardEligible(eligibility) || !personaCardInputFitsScenario(read.input, eligibility.scenarioId)) {
     return { ok: false, reason: PERSONA_CARD_NOT_APPLICABLE_REASON };
   }
+  // BK6 — 거래 은행 · 잔액은 내가 하는 훈련에서만(받는 분 카드 = 챌린지 보내기 화면에 칸 0 · 조용히 버리지 않는다).
+  if (inputBy !== "self" && (read.input.bank !== undefined || read.input.balance !== undefined)) {
+    return { ok: false, reason: PERSONA_CARD_NOT_APPLICABLE_REASON };
+  }
   return { ok: true, personaCard: buildPersonaCard({ input: read.input, inputBy }) };
+}
+
+/**
+ * 판정표 BK2 — 세션 은행(`fictionalBankName`). 은행 사칭(B) ∧ 카드 거래 은행 = 가상 은행이면 그 은행, 그 밖 = `picked`(종전 — BK1 · BK3 · BK4 · BK5).
+ * `createSession`이 `pickSessionBankName` 결과를 넘긴다(⚠️ U3 예금주 고정보다 먼저 — 사용자 결정 2026-11-09).
+ */
+export function sessionBankNameForCard(scenarioId: string, personaCard: PersonaCard | undefined, picked: string): string {
+  if (scenarioId !== BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID) return picked;
+  const bank = personaCard?.items.find((item) => item.key === "bank")?.value;
+  return bank && FICTIONAL_BANK_NAMES.includes(bank) ? bank : picked;
 }
 
 /**

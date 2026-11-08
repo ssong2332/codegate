@@ -6,7 +6,7 @@
 // ⭐ "먼저 말했다"(R-1)는 기록이 1건 이상일 때만 단정한다(D-120 · J-6). 기록이 0이면 R-2(조건문)다.
 // 오차 방향(§84.3.6): 거짓 음성(전사 오기 · 다른 표기) → R-2로 떨어진다 = 안전 쪽. 거짓 양성(사기범이 우연히 같은 지역명을 말함)이어도
 //    R-1 문면 "내가 말하기 전에 먼저 말했습니다"는 문자 그대로 참이다(근거 = `scammerTurnIndex`).
-import { PERSONA_REGION_POOL } from "../scenarios/personaCardCatalog";
+import { PERSONA_BANK_UNNAMED_VALUE, PERSONA_REGION_POOL } from "../scenarios/personaCardCatalog";
 import type {
   PersonaBlock,
   PersonaBlockContext,
@@ -69,7 +69,10 @@ export function personaMatchTokens(item: PersonaCardItem): string[] {
       return entry ? [entry.name, ...entry.shortNames] : [];
     }
     case "bank":
-      return [item.value];
+      // 2026-11-09 판정표 BK3 · BK5 — 실제 은행을 고른 카드는 이름이 없다(대조 0 = R-2 = 안전 쪽).
+      return item.value === PERSONA_BANK_UNNAMED_VALUE ? [] : [item.value];
+    case "balance":
+      return balanceTokens(item.value);
     case "card":
     case "loan":
       return [];
@@ -117,6 +120,16 @@ function childNameTokens(value: string): string[] {
     for (const particle of CHILD_CALL_PARTICLES) for (const word of CHILD_CALL_NEXT_WORDS) tokens.add(`${call}${particle} ${word}`);
   }
   return [...tokens];
+}
+
+/**
+ * 2026-11-09 판정표 BL2 — 잔액 토큰: 값에서 " 원"을 뗀 꼴 · 쉼표 없는 꼴 · 억과 만 사이를 붙여 쓴 꼴("2,000만" · "2000만" · "1억 2,000만" · "1억2000만").
+ * ⚠️ 한글 읽기("이천만")는 세지 않는다(전사 표기 변형 = 거짓 음성 = R-2 = 안전 쪽 · 추정).
+ */
+function balanceTokens(value: string): string[] {
+  const base = value.replace(/\s?원$/, "");
+  const forms = [base, base.replace(/,/g, ""), base.replace(/억 /, "억"), base.replace(/,/g, "").replace(/억 /, "억")];
+  return forms.filter((t, i, all) => t !== "" && all.indexOf(t) === i);
 }
 
 /** 네 자리 연도의 대조 토큰 — "1961" · "61년" · "육십일년". */

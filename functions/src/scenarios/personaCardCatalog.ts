@@ -76,16 +76,20 @@ export const PERSONA_CARD_LABELS: Readonly<Record<PersonaCardKey, string>> = {
   childName: "자녀 이름",
   childGrade: "자녀 학년",
   childAcademy: "자녀가 다니는 학원",
+  balance: "통장 잔액",
 };
 
 /**
  * ⭐ §88(DECISIONS #199 · 사용자 요청 2026-10-20) — 사용자가 넣을 수 있는 카드 행(순서 = 카드 행 순서). 서버 임의 생성(§84.3.2 —
  * 이름 풀 · 출생 연도 범위 · 카드 은행 · 가림 고정값)은 폐지됐다. 거래 은행 · 사용 카드 · 대출 행은 입력 대상이 아니다(실존 은행명을
- * 넣으면 사기범이 실존 금융사명을 말한다 — §81 · OQ-U96). `bank` · `card` · `loan` 키는 옛 카드(v1) 읽기 하위호환으로만 남는다.
+ * 넣으면 사기범이 실존 금융사명을 말한다 — §81 · OQ-U96). `card` · `loan` 키는 옛 카드(v1) 읽기 하위호환으로만 남는다.
+ * ⭐ 2026-11-09 사용자 결정 — 기관형에 `bank`(거래 은행)를 다시 받는다. 단 실제 은행 이름은 서버로 오지 않는다(요청 값 = 가상 은행 이름 또는
+ * `PERSONA_BANK_REAL_INPUT` — `session/personaCard.ts` 판정표 BK). 사용 카드 · 대출은 여전히 입력 대상 아님.
  * ⭐ §93 — 종류별 행(위 판정표). 종류에 없는 행을 보내면 서버가 `persona-card-not-applicable`로 거부한다(조용히 버리지 않는다).
  */
 export const PERSONA_CARD_INPUT_KEYS_BY_KIND: Readonly<Record<PersonaCardKind, readonly PersonaCardKey[]>> = {
-  identity: ["name", "birthYear", "birthDate", "region"],
+  // 2026-11-09 사용자 결정 — 기관형(은행 사칭 포함)에 거래 은행 · 통장 잔액(`session/personaCard.ts` 판정표 BK · BL). 협박형 = 0(BK6 · BL4).
+  identity: ["name", "birthYear", "birthDate", "region", "bank", "balance"],
   "self-threat": ["name", "birthYear", "birthDate", "region", "job"],
   "child-threat": ["childName", "childGrade", "childAcademy"],
 };
@@ -163,6 +167,42 @@ export const PERSONA_REGION_MASK_SUFFIX = "○○시";
 export const PERSONA_LOAN_PROMPT_VALUE = "저축은행 대출 이용 중";
 
 /**
+ * ⭐ 2026-11-09 사용자 결정(판정표 BK · BL — `session/personaCard.ts`) — 거래 은행 · 통장 잔액 행의 값.
+ * - 요청 `bank` = 가상 은행 이름(`FICTIONAL_BANK_NAMES`) 또는 이 표시(`"real"` — 실제 은행을 골랐다 · 이름은 탭 밖으로 나가지 않는다)
+ * - 실제 은행 카드 행의 값 = `PERSONA_BANK_UNNAMED_VALUE`(화면 · 리포트 표시) · 프롬프트 = `PERSONA_BANK_UNNAMED_PROMPT_VALUE`
+ * - 요청 `balance` = 원 단위 정수 · 1만 원 단위 · 1만 원 ~ 10억 원(클라 판정표 K3 · S8과 같은 범위)
+ */
+export const PERSONA_BANK_REAL_INPUT = "real";
+export const PERSONA_BANK_UNNAMED_VALUE = "직접 고른 은행";
+export const PERSONA_BANK_UNNAMED_PROMPT_VALUE =
+  "참가자가 실제로 거래하는 은행(이름은 너도 모르고 지어내지도 않는다) — 네가 그 은행 직원으로 전화했다면 자기소개부터 '저희 은행 금융사고대응팀'처럼 '저희 은행'으로만, 그 밖에는 '고객님 거래 은행'으로만 부른다";
+export const PERSONA_BALANCE_MIN = 10_000;
+export const PERSONA_BALANCE_MAX = 1_000_000_000;
+export const PERSONA_BALANCE_UNIT = 10_000;
+
+/** 잔액(원) → 카드 값("2,000만 원" · "1억 원" · "1억 2,000만 원"). */
+export function personaBalanceText(won: number): string {
+  const manwon = Math.floor(won / PERSONA_BALANCE_UNIT);
+  const eok = Math.floor(manwon / 10_000);
+  const rest = manwon % 10_000;
+  const comma = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (eok === 0) return `${comma(rest)}만 원`;
+  return rest === 0 ? `${eok}억 원` : `${eok}억 ${comma(rest)}만 원`;
+}
+
+/**
+ * 카드 값("2,000만 원" 등) → 원. 형식 밖 = `undefined`. ⭐ BL3(문자 속 고정 금액을 잔액에 맞출지 — 사용자 결정 대기)가 정해지면 문자 · 이체 화면이
+ * 세션 문서 `personaCard`에서 잔액을 읽는 자리다(지금은 리포트 · 시험만 쓴다).
+ */
+export function personaBalanceWon(value: string): number | undefined {
+  const match = /^(?:(\d+)억)?\s?(?:([\d,]+)만)?\s?원$/.exec(value);
+  if (!match || (match[1] === undefined && match[2] === undefined)) return undefined;
+  const eok = match[1] ? Number(match[1]) : 0;
+  const manwon = match[2] ? Number(match[2].replace(/,/g, "")) : 0;
+  return (eok * 10_000 + manwon) * PERSONA_BALANCE_UNIT;
+}
+
+/**
  * 카드 행의 **프롬프트용** 값(화면 값은 세션 문서 그대로). 블록 안 `"○○"` 리터럴 0이 목표다(리뷰 M1).
  * - loan: 일반명(`PERSONA_LOAN_PROMPT_VALUE` — 옛 v1 카드)
  * - birthDate: 사기범이 줄여 말하는 꼴(`"65년 3월 2일생"`)을 앞에 두고 네 자리 연도를 괄호로 붙인다(§88 후속 — 사용자 요청
@@ -173,6 +213,10 @@ export const PERSONA_LOAN_PROMPT_VALUE = "저축은행 대출 이용 중";
  */
 export function personaCardPromptValue(item: { key: PersonaCardKey; value: string }): string {
   if (item.key === "loan") return PERSONA_LOAN_PROMPT_VALUE;
+  // 판정표 BK3 · BK5 — 실제 은행을 고른 카드(이름은 서버에 없다). 은행 사칭이면 자기 은행 = 참가자 은행이라 "저희 은행", 그 밖 = "고객님 거래 은행".
+  if (item.key === "bank" && item.value === PERSONA_BANK_UNNAMED_VALUE) return PERSONA_BANK_UNNAMED_PROMPT_VALUE;
+  // 판정표 BL2 — 잔액은 "약 2,000만 원"처럼(대략값으로 꺼낸다).
+  if (item.key === "balance") return `약 ${item.value}`;
   if (item.key === "region") return item.value.replace(` ${PERSONA_REGION_MASK_SUFFIX}`, "");
   if (item.key === "birthDate") {
     const match = /^(\d{4})년 (\d{1,2})월 (\d{1,2})일생$/.exec(item.value);

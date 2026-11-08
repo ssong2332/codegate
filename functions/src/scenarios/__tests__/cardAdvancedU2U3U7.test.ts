@@ -123,7 +123,8 @@ test("[U3] 세션 은행명 판정표 — 계좌 문자 예금주 · 메신저 �
 test("[U3 배선] 세션 생성 두 곳 — 변형 배정 뒤에 pickSessionBankName(이전 pickFictionalBankName 0)", () => {
   const session = read("session/index.ts");
   const assignAt = session.indexOf("await assignFlowVariantForSession(");
-  const pickAt = session.indexOf("const fictionalBankName = pickSessionBankName(scenarioId, variantAssignment.flowVariantId);");
+  // 2026-11-09 판정표 BK2 — 은행 사칭 ∧ 카드 가상 은행이면 그 은행(`sessionBankNameForCard`가 이 값을 감싼다).
+  const pickAt = session.indexOf("const fictionalBankName = sessionBankNameForCard(scenarioId, personaCard, pickSessionBankName(scenarioId, variantAssignment.flowVariantId));");
   assert.ok(assignAt > 0 && pickAt > assignAt, "createSession — 배정 뒤");
   assert.equal(session.includes("pickFictionalBankName("), false);
   const challenge = read("challenge/userAccess.ts");

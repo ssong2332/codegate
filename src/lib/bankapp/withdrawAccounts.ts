@@ -366,7 +366,7 @@ export function availableText(ledgerKey: string, account: Pick<WithdrawAccount, 
 // | K2 | 거래 은행 = 표 R 실제 은행 ∪ 가상 은행 목록 안(고르기만 — 자유 입력 0 · ⭐ 2026-11-09 사용자 결정으로 실제 은행 추가) | 은행 = 그 이름 |
 // | K3 | 잔액 = 만 원 단위 숫자(쉼표 · 띄어쓰기 허용) · 1 ~ 100,000(= 1만 원 ~ 10억 원 · 판정표 S8과 같은 범위) | 잔액 = 숫자 × 10,000 |
 // | K4 | 잔액이 숫자 아님 · 범위 밖 · 목록 밖 은행 | 진행 안 함 + `CARD_ACCOUNT_COPY.invalid` 1줄 |
-// | K5 | 저장 | 이 탭 `sessionStorage`에 세션 id와 함께(서버 · 요청 · 리포트 0 — 사기범에게 알리지 않는다 · `fv-akj5` · `fv-6s5p` 무변경) |
+// | K5 | 저장 | 이 탭 `sessionStorage`에 세션 id와 함께(화면 내 계좌 원천). ⭐ 2026-11-09 — 기관형은 아래 판정표 RQ로 요청에도 싣는다(실제 은행 이름은 0 · 협박형 = 0) |
 // | K6 | 읽기 | 저장된 세션 id = 지금 세션 id일 때만(다른 세션 값 0) · 저장소를 못 쓰면(사생활 보호 모드 등) 값 없음 |
 // | K7 | 보이는 곳 | 카드 입력 블록이 보일 때만(대상 10종 × 고급 × 통화형 × 내가 하는 훈련) — 챌린지 보내기 · 메신저 = 칸 0 |
 
@@ -390,6 +390,9 @@ export const CARD_ACCOUNT_COPY = {
   balanceLabel: "통장 잔액 (만 원)",
   balancePlaceholder: "예: 1200",
   hint: "거래 은행과 잔액은 통화 중 열리는 은행 · 결제 화면의 내 계좌에만 쓰입니다. 비워 두면 통화에서 말한 값이나 정해진 값으로 보입니다.",
+  /** 2026-11-09 판정표 RQ2 — 기관형(사기범이 아는 값으로 보낼 때). ⚠️ 문구 제안. */
+  hintKnown:
+    "거래 은행과 잔액은 전화한 상대도 이미 알고 있는 정보로 쓰이고, 통화 중 열리는 은행 · 결제 화면의 내 계좌에도 보입니다. 실제 은행을 고르면 상대는 은행 이름을 말하지 않습니다.",
   invalid: "통장 잔액은 만 원 단위 숫자로 1부터 100000까지 넣어 주세요. 예: 1200(= 1,200만 원)",
 } as const;
 
@@ -397,6 +400,26 @@ export type CardAccountForm = { bankName: string; balanceManwon: string };
 export const EMPTY_CARD_ACCOUNT_FORM: CardAccountForm = { bankName: "", balanceManwon: "" };
 
 export type CardAccountFormResult = { ok: true; card: CardAccount | undefined } | { ok: false };
+
+// ── ⭐ 2026-11-09 사용자 결정 — 카드 거래 은행 · 잔액을 서버로(사기범이 아는 값 · 서버 판정표 BK · BL = `functions/src/session/personaCard.ts`) ─────
+// 판정표 RQ(카드 값 → 요청 `personaCardInput`의 칸 · 판정표 K5 저장은 그대로 — 화면 내 계좌는 종전처럼 이 탭 값을 쓴다).
+// | # | If | Then |
+// |---|---|---|
+// | RQ1 | 카드 값 없음 · 협박형(납치 · 유포 — BK6 · BL4) | 요청 칸 0(종전) |
+// | RQ2 | 기관형(은행 사칭 포함) ∧ 은행 = 가상 은행 | `bank` = 그 이름 |
+// | RQ3 | 기관형 ∧ 은행 = 표 R 실제 은행 | `bank` = `"real"`(⛔ 실제 이름은 탭 밖으로 나가지 않는다 — 판정표 P6) |
+// | RQ4 | 기관형 ∧ 잔액 있음 | `balance` = 원 단위 그대로 |
+/** 서버 `PERSONA_BANK_REAL_INPUT`과 같은 값(드리프트 시험). */
+export const CARD_BANK_REAL_REQUEST = "real";
+
+/** 판정표 RQ — 요청에 실을 거래 은행 · 잔액 칸(없으면 undefined). `identity` = 카드 종류가 기관형인가. */
+export function cardAccountRequestFields(card: CardAccount | undefined, identity: boolean): { bank?: string; balance?: number } | undefined {
+  if (!card || !identity) return undefined; // RQ1
+  const fields: { bank?: string; balance?: number } = {};
+  if (card.bankName && isCardBankName(card.bankName)) fields.bank = isRealBankName(card.bankName) ? CARD_BANK_REAL_REQUEST : card.bankName; // RQ3 · RQ2
+  if (validBalance(card.balance) !== undefined) fields.balance = card.balance; // RQ4
+  return Object.keys(fields).length > 0 ? fields : undefined;
+}
 
 /** 판정표 K1 ~ K4. */
 export function readCardAccountForm(form: CardAccountForm): CardAccountFormResult {

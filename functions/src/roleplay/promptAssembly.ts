@@ -982,6 +982,9 @@ export const PERSONA_CARD_BLOCK_ORDER_CHILD = `**순서**: 늦어도 상대의 �
 export const PERSONA_CARD_BLOCK_ORDER_SELF = `**순서**: 늦어도 상대의 첫 대답을 받은 바로 다음 차례까지 목록의 정보 가운데 한두 가지를 네가 먼저 대며 다 알고 있다고 압박한다. 맞는지 묻지 말고 이미 확인한 사실처럼 단정해 말한다. 목록에 있는 항목을 상대에게 불러 달라고 하지 않는다. 상대가 의심한 뒤에야 꺼내지 않는다.`;
 export const PERSONA_CARD_BLOCK_TAIL_THREAT = `목록에 없는 이름·나이·금액·금융사·주소는 지어내 말하지 않는다. 목록의 정보는 알고 있다는 압박에만 쓰고, 만날 곳·찾아갈 곳·돈을 건넬 곳이나 구체적인 장소·주소를 정하는 데 쓰지 않는다. 이 정보를 어디서 얻었는지는 설명하지 않는다.`;
 const CHILD_CARD_KEYS: readonly PersonaCardItem["key"][] = ["childName", "childGrade", "childAcademy"];
+// 2026-11-09 판정표 BL2(`session/personaCard.ts`) — 카드에 통장 잔액 행이 있을 때만 블록 끝에 1줄(없으면 블록 바이트 무변경).
+// BL3(문자 속 고정 금액)은 사용자 결정 대기라 이 줄은 말로 새로 부르는 금액만 묶는다.
+export const PERSONA_CARD_BALANCE_RULE = `**잔액**: 목록의 통장 잔액은 이미 알고 있는 값처럼 확인하듯 꺼낼 수 있다. 말로 새로 부르는 요구 금액은 그 잔액을 넘지 않게 하고, 잔액을 전부 옮기라고 할 때는 그 금액을 말한다.`;
 
 /**
  * 카드 행이 1개 이상일 때만 블록을 만든다(빈 배열 = 블록 0 — 부재와 같은 결과). 값은 프롬프트용 값(`personaCardPromptValue` —
@@ -991,7 +994,8 @@ const CHILD_CARD_KEYS: readonly PersonaCardItem["key"][] = ["childName", "childG
 export function buildPersonaCardBlock(items: readonly PersonaCardItem[], identityCheckAllowed = true): string | null {
   if (items.length === 0) return null;
   const rows = items.map((item) => `- ${item.label}: ${personaCardPromptValue(item)}`);
-  if (identityCheckAllowed) return [PERSONA_CARD_BLOCK_HEAD, ...rows, PERSONA_CARD_BLOCK_ORDER, PERSONA_CARD_BLOCK_TAIL].join("\n");
+  const balanceRule = items.some((item) => item.key === "balance") ? [PERSONA_CARD_BALANCE_RULE] : [];
+  if (identityCheckAllowed) return [PERSONA_CARD_BLOCK_HEAD, ...rows, PERSONA_CARD_BLOCK_ORDER, PERSONA_CARD_BLOCK_TAIL, ...balanceRule].join("\n");
   const order = items.some((item) => CHILD_CARD_KEYS.includes(item.key)) ? PERSONA_CARD_BLOCK_ORDER_CHILD : PERSONA_CARD_BLOCK_ORDER_SELF;
   return [PERSONA_CARD_BLOCK_HEAD_THREAT, ...rows, order, PERSONA_CARD_BLOCK_TAIL_THREAT].join("\n");
 }
