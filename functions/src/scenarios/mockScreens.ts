@@ -423,7 +423,7 @@ export const VOUCHER_PURCHASED_INSTRUCTION =
 // 자산 보호 고급 금형(fv-t8ga)의 앱 안 금 거래소 화면. 렌더 정본 = 클라 `src/components/MessengerFakeLanding.tsx` `GoldBuyMockup`:
 // ① 상품(골드바 중량) · 수량 · 가상 시세 → ② 결제 확인(결제 계좌 이체) + 고액 구매 확인(구매 목적 · 수사기관 요구 여부) → ③ 생체 인증 → ④ 구매 완료 · 보증서.
 // ②에서 "수사기관 요구를 받았다"를 고르면 구매 보류 화면(112 · 1332 안내) → `landing_held`. 끝까지 = `landing_submitted`. 답 · 중량 · 금액은 서버로 가지 않는다(G138).
-// ⛔ 실제 금 거래소 · 판매점 이름 0(가상 "해담골드" — 웹 검색 2026-11-07 일치 0) · 매장 위치 · 주소 0(AC-102 (d) — "구매 매장에서 수령"까지만).
+// ⛔ 실제 금 거래소 · 판매점 이름 0(가상 "해담골드" — 웹 검색 2026-11-07 일치 0) · 매장 위치 · 주소 0(AC-102 (d)) · 매장 방문 수령 안내 0(2026-11-08 사용자 결정 — 출금 예약 §15.4 (c)와 같게).
 /** 금 거래소 구매 화면 landingId. 클라 `GOLD_LANDINGS`와 같은 목록(드리프트 테스트). */
 export const GOLD_LANDINGS: readonly string[] = ["gold-buy", "asset-gold-buy"];
 
@@ -697,7 +697,7 @@ const INSTITUTIONAL_IMPERSONATION: MockScreenItem[] = [
     kind: "credential-form",
     entrySurface: "in-call-sms",
     headline: "해담골드 골드바 구매",
-    bodyLines: ["구매하신 골드바는 품질 보증서와 함께 구매 매장에서 수령합니다."],
+    bodyLines: ["구매하신 골드바에는 품질 보증서 번호가 발급됩니다."],
     issuerLabel: "ⓒ 해담골드",
     mockHost: "haedam-gold.invalid",
     fields: ["상품", "수량"],
@@ -875,7 +875,7 @@ const ASSET_PROTECTION_NOTICE_CALL: MockScreenItem[] = [
     kind: "credential-form",
     entrySurface: "in-call-sms",
     headline: "해담골드 금 실물 주문",
-    bodyLines: ["주문하신 금 실물은 보증서와 함께 구매 매장에서 받으실 수 있습니다."],
+    bodyLines: ["주문하신 금 실물에는 보증서 번호가 발급됩니다."],
     issuerLabel: "ⓒ 해담골드 주문센터",
     mockHost: "haedam-gold-order.invalid",
     fields: ["주문 상품", "주문 수량"],
