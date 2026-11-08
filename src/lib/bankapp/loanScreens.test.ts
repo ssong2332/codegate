@@ -126,7 +126,10 @@ const keepProps = (ledgerKey: string) => ({
 test("[S5] 대출금 보관 이체 화면 — 보관 계좌 미리 채움 · 출금 계좌 · 확인 단계 받는 분 · 금지어 0", () => {
   const { text, markup } = renderLandingScreen(keepProps(LEDGER));
   assert.ok(text.includes("대출금 보관 이체가 아직 완료되지 않았습니다"), text);
-  assert.ok(text.includes(`${myBankNameFor(LEDGER)} 모바일뱅킹`), "머리띠 = 참가자의 내 은행");
+  // ⭐ 2026-11-08 웹 안의 웹 PR-4(사용자 결정 (가)) — 이체 화면 **첫 화면**(계좌 · 금액 입력)은 그 사이트 머리(기관형 이체 = 발급처 이름)다.
+  // '{내 은행} 모바일뱅킹' 머리띠(N2)는 확인 → 인증 → 영수증 단계에 남는다 — 그래서 이 단언을 아래 확인 단계 렌더로 옮겼다.
+  assert.ok(text.split("\n").includes("대출금 보관 안내센터"), "첫 화면 머리 = 기관형 이체 사이트 이름");
+  assert.equal(text.includes("모바일뱅킹"), false, "첫 화면에는 은행 앱 머리띠가 없다");
   assert.ok(/value="302-1184-5527-61"/.test(markup), "보관 계좌 번호 미리 채움");
   assert.ok(text.includes("출금 계좌") && text.includes("출금 가능 금액") && text.includes("보관 계좌로 이체하기"), "출금 계좌 줄 · 이체 버튼");
   assert.ok(!SESSION_WORDS.test(text), text);
@@ -136,6 +139,8 @@ test("[S5] 대출금 보관 이체 화면 — 보관 계좌 미리 채움 · 출
     overridden([['const [bankStage, setBankStage] = useState<"form" | "confirm" | "auth">("form");', 'const [bankStage, setBankStage] = useState<"form" | "confirm" | "auth">("confirm");']]),
   );
   for (const line of ["받는 분", "노은채", "받는 계좌", "302-1184-5527-61", "보내는 금액"]) assert.ok(confirm.text.includes(line), `확인 단계 "${line}"\n${confirm.text}`);
+  // N2 — 확인 단계부터 머리띠 = 참가자의 내 은행(PR-4에서 첫 화면 렌더에서 이리로 옮긴 단언).
+  assert.ok(confirm.text.includes(`${myBankNameFor(LEDGER)} 모바일뱅킹`), "확인 단계 머리띠 = 참가자의 내 은행");
   assert.ok(!SESSION_WORDS.test(confirm.text), confirm.text);
 });
 
