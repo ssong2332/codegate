@@ -86,6 +86,9 @@ import {
   recordLoanApplication,
   recordWithdrawal,
   resolveMyAccount,
+  myBankAppName,
+  myBankBrand,
+  MY_BANK_NEUTRAL_APP_NAME,
   withdrawAccountsFor,
   type CardAccount,
   withdrawError,
@@ -1899,7 +1902,7 @@ function GoldBuyMockup({
         {stage === "auth" && (
           <BankAuthSheet
             method={authMethodForSkin(skin)}
-            appName={`${appBankName} 모바일뱅킹`}
+            appName={myBankAppName(appBankName)}
             summary={`${GOLD_SHOP_NAME} ${goldWon(total)} ${GOLD_COPY.pay}`}
             onSuccess={finishPurchase}
             onCancel={() => setStage("confirm")}
@@ -2131,9 +2134,10 @@ function CashWithdrawMockup({
 
   // 이체 화면(`CredentialFormMockup`)과 같은 규칙 — 내 은행이 정해져 있으면 그 은행 모바일뱅킹, 아니면 발급처 라벨(렌더 게이트 · 메신저 진입).
   // 판정표 S — 참가자가 거래 은행을 말했으면 그 은행(출금 계좌 줄과 같은 이름).
-  const bankHeaderName = bankIdentity?.myBankName ? `${appBankName} 모바일뱅킹` : issuerNameOf(copy.issuerLabel);
+  // ⭐ 2026-11-09 판정표 H — 내 은행이 실제 은행이면 이름을 빼고 "모바일뱅킹"(실제 이름은 '내 계좌' 줄에만 · `withdrawAccounts.ts` 판정표 P).
+  const bankHeaderName = bankIdentity?.myBankName ? myBankAppName(appBankName) : issuerNameOf(copy.issuerLabel);
   // ⭐ PR-3 F1 — 꼬리말 이름 = 그 은행(내 은행이 없으면 발급처 이름).
-  const bankFooterName = bankIdentity?.myBankName ? appBankName : issuerNameOf(copy.issuerLabel);
+  const bankFooterName = bankIdentity?.myBankName ? myBankBrand(appBankName) || MY_BANK_NEUTRAL_APP_NAME : issuerNameOf(copy.issuerLabel);
   // ⭐ PR-3 — 흰 머리 + 남색 고리 로고 · 오른쪽 메뉴 이름(시안 I).
   const cashBankBar = <SiteHeader skin={site} name={bankHeaderName} aside={CASH_COPY.menuTitle} />;
   const rowList = (rows: [string, string][]) => (
@@ -2321,7 +2325,7 @@ function CashWithdrawMockup({
         {stage === "auth" && (
           <BankAuthSheet
             method={authMethodForSkin(skin)}
-            appName={`${appBankName} 모바일뱅킹`}
+            appName={myBankAppName(appBankName)}
             summary={`${CASH_COPY.menuTitle} ${cashWon(amount)}`}
             onSuccess={finishReservation}
             onCancel={() => setStage("check")}
@@ -2635,7 +2639,7 @@ function VoucherPurchaseMockup({
         {stage === "auth" && (
           <BankAuthSheet
             method={authMethodForSkin(skin)}
-            appName={`${appBankName} 모바일뱅킹`}
+            appName={myBankAppName(appBankName)}
             summary={`${VOUCHER_SELLER} ${voucherWon(total)} ${VOUCHER_COPY.pay}`}
             onSuccess={finishPurchase}
             onCancel={() => setStage("confirm")}
@@ -3333,7 +3337,7 @@ function CredentialFormMockup({
       {/* P2 — 훈련용 이체 화면은 은행 앱 흉내라 머리띠에 은행명을 쓴다. N2(실기기 신고 2026-11-01) — 받는 계좌 은행이 아니라 참가자의 "내 은행"이다
           (`myBankName` — 부재 = 발급처 이름 · 실존 은행명 0). */}
       <span className="truncate">
-        {bankTransfer && prefilledTransfer?.myBankName ? `${appBankName} 모바일뱅킹` : issuerNameOf(copy.issuerLabel)}
+        {bankTransfer && prefilledTransfer?.myBankName ? myBankAppName(appBankName) : issuerNameOf(copy.issuerLabel)}
       </span>
     </div>
   );
@@ -3406,7 +3410,7 @@ function CredentialFormMockup({
         {bankStage === "auth" && (
           <BankAuthSheet
             method={authMethodForSkin(skin)}
-            appName={`${appBankName} 모바일뱅킹`}
+            appName={myBankAppName(appBankName)}
             summary={holder ? `${holder}님에게 ${amountText} 이체` : `${amountText} 이체`}
             onSuccess={finishSubmit}
             onCancel={() => setBankStage("confirm")}

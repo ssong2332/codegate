@@ -224,7 +224,7 @@ import {
 import { buildRecents, officialNumberForTitle, type PhoneCallLog } from "@/lib/callLegs/phoneApp";
 import BankAppOverlay from "@/components/BankAppOverlay";
 import { fictionalBalanceFor, isBankAppEnabled, latestDemandAmount, myBankNameFor, spokenAccountFrom, type TransferTarget } from "@/lib/bankapp/bankApp";
-import { disburseLoan, loadCardAccount, loanDisbursedAmount, resolveMyAccount, type MyAccount } from "@/lib/bankapp/withdrawAccounts";
+import { disburseLoan, loadCardAccount, loanDisbursedAmount, realBankMentionsIn, resolveMyAccount, type MyAccount } from "@/lib/bankapp/withdrawAccounts";
 import { LOAN_DISBURSED_SMS_ID, LOAN_SAFE_TRANSFER_LANDING_ID } from "@/lib/bankapp/loanFlow";
 import { readDebugFlagSearch } from "@/lib/realtime/debugFlags";
 import VerifyCallOverlay from "@/components/VerifyCallOverlay";
@@ -2743,7 +2743,7 @@ export default function SessionCallPage() {
     const sid = sessionId ?? "";
     const mine = resolveMyAccount({
       card: loadCardAccount(sid),
-      spoken: spokenAccountFrom([...messages, ...transcriptRef.current]),
+      spoken: spokenAccountFrom([...messages, ...transcriptRef.current], realBankMentionsIn),
       fixedBankName: myBankNameFor(sid, target.bankName),
       fixedBalance: fictionalBalanceFor(sid),
     });
@@ -4523,7 +4523,7 @@ export default function SessionCallPage() {
           }
           // ⭐ 2026-11-08(라이브 재시험 7 · 사용자 결정 "말한 값에 맞추기") — 출금 예약 · 금 거래소 화면의 출금 계좌 은행 · 잔액 = 참가자가 말한 값(판정표 S · S12 ·
           // 참가자 대사만 값으로 · 사기범 대사는 잔액 질문 판정에만). 값은 화면 안에서만 쓰인다(G138 — 기록 경로 0).
-          spokenAccountNow={() => spokenAccountFrom([...messages, ...transcriptRef.current])}
+          spokenAccountNow={() => spokenAccountFrom([...messages, ...transcriptRef.current], realBankMentionsIn)}
           // ⭐ 2026-11-08(실기기 신고 · 판정표 A1 · A5) — 시작 전 카드에 넣은 거래 은행 · 잔액(이 탭 저장소 · 이 세션 값만 · 서버 0). 말한 값보다 먼저.
           cardAccountNow={() => loadCardAccount(sessionId ?? "")}
         />

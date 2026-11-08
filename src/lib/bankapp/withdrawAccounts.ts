@@ -129,15 +129,105 @@ export function withdrawAccountsFor(input: {
 // | C1 | A1 · A2 · A3 · A5 · A6 중 하나라도 해당(참가자 쪽 값이 하나라도 있음) | 그 계좌 하나만(다른 은행 계좌 숨김) |
 // | C2 | 그 밖(값 0) | 종전 3개(이 앱 은행 1 + 다른 은행 2) |
 // 기존 규칙과의 관계(바꾸지 않음): 출금 가능 금액 · 1일 한도 = 판정표 W 그대로(요구액보다 잔액이 적으면 W3로 이체가 막힌다 — C1이면 다른 계좌로 바꿀 수도 없다 = 현실과 같다) ·
-// 출금 예약 최소 100만 원(S8 결정 "그대로 둠") 그대로 · 실제 은행 이름은 화면에 0(A3) · 값은 화면 안에서만(서버 · 콜백 0 · G138).
+// 출금 예약 최소 100만 원(S8 결정 "그대로 둠") 그대로 · 값은 화면 안에서만(서버 · 콜백 0 · G138).
+//
+// ⭐ 2026-11-09 사용자 결정 — 내 출금 계좌에 **실제 은행 이름**을 허용한다. 단 **'내 계좌' 줄에만 글자로**(로고 · 브랜드 색 0) · 사기 쪽은 가상 이름 그대로 ·
+// 카드 값은 그 훈련 한 번만(종전 K5 · K6 그대로). 위 표 A1 · A3이 아래처럼 바뀐다(A2 · A4 ~ A7 · C 무변경).
+// | # | If | Then |
+// |---|---|---|
+// | A1′ | 카드 은행 = 가상 은행 목록 ∪ 실제 은행 표 R 안 | 은행 = 카드 은행(실제 은행이면 그 표기 그대로) |
+// | A3a | A1 · A2 아님 ∧ 통화에서 마지막으로 말한 은행 = 표 R이 알아본 실제 은행(`realBankName`) | 은행 = 그 표기(R의 '표기' 열) |
+// | A3b | A1 · A2 · A3a 아님 ∧ 마지막 언급이 가상 목록 밖이지만 표 R이 모르는 이름("○○은행" · "○○뱅크") | 은행 = `NAMELESS_BANK_NAME`(종전 A3) |
+// 판정표 P — 실제 은행 이름이 **나와도 되는 곳 / 안 되는 곳**(이름이 실제 은행일 때만 적용 · 가상 은행 · 주거래은행은 종전 그대로).
+// | # | 위치 | 실제 은행 이름 |
+// |---|---|---|
+// | P1 | 출금 · 결제 · 입금 계좌 줄(`accountLabel` — "KB국민은행 209-****-2900") · 확인 화면 '출금 계좌' 칸 | 허용 |
+// | P2 | 출금 계좌 선택 시트 '내 계좌' 묶음(이름 · 상품 줄 · 계좌 줄 · 머리글자 동그라미 — 색은 기본 남색 = 브랜드 색 0) | 허용 |
+// | P3 | 시작 전 카드 '거래 은행' 고르기 칸(난이도 화면 — 세션 화면 밖) | 허용(고르기만 · 자유 입력 0) |
+// | P4 | 화면 머리띠 · 송금 앱 머리 · 인증 시트 앱 이름 · 꼬리말 | 불허 → 판정표 H |
+// | P5 | 사기 사이트 · 받는 계좌 · 문자 · 사기범 대사 · 리포트 · 이체 완료 캡처 | 불허(이 값이 닿지 않는다 — 카드 · 말한 값은 화면 state뿐 · 서버 · 콜백 0) |
+// | P6 | 서버 · 요청 · 사기범 프롬프트 · 저장소(세션 id와 함께 탭 `sessionStorage`만 — K5) | 0 |
+// 판정표 H — 머리 · 앱 이름 표기(`myBankBrand` · `myBankAppName`).
+// | # | If | Then |
+// |---|---|---|
+// | H1 | 내 은행 = 가상 은행 · `NAMELESS_BANK_NAME` | 종전 그대로("{은행} 모바일뱅킹" · "{은행} 송금" · 꼬리말 "{은행}") |
+// | H2 | 내 은행 = 표 R 실제 은행 | 은행 이름을 빼고 "모바일뱅킹" · "송금" · 꼬리말 "모바일뱅킹"(⚠️ 문구 제안) |
+// ⛔ 실제 은행 이름 글자는 이 파일의 표 R 블록(아래 "실제 은행 표 R 시작" ~ "끝") 한 곳에만 둔다 — `realBankScope.test.ts`가 src 전체를 스캔한다
+//    (예외 = 이 블록 · 통화 자막 가드 사본 `realtime/liveTranscriptGuard.ts`(실존명을 지우는 쪽) · 시험 · 주석).
 
-/** A3 — 참가자가 실제 은행을 말했을 때 은행 이름 대신 쓰는 이름 없는 표기(실존 기관명 아님 · 일반어). */
+/** A3b — 참가자가 표 R이 모르는 은행을 말했을 때 은행 이름 대신 쓰는 이름 없는 표기(실존 기관명 아님 · 일반어). */
 export const NAMELESS_BANK_NAME = "주거래은행";
+
+// ── 실제 은행 표 R 시작 ──────────────────────────────────────────────────────────────────────────────
+// 표 R — 실제 은행(2026-11 기준 · 개인 입출금 계좌가 흔한 곳 21개). '표기' = 화면 글자(⚠️ 표기 확정 제안 — 대구은행은 2024년 iM뱅크로 이름을 바꿨다 ·
+// 지역 · 단위농협도 'NH농협은행' 한 표기로 묶는다(추정 — 참가자는 둘을 가르지 않는다)). '알아보는 말' = 통화 자막에서 이 은행을 가리키는 꼴(판정표 S2′).
+// 짧은 이름(신한 · 신협 · 수협)은 한글 낱말 안에 박히지 않게 앞 경계를 둔다 · 띄어 쓴 "우리 은행" · "하나 은행"은 일반어라 세지 않는다 ·
+// 카드사 말("신한카드" · "농협카드")은 은행 언급이 아니다 · 단독 "우체국"은 택배와 겹쳐 뒤에 통장 · 계좌 · 예금 · 대답 어미가 올 때만 센다 · 단독 "토스"는 세지 않는다.
+const REAL_BANKS: readonly { name: string; alias: string }[] = [
+  { name: "KB국민은행", alias: "(?:KB\\s?)?국민\\s?은행|KB\\s?국민|KB\\s?은행" },
+  { name: "신한은행", alias: "신한\\s?은행|(?<![가-힣])신한(?!\\s?(?:카드|금융|라이프|투자|캐피탈))" },
+  { name: "우리은행", alias: "우리은행" },
+  { name: "하나은행", alias: "(?:KEB\\s?)?하나은행|KEB\\s?하나" },
+  { name: "NH농협은행", alias: "(?:(?:지역|단위)\\s?)?(?:NH\\s?)?농협(?!\\s?(?:카드|생명|손해))(?:\\s?은행)?|농축협" },
+  { name: "IBK기업은행", alias: "IBK(?:\\s?기업)?(?:\\s?은행)?|(?:중소\\s?)?기업은행" },
+  { name: "카카오뱅크", alias: "카카오\\s?뱅크|카뱅" },
+  { name: "토스뱅크", alias: "토스\\s?뱅크" },
+  { name: "케이뱅크", alias: "케이\\s?뱅크|K\\s?뱅크" },
+  { name: "우체국", alias: "우체국(?=\\s?(?:통장|계좌|예금|은행|뱅킹|이에요|이예요|이요|입니다|이고|이랑|에\\s?(?:있|넣|돈)))" },
+  { name: "새마을금고", alias: "새마을\\s?금고" },
+  { name: "신협", alias: "(?<![가-힣])신협" },
+  { name: "Sh수협은행", alias: "(?<![가-힣])(?:Sh\\s?)?수협(?:\\s?은행)?" },
+  { name: "SC제일은행", alias: "(?:SC\\s?)?제일\\s?은행|SC\\s?제일|SC\\s?은행|스탠다드\\s?차타드(?:\\s?은행)?" },
+  { name: "한국씨티은행", alias: "(?:한국\\s?)?[씨시]티\\s?은행" },
+  { name: "iM뱅크", alias: "i\\s?M\\s?뱅크|아이엠\\s?뱅크|(?:DGB\\s?)?대구\\s?은행" },
+  { name: "부산은행", alias: "(?:BNK\\s?)?부산\\s?은행" },
+  { name: "경남은행", alias: "(?:BNK\\s?)?경남\\s?은행" },
+  { name: "광주은행", alias: "광주\\s?은행" },
+  { name: "전북은행", alias: "전북\\s?은행" },
+  { name: "제주은행", alias: "제주\\s?은행" },
+];
+// ── 실제 은행 표 R 끝 ────────────────────────────────────────────────────────────────────────────────
+
+/** 표 R의 표기(카드 고르기 칸 순서 그대로). */
+export const REAL_BANK_NAMES: readonly string[] = REAL_BANKS.map((bank) => bank.name);
+
+const REAL_BANK_PATTERNS = REAL_BANKS.map((bank) => ({ name: bank.name, pattern: new RegExp(bank.alias, "gi") }));
+
+/** 표 R의 실제 은행 표기인가(판정표 H · P의 '실제 은행일 때'). */
+export function isRealBankName(bankName: string): boolean {
+  return REAL_BANK_NAMES.includes(bankName);
+}
+
+/**
+ * 판정표 S2′ — 한 대사 안에서 표 R이 알아본 실제 은행 언급(끝 위치 · 표기). `bankApp.ts` `spokenAccountFrom`에 넘기는 알아보기 함수다
+ * (`bankApp.ts`는 실존 은행명 0을 지키는 파일이라 표를 두지 않고 이 함수를 받는다).
+ */
+export function realBankMentionsIn(text: string): { end: number; name: string }[] {
+  const found: { end: number; name: string }[] = [];
+  for (const { name, pattern } of REAL_BANK_PATTERNS) {
+    for (const match of text.matchAll(pattern)) found.push({ end: (match.index ?? 0) + match[0].length, name });
+  }
+  return found;
+}
+
+/** 판정표 H — 머리 · 앱 이름에 쓰는 내 은행 이름(H1 = 그 이름 · H2 실제 은행 = 빈 문자열). */
+export function myBankBrand(bankName: string): string {
+  return isRealBankName(bankName) ? "" : bankName;
+}
+
+/** 판정표 H 중립 표기(H2 꼬리말 · 인증 시트 앱 이름). */
+export const MY_BANK_NEUTRAL_APP_NAME = "모바일뱅킹";
+
+/** 판정표 H — "{은행} 모바일뱅킹"(H1) · "모바일뱅킹"(H2). `suffix`로 "송금" 등. */
+export function myBankAppName(bankName: string, suffix: string = MY_BANK_NEUTRAL_APP_NAME): string {
+  const brand = myBankBrand(bankName);
+  return brand ? `${brand} ${suffix}` : suffix;
+}
 
 /** 시작 전 카드에 넣은 거래 은행 · 잔액(둘 다 선택). */
 export type CardAccount = { bankName?: string; balance?: number };
-/** 통화에서 말한 값(`bankApp.ts` `SpokenAccount`와 같은 모양 — 잎 모듈이라 타입만 다시 둔다). */
-export type SpokenAccountValues = { bankName?: string; balance?: number; realBank?: true };
+/** 통화에서 말한 값(`bankApp.ts` `SpokenAccount`와 같은 모양 — 잎 모듈이라 타입만 다시 둔다). `realBankName` = 표 R이 알아본 표기(A3a). */
+export type SpokenAccountValues = { bankName?: string; balance?: number; realBank?: true; realBankName?: string };
 
 /** A5 · S8과 같은 잔액 범위(1만 원 ~ 10억 원). */
 export const MY_ACCOUNT_BALANCE_MIN = 10_000;
@@ -148,7 +238,7 @@ function validBalance(value: number | undefined): number | undefined {
 }
 
 export type MyAccount = {
-  /** 머리띠 · 첫 계좌 은행 이름(가상 은행 또는 `NAMELESS_BANK_NAME`). */
+  /** 첫 계좌 은행 이름(가상 은행 · 표 R 실제 은행 · `NAMELESS_BANK_NAME`). 머리띠에는 그대로 쓰지 않는다 — `myBankAppName`(판정표 H). */
   bankName: string;
   balance: number;
   /** C1 — 이 계좌 하나만 보인다. */
@@ -163,9 +253,14 @@ export function resolveMyAccount(input: {
   fixedBalance: number;
 }): MyAccount {
   const { card, spoken, fixedBankName, fixedBalance } = input;
-  const cardBank = card?.bankName && BANKS.includes(card.bankName) ? card.bankName : undefined; // A1
-  const spokenBank = spoken?.bankName && BANKS.includes(spoken.bankName) ? spoken.bankName : undefined; // A2
-  const namelessBank = spoken?.realBank ? NAMELESS_BANK_NAME : undefined; // A3
+  const cardBank = card?.bankName && isCardBankName(card.bankName) ? card.bankName : undefined; // A1′
+  const spokenBank =
+    spoken?.bankName && BANKS.includes(spoken.bankName)
+      ? spoken.bankName // A2
+      : spoken?.realBankName && isRealBankName(spoken.realBankName)
+        ? spoken.realBankName // A3a
+        : undefined;
+  const namelessBank = spoken?.realBank ? NAMELESS_BANK_NAME : undefined; // A3b
   const cardBalance = validBalance(card?.balance); // A5
   const spokenBalance = validBalance(spoken?.balance); // A6
   const bankName = cardBank ?? spokenBank ?? namelessBank ?? fixedBankName; // A4
@@ -255,15 +350,26 @@ export function availableText(ledgerKey: string, account: Pick<WithdrawAccount, 
 // | # | If | Then |
 // |---|---|---|
 // | K1 | 두 칸 모두 비움 | 카드 값 없음(저장된 값 지움) → 판정표 A2 ~ A7 |
-// | K2 | 거래 은행 = 가상 은행 목록 안(고르기만 — 자유 입력 0 · 실제 은행 고를 수 없음) | 은행 = 그 이름 |
+// | K2 | 거래 은행 = 표 R 실제 은행 ∪ 가상 은행 목록 안(고르기만 — 자유 입력 0 · ⭐ 2026-11-09 사용자 결정으로 실제 은행 추가) | 은행 = 그 이름 |
 // | K3 | 잔액 = 만 원 단위 숫자(쉼표 · 띄어쓰기 허용) · 1 ~ 100,000(= 1만 원 ~ 10억 원 · 판정표 S8과 같은 범위) | 잔액 = 숫자 × 10,000 |
 // | K4 | 잔액이 숫자 아님 · 범위 밖 · 목록 밖 은행 | 진행 안 함 + `CARD_ACCOUNT_COPY.invalid` 1줄 |
 // | K5 | 저장 | 이 탭 `sessionStorage`에 세션 id와 함께(서버 · 요청 · 리포트 0 — 사기범에게 알리지 않는다 · `fv-akj5` · `fv-6s5p` 무변경) |
 // | K6 | 읽기 | 저장된 세션 id = 지금 세션 id일 때만(다른 세션 값 0) · 저장소를 못 쓰면(사생활 보호 모드 등) 값 없음 |
 // | K7 | 보이는 곳 | 카드 입력 블록이 보일 때만(대상 10종 × 고급 × 통화형 × 내가 하는 훈련) — 챌린지 보내기 · 메신저 = 칸 0 |
 
-/** 카드 은행 선택지(서버 `FICTIONAL_BANK_NAMES`와 같은 목록 · 순서 — `bankApp.ts`와 대조 테스트). */
-export const CARD_ACCOUNT_BANK_OPTIONS: readonly string[] = BANKS;
+/** 카드 은행 선택지 — 실제 은행(표 R 순서) 다음 가상 은행(서버 `FICTIONAL_BANK_NAMES`와 같은 목록 · 순서 — `bankApp.ts`와 대조 테스트). */
+export const CARD_ACCOUNT_BANK_OPTIONS: readonly string[] = [...REAL_BANK_NAMES, ...BANKS];
+
+/** 고르기 칸의 묶음(`<optgroup>` — 실제 은행 / 가상 은행). ⚠️ 묶음 이름 = 문구 제안. */
+export const CARD_ACCOUNT_BANK_GROUPS: readonly { label: string; banks: readonly string[] }[] = [
+  { label: "은행", banks: REAL_BANK_NAMES },
+  { label: "가상 은행", banks: BANKS },
+];
+
+/** K2 · K4 — 카드 은행으로 받는 이름(실제 은행 표 R ∪ 가상 은행). */
+function isCardBankName(bankName: string): boolean {
+  return CARD_ACCOUNT_BANK_OPTIONS.includes(bankName);
+}
 
 export const CARD_ACCOUNT_COPY = {
   bankLabel: "거래 은행",
@@ -283,7 +389,7 @@ export type CardAccountFormResult = { ok: true; card: CardAccount | undefined } 
 export function readCardAccountForm(form: CardAccountForm): CardAccountFormResult {
   const card: CardAccount = {};
   if (form.bankName) {
-    if (!BANKS.includes(form.bankName)) return { ok: false }; // K4
+    if (!isCardBankName(form.bankName)) return { ok: false }; // K4
     card.bankName = form.bankName; // K2
   }
   const raw = form.balanceManwon.replace(/[\s,]/g, "");
@@ -328,7 +434,7 @@ export function loadCardAccount(sessionId: string, store: StorageLike | undefine
     const { sessionId: savedId, bankName, balance } = parsed as Record<string, unknown>;
     if (savedId !== sessionId) return undefined;
     const card: CardAccount = {};
-    if (typeof bankName === "string" && BANKS.includes(bankName)) card.bankName = bankName;
+    if (typeof bankName === "string" && isCardBankName(bankName)) card.bankName = bankName;
     if (typeof balance === "number" && validBalance(balance) !== undefined) card.balance = balance;
     return Object.keys(card).length > 0 ? card : undefined;
   } catch {

@@ -72,7 +72,8 @@ test("[P2 C4] 미리 채움 — 은행명이 있으면 받는 분 · 금액을, 
 test("[P2 C5] 머리띠 은행명은 세션 가상 은행명 변수뿐(리터럴 은행명 0)", () => {
   // N2(실기기 신고 2026-11-01) — 머리띠는 받는 계좌 은행이 아니라 참가자의 "내 은행"(세션 가상 은행 변수 · `myBankNameFor`).
   // 2026-11-08 — 머리띠 이름 = 판정표 A(`withdrawAccounts.ts` `resolveMyAccount`)로 정한 첫 출금 계좌 은행 변수(`appBankName` · 값이 없으면 종전 `prefilledTransfer.myBankName`).
-  assert.ok(code.includes("`${appBankName} 모바일뱅킹`"));
+  // ⭐ 2026-11-09 판정표 H(`withdrawAccounts.ts`) — 머리띠 = `myBankAppName(appBankName)`(가상 은행 = 종전 "{은행} 모바일뱅킹" · 실제 은행 = "모바일뱅킹").
+  assert.ok(code.includes("prefilledTransfer?.myBankName ? myBankAppName(appBankName) : issuerNameOf(copy.issuerLabel)"));
   assert.ok(code.includes("fixedBankName: prefilledTransfer?.myBankName ?? myBankNameFor(ledger, prefilledTransfer?.bankName),"));
   const bankBlock = code.slice(code.indexOf("if (bankTransfer && !submitted"), code.indexOf("const recordDocument"));
   assert.equal(/[가-힣]{1,6}은행/.test(bankBlock), false, "확인 · 인증 화면에 은행 이름 리터럴 0");
