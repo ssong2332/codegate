@@ -47,5 +47,40 @@ test("[배선] 통화 전사를 내보내는 두 자리(턴 끝 · 끼어들기)
   assert.match(flush, /lastEmittedScammerLine = s;/);
   assert.match(flushScammer, /const s = guardScammer\(scammerBuffer\);/);
   assert.match(flushScammer, /lastEmittedScammerLine = s;/);
-  assert.match(src, /const guardScammer = \(raw: string\) => guardLiveScammerLine\(stripLeakedThought\(raw\)\)\.trim\(\);/);
+  assert.match(src, /const guardScammer = \(raw: string\) => guardLiveScammerLine\(stripLeakedThought\(raw\), userTextsForGuard\(\)\)\.trim\(\);/);
+});
+
+// ── 2026-11-08(라이브 재시험 9) — S2b · S2c 실존 은행 · 카드사 ──
+const DECL = '/** 한글 낱말 안에 박히지 않게 하는 앞 경계(`\\b` 대용). */\nconst NOT_AFTER_HANGUL = "(?<![가-힣])";\n\n';
+const clientBankTable = (s: string) =>
+  s.slice(s.indexOf("// ── 은행 · 카드 표 사본 시작 ──"), s.indexOf("// ── 은행 · 카드 표 사본 끝 ──")).slice(s.slice(s.indexOf("// ── 은행 · 카드 표 사본 시작 ──")).search(/^export const FICTIONAL_BANK_NAME/m)).trim();
+
+test("[재시험 9] 은행 · 카드 표는 서버 파일과 글자까지 같다(NOT_AFTER_HANGUL 선언 두 줄만 뺀다)", () => {
+  const server = read("../../../functions/src/guardrails/realFinancialNames.ts");
+  const serverTable = server.slice(server.search(/^export const FICTIONAL_BANK_NAME/m));
+  assert.equal(serverTable.split(DECL).length - 1, 1, "서버 선언 두 줄을 정확히 한 번 찾는다 — 조용한 건너뜀 금지");
+  const client = clientBankTable(read("./liveTranscriptGuard.ts"));
+  assert.ok(client.length > 3000, "표 시작 줄을 못 찾았다 — 조용한 건너뜀 금지");
+  assert.equal(client, serverTable.replace(DECL, "").trim());
+});
+
+test("[재시험 9 재현] 화면 자막 — 오인식된 참가자 줄 뒤 사기범 줄의 실존 이름은 \"말씀하신 은행\", 참가자가 말한 적 없는 이름은 OO은행", () => {
+  const user = "거래 은행은 새마을금고고요, 잔액은 천이백만 원 정도 있어요.";
+  assert.equal(guardLiveScammerLine("네, 말씀하신 새마을금고 계좌의 잔액 상황은 확인했습니다.", [user]), "네, 말씀하신 은행 계좌의 잔액 상황은 확인했습니다.");
+  assert.equal(guardLiveScammerLine("농협은행 948-2716-5093-27로 옮기시면 됩니다."), "OO은행 948-2716-5093-27로 옮기시면 됩니다.");
+  assert.equal(guardLiveScammerLine("금융감독원 조사관입니다.", ["금융감독원이요?"]), "금융감독원 조사관입니다.");
+  assert.equal(guardLiveUserLine(user, "거래하시는 은행이 어디세요?"), user, "참가자 줄은 원문(U2)");
+});
+
+test("[재시험 9 배선] 사기범 줄 거르기의 참가자 입력 = 부모 전사 + 이 연결 전사 + 아직 flush 전 버퍼", () => {
+  const src = read("./GeminiVoiceSession.tsx");
+  const fn = src.slice(src.indexOf("const userTextsForGuard = (): string[] => ["), src.indexOf("const guardScammer = (raw: string)"));
+  assert.ok(fn.length > 0, "userTextsForGuard를 못 찾았다");
+  assert.match(fn, /handlersRef\.current\.readTranscript\?\.\(\) \?\? \[\]/);
+  assert.match(fn, /\.\.\.instanceTurns/);
+  assert.match(fn, /filter\(\(t\) => t\.role === "user"\)/);
+  assert.match(fn, /userBuffer,/);
+  // 턴 끝 flush는 버퍼를 비우기 전에 사기범 줄을 거른다(같은 flush의 참가자 줄이 입력에 들어간다).
+  const flush = src.slice(src.indexOf("const flushTranscript = () => {"), src.indexOf("const flushScammerTurn = () => {"));
+  assert.ok(flush.indexOf("const s = guardScammer(scammerBuffer);") < flush.indexOf('userBuffer = "";'));
 });

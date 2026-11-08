@@ -125,7 +125,7 @@ test("[K6 · K7] 말하는 도중 요청이면 이미 말한 그 턴을 더한�
 test("[K6 배선] 두 경로가 '이 턴에 말한 대사'를 같은 거름 식으로 본다 · 역검증", () => {
   const code = codeOnly(session);
   // 모델 도구 — flush와 같은 `guardScammer`(사고 문장 · 금지 표식만 남은 버퍼 = 말한 대사 없음).
-  assert.ok(code.includes("const guardScammer = (raw: string) => guardLiveScammerLine(stripLeakedThought(raw)).trim();"));
+  assert.ok(code.includes("const guardScammer = (raw: string) => guardLiveScammerLine(stripLeakedThought(raw), userTextsForGuard()).trim();"));
   // 말하는 도중 주장 — 부모 표식은 주장 때 켜지고 그 턴 flush에서 꺼진다(그 사이 백스톱만 +1).
   const pageCode = codeOnly(page);
   assert.ok(pageCode.includes("smsClaimRaisedMidTurnRef.current = true;"));

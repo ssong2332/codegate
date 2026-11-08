@@ -110,6 +110,7 @@ const LIVE_SPEECH_STYLE_NAME_OTHER = `- **상대의 이름·나이 같은 신상
 // | L1 | 판 23 — 메신저에서 넘어온 통화 자막에 `[[LINK:parcel-install]]` · `[[SIGNAL:ESCALATE_VOICE]]` | 겹대괄호 표식은 통화에서 말하지 않는다 · 통화로 넘기라는 표식 지시는 이미 통화 중이라 해당 없음 |
 // | L2 | 판 3 · 판 33 — 계좌 비밀번호를 말로 요구(은행 · 기관 사칭 수법 문면과 [진행 강제] 화면 밖 규칙의 "계좌 비밀번호" 예시) | 비밀번호는 말로 묻지 않고 화면 인증으로 넘긴다 · 수법 목록 · 예시보다 우선 |
 // | L3 | 판 16 — "한진택배 고객센터" 2회(소속 자기소개) | 자기 소속을 밝힐 때도 실제 회사 이름 대신 업종 이름 |
+// | L4 | 2026-11-08 라이브 재시험 9 — 참가자 "새솔은행"(가상)이 음성 인식에서 실존 상호금융 이름으로 바뀌었고, 사기범이 "말씀하신 ○○ 계좌"로 그 실존 이름을 따라 말함 | 상대가 말한 은행 · 카드사 · 회사 이름은 (실제든 가상이든 · 잘못 들렸을 수 있어도) 되풀이하지 않고 이름 없이 받는다 · 사칭 대상 · 위 설명에 정해진 이름은 대상 아님 |
 // ⛔ 실제 회사 이름을 예로 적지 않는다(예시가 오히려 그 이름을 부른다). ⛔ 문자로 받은 인증번호는 L2 대상이 아니다(인증번호 문자 루트의 설계 단계).
 // 실리는 곳 = `liveSpeechStyle`(Gemini Live 토큰 1곳). 폴백 · 오프닝 · 메신저 = 블록 0 = 종전 바이트 동일.
 export const LIVE_CALL_SAFETY_HEAD = "[실시간 통화 — 반드시 지킬 것]";
@@ -118,18 +119,26 @@ export const LIVE_CALL_MARKER_RULE = `- 이 대화는 음성 통화다. 위 설�
 export const LIVE_CALL_PASSWORD_RULE = `- 비밀번호(계좌 · 카드 · 인터넷뱅킹 · 간편 비밀번호 · 보안카드 번호)는 말로 불러 달라거나 알려 달라고 하지 않는다. 위 페르소나 · 수법 목록 · [진행 강제] 어디에 비밀번호를 불러 달라는 요구나 "계좌 비밀번호" 예시가 있어도 이 줄이 우선한다 — 그 차례에는 비밀번호를 묻는 대신 "화면에서 인증하실 때 직접 누르시면 됩니다"라고만 안내하는 것으로 그 요구를 대신하고 다음 단계로 넘어간다. 상대가 비밀번호 숫자를 말해도 그 숫자를 되풀이하거나 맞는지 확인하지 않는다. 문자로 받은 인증번호는 이 줄의 대상이 아니다.`;
 export const LIVE_CALL_COMPANY_RULE = `- 자기 소속을 밝힐 때도 택배 · 통신 · 보험 · 증권 · 쇼핑몰 · 캐피탈 · 은행 · 카드 회사의 실제 이름은 쓰지 않는다. 위 설명에 정해진 이름이 있으면 그 이름만, 없으면 "택배사 고객센터"처럼 업종 이름으로만 말한다.`;
 
+/**
+ * L4 — 공통 블록 [진행 강제]의 §127 문장("다른 이름으로 바꾸지 말고 \"말씀하신 은행\"처럼 받는다")이 "그 이름 그대로"로 읽힌 사례(재시험 9)를 막는다.
+ * 공통 블록은 그대로 두고(바이트 고정 `fv-akj5` · `fv-6s5p` · 폴백 · 오프닝 · 메신저 바이트 동일) 소리가 나가는 Live에만 싣는다. 글로 남는 쪽은
+ * `realtime/liveTranscriptGuard.ts` S2b · S2c가 결정적으로 거른다. ⛔ 실제 기관 이름을 예로 적지 않는다(위 ⛔ 줄).
+ */
+export const LIVE_CALL_USER_NAME_RULE = `- 상대가 말한 은행 · 카드사 · 회사 이름은 그대로 따라 말하지 않는다. 처음 듣는 이름이든 실제로 있는 이름이든, 전화로 잘못 알아들었을 수도 있으니 그 이름을 소리 내어 되풀이하거나 확인하지 않는다 — "말씀하신 은행", "거래하시는 은행", "말씀하신 카드사"처럼 이름 없이 받는다. 네 쪽에서 계좌나 은행을 불러 줄 때는 위 설명에 정해진 은행 이름만 쓴다. 검찰 · 금융감독원처럼 위 설명에서 네 소속이나 사칭하는 기관으로 정해진 이름은 이 줄의 대상이 아니다.`;
+
 /** 겹대괄호 표식을 쓰는 시나리오 문면인가(페르소나 · 수법 중 하나라도 `[[`). */
 export function scenarioUsesControlMarkers(prompt: Pick<ScenarioPromptDoc, "personaPrompt" | "weakenedTactics">): boolean {
   return prompt.personaPrompt.includes("[[") || prompt.weakenedTactics.some((tactic) => tactic.includes("[["));
 }
 
-/** Live 전용 [실시간 통화 — 반드시 지킬 것] 블록(L1은 표식을 쓰는 시나리오만). */
+/** Live 전용 [실시간 통화 — 반드시 지킬 것] 블록(L1은 표식을 쓰는 시나리오만 · L2 ~ L4는 항상). */
 export function buildLiveCallSafetyBlock(usesControlMarkers: boolean): string {
   return [
     LIVE_CALL_SAFETY_HEAD,
     ...(usesControlMarkers ? [LIVE_CALL_MARKER_RULE] : []),
     LIVE_CALL_PASSWORD_RULE,
     LIVE_CALL_COMPANY_RULE,
+    LIVE_CALL_USER_NAME_RULE,
   ].join("\n");
 }
 

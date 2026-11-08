@@ -10,7 +10,10 @@
 // |---|---|---|
 // | S1 | 겹대괄호 표식(`[[LINK:…]]` · `[[SIGNAL:…]]` · `[[SMS:…]]` 등 · 끝이 잘린 `[[LINK:pa`도) | 지운다(판 23) |
 // | S2 | 실존 민간 회사명(택배 · 통신 · 보험 · 증권 · 쇼핑몰 · 캐피탈 · 저축은행 — `realCompanyNames.ts` 표) | 업종 이름 · 가상 자리표시로(판 16) |
-// | S3 | 그 밖 | 원문 그대로(바이트 동일) |
+// | S2b | 실존 은행 · 카드사 이름(`realFinancialNames.ts` 표) ∧ 같은 통화의 참가자 줄(이 줄보다 앞 · 같은 flush 포함 · 음성 인식 오인식이어도 전사 기준)에 같은 규칙에 걸리는 이름 | "말씀하신 은행" · "말씀하신 카드사"(§127 `neutralizeUserMentionedFinancialNames` 그대로 · 재시험 9) |
+// | S2c | 실존 은행 · 카드사 이름 ∧ 참가자가 말한 적 없음(사기범이 스스로 꺼냄) | "OO은행" · "OO카드"(텍스트 경로 1단계 `replaceRealFinancialNames`와 같음 · 2026-11-08 사용자 결정 안 B) |
+// | S3 | 그 밖(검찰 · 금융감독원 등 사칭 대상 기관 · 가상 은행명 포함) | 원문 그대로(바이트 동일) |
+// 적용 순서 = S1 → S2b → S2c(그 안에서 S2 회사명이 먼저) — 텍스트 경로(`roleplay/index.ts` §127 → `replaceRealFinancialNames`)와 같은 순서다.
 //
 // 판정표(참가자 줄 — `guardLiveUserLine`):
 // | 행 | If | Then |
@@ -18,11 +21,13 @@
 // | U1 | 바로 앞 사기범 줄이 비밀번호를 묻는다(`asksPasswordAloud`) ∧ 참가자 줄에 숫자 3개 이상 묶음(아라비아 · "일 이 삼 사") | 그 묶음을 `[비밀번호]`로(판 3) |
 // | U2 | 그 밖 | 원문 그대로(참가자 말은 기록이다) |
 // ⚠️ U1은 이미 Live로 간 소리를 되돌리지 못한다 — 화면 · 저장 · 재연결 주입에 실제 비밀번호가 남지 않게 할 뿐이다.
-// ⚠️ 은행 · 카드사 실명(`realFinancialNames.ts`)은 S2에 넣지 않는다 — 참가자가 먼저 말한 은행을 되받는 경우 "말씀하신 은행"으로 바꿔야 하는데
-//    (§127) 자막은 그 판단 입력을 갖지 않는다. 은행 · 카드는 지시 문면(세션 가상 은행명)이 막는다.
+// ⭐ 2026-11-08(라이브 재시험 9 — 참가자 "새솔은행"이 음성 인식에서 "새마을금고"로 바뀌자 사기범이 "말씀하신 새마을금고 계좌"로 되받음) — 종전에는
+//    은행 · 카드사 실명을 자막에서 거르지 않았다("말씀하신 은행" 판단에 참가자 말 입력이 없다는 이유). 화면 flush와 서버 저장 모두 같은 통화의 참가자 줄을
+//    갖고 있으므로 그 줄을 입력으로 받아 S2b · S2c를 더했다. 소리는 지시 문면(`promptAssembly.ts` L4)이 유일한 층이고, 이미 나간 소리는 되돌리지 못한다.
+// ⚠️ 참가자 줄은 실존 이름이 있어도(오인식 포함) 원문 그대로다(U2 — 참가자 말은 기록이다).
 // ⛔ 아래 "사본 시작" ~ "사본 끝" 구간은 `src/lib/realtime/liveTranscriptGuard.ts`와 **글자까지 같아야 한다**
 //    (루트 `liveTranscriptGuard.test.ts`가 두 파일을 읽어 대조한다 — 빌드 루트가 달라 import로 공유하지 않는다).
-import { replaceRealCompanyNames } from "../guardrails/realCompanyNames";
+import { neutralizeUserMentionedFinancialNames, replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 
 // ── 사본 시작 ──
 /** S1 — 겹대괄호 표식. 닫는 `]]`가 없어도(끼어들기로 잘린 조각) 줄 끝까지면 지운다. */
@@ -57,15 +62,29 @@ export function guardLiveUserLineWith(text: string, previousScammerLine: string 
   return masked === text ? text : masked;
 }
 
-/** S1 ~ S3 — 회사명 치환은 호출부가 넘긴다(서버 = `guardrails/realCompanyNames.ts` · 화면 = 같은 표의 사본). */
-export function guardLiveScammerLineWith(text: string, replaceCompanies: (t: string) => { text: string }): string {
-  return replaceCompanies(stripControlMarkers(text)).text;
+/** 실명 치환 한 쌍 — 서버 = `guardrails/realFinancialNames.ts`(회사명 표 포함) · 화면 = 같은 표의 사본. */
+export type LiveRealNameReplacers = {
+  /** S2b — 참가자가 먼저 말한 은행 · 카드사 → "말씀하신 은행/카드사". */
+  neutralizeUserMentioned: (text: string, userTexts: readonly string[]) => { text: string };
+  /** S2 · S2c — 실존 회사명 → 업종 이름 · 실존 은행 · 카드사 → "OO은행/OO카드". */
+  replaceRealNames: (text: string) => { text: string };
+};
+
+/** S1 ~ S3. `userTexts` = 같은 통화에서 이 줄보다 앞선(같은 flush 포함) 참가자 줄 원문. */
+export function guardLiveScammerLineWith(text: string, userTexts: readonly string[], replace: LiveRealNameReplacers): string {
+  const stripped = stripControlMarkers(text);
+  return replace.replaceRealNames(replace.neutralizeUserMentioned(stripped, userTexts).text).text;
 }
 // ── 사본 끝 ──
 
-/** 서버 — 사기범 줄(S1 ~ S3). */
-export function guardLiveScammerLine(text: string): string {
-  return guardLiveScammerLineWith(text, replaceRealCompanyNames);
+const SERVER_REPLACERS: LiveRealNameReplacers = {
+  neutralizeUserMentioned: neutralizeUserMentionedFinancialNames,
+  replaceRealNames: replaceRealFinancialNames,
+};
+
+/** 서버 — 사기범 줄(S1 ~ S3). `userTexts` = 같은 통화의 앞선 참가자 줄(S2b 입력 · 없으면 S2b 0건). */
+export function guardLiveScammerLine(text: string, userTexts: readonly string[] = []): string {
+  return guardLiveScammerLineWith(text, userTexts, SERVER_REPLACERS);
 }
 
 /** 서버 — 참가자 줄(U1 · U2). */

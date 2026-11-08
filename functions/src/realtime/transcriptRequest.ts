@@ -88,12 +88,15 @@ export function prepareTranscriptTurns(turns: readonly ReadTranscriptTurn[]): Pr
   const out: PreparedTranscriptTurn[] = [];
   // 2026-11-07(판 3) — 참가자 줄 U1의 조건 = 바로 앞 사기범 줄(거른 뒤 값 · 빈 줄 포함 직전 사기범 제출 기준).
   let previousScammerLine: string | undefined;
+  // 2026-11-08(재시험 9) — 사기범 줄 S2b의 입력 = 이 제출에서 그 줄보다 앞선 참가자 줄 원문(음성 인식 오인식 포함 · 화면 flush는 참가자 줄을 사기범 줄보다 먼저 보낸다).
+  const userTextsSoFar: string[] = [];
   turns.forEach((turn, index) => {
     const submitted = turn.text.slice(0, TRANSCRIPT_MAX_TEXT_LEN);
-    // §116 사고 문장 → 2026-11-07 `liveTranscriptGuard.ts`(S1 표식 · S2 실존 회사명 · U1 비밀번호 숫자). 화면이 이미 걸렀어도 옛 화면 캐시를 위해 다시 거른다(멱등).
+    if (turn.role === "user") userTextsSoFar.push(submitted);
+    // §116 사고 문장 → 2026-11-07 `liveTranscriptGuard.ts`(S1 표식 · S2 실존 회사명 · S2b · S2c 실존 은행 · 카드사(2026-11-08) · U1 비밀번호 숫자). 화면이 이미 걸렀어도 옛 화면 캐시를 위해 다시 거른다(멱등).
     const raw =
       turn.role === "scammer"
-        ? guardLiveScammerLine(stripLeakedThought(submitted))
+        ? guardLiveScammerLine(stripLeakedThought(submitted), userTextsSoFar)
         : guardLiveUserLine(submitted, previousScammerLine);
     if (turn.role === "scammer") previousScammerLine = raw;
     const textMasked = maskPII(raw).trim();

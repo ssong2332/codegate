@@ -70,7 +70,8 @@ test("[§116 배선] 저장 — submitTranscript는 사기범 줄만 마스킹 �
   const s = src("realtime/transcriptRequest.ts");
   assert.match(s, /import \{ stripLeakedThought \} from "\.\/thoughtLeak";/);
   // 2026-11-07(판 3 · 16 · 23) — 사기범 줄은 사고 문장 제거 뒤 `liveTranscriptGuard.ts`(표식 · 실존 회사명)를, 참가자 줄은 비밀번호 숫자 가림(U1)만 거친다.
-  assert.match(s, /\? guardLiveScammerLine\(stripLeakedThought\(submitted\)\)\r?\n\s*: guardLiveUserLine\(submitted, previousScammerLine\);/);
+  // 2026-11-08(재시험 9) — 사기범 줄은 앞선 참가자 줄(S2b 입력)을 함께 받는다.
+  assert.match(s, /\? guardLiveScammerLine\(stripLeakedThought\(submitted\), userTextsSoFar\)\r?\n\s*: guardLiveUserLine\(submitted, previousScammerLine\);/);
   assert.ok(s.indexOf("stripLeakedThought(submitted)") < s.indexOf("maskPII(raw)"), "마스킹 전에 거른다");
   assert.match(src("realtime/submitTranscript.ts"), /const prepared = prepareTranscriptTurns\(turns\);/);
 });
