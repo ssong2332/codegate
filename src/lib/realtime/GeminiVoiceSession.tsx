@@ -62,7 +62,7 @@ import {
 import { INITIAL_LOUDNESS_STATE, normalizeChunk, type LoudnessState } from "./loudnessNormalizer";
 import { createEarlyMessageGate } from "./earlyMessageGate";
 import { INITIAL_UNHEARD_REPLY_STATE, UNHEARD_REPLY_TEXT, stepUnheardReply } from "./unheardReply";
-import { appendScammerChunk, shouldMarkToolBoundary } from "./toolTurnTranscript";
+import { appendScammerChunk, claimedScammerTranscriptTurns, shouldMarkToolBoundary } from "./toolTurnTranscript";
 import { INITIAL_THOUGHT_LEAK_GATE_STATE, pickLiveAudioData, stepThoughtLeakGate, stripLeakedThought, type LiveContentPart } from "./thoughtLeak";
 import { guardLiveScammerLine, guardLiveUserLine } from "./liveTranscriptGuard";
 import {
@@ -294,6 +294,12 @@ export type GeminiVoiceSessionProps = {
   // (leg 재마운트에도 살아남게). 이 컴포넌트는 getter로 읽고 콜백으로 알린다 — 지역 `hangupPending` 0(G528 ⓑ).
   /** 세션 누적 사용자 발화 수(부모 `turnCountersRef.current.userTurns`). `end_call` · `send_prepared_sms`가 같은 값을 쓴다. */
   getSessionUserTurns: () => number;
+  /**
+   * ⭐ 2026-11-08(#538 발견 1 · 사용자 결정 "고치기") — 세션 누적 사기범 전사 수(부모 `turnCountersRef.current.scammerTranscriptTurns`).
+   * `send_prepared_sms` · 확인 오퍼 announce가 서버에 넘기는 앵커 입력이다. 종전 지역 사본은 이 컴포넌트가 새 연결(`key={connectionSeq}`
+   * — 다음 통화 · 재연결)마다 다시 마운트되며 0부터 세어, 통화 2 · 3에서 보낸 문자가 리포트에서 세션 맨 앞에 찍혔다.
+   */
+  getSessionScammerTurns: () => number;
   /** 부모 클라 항 — 지시 큐 비어 있지 않음 ∨ 이번 턴 지시 처리 중 ∨ 교대 대기(`isRelaySwitchPending` — S7 전 `false`). */
   getPendingInstruction: () => boolean;
   /** 승인 · 종료 래치(`isEndLatched(callEndingRef.current)`) — 마이크 · 클라 텍스트 턴 · 침묵 넛지 차단의 판정(G510). */
@@ -407,6 +413,7 @@ export default function GeminiVoiceSession({
   primedAudio,
   turnPhaseRef,
   getSessionUserTurns,
+  getSessionScammerTurns,
   getPendingInstruction,
   isHangupLatched,
   onScammerHangupAccepted,
@@ -436,6 +443,7 @@ export default function GeminiVoiceSession({
     claimVerifyAnnounceSlot,
     releaseVerifyAnnounceSlot,
     getSessionUserTurns,
+    getSessionScammerTurns,
     getPendingInstruction,
     isHangupLatched,
     onScammerHangupAccepted,
@@ -482,6 +490,7 @@ export default function GeminiVoiceSession({
       claimVerifyAnnounceSlot,
       releaseVerifyAnnounceSlot,
       getSessionUserTurns,
+      getSessionScammerTurns,
       getPendingInstruction,
       isHangupLatched,
       onScammerHangupAccepted,
@@ -506,6 +515,7 @@ export default function GeminiVoiceSession({
     claimVerifyAnnounceSlot,
     releaseVerifyAnnounceSlot,
     getSessionUserTurns,
+    getSessionScammerTurns,
     getPendingInstruction,
     isHangupLatched,
     onScammerHangupAccepted,
@@ -643,12 +653,14 @@ export default function GeminiVoiceSession({
     // §116 — 출력 전사에 모델의 영어 사고 문장이 섞이면 그 구간의 재생을 막는다(판정표 `thoughtLeak.ts` G1~G5 · 턴 경계에서 초기화).
     let thoughtGate = INITIAL_THOUGHT_LEAK_GATE_STATE;
 
-    // ⭐ §59.6(reviewer Critical #1) — Live 도구 라우팅이 쓰는 상태.
-    // `modelToolScammerTurns`는 부모(session/play/page.tsx)의 `scammerTurnsRef`와 **같은 경계**
-    // (turnComplete)에서 증가하는 이 컴포넌트 자체의 사본이다 — `toolCall`은 이 effect의 onmessage
-    // 클로저 안에서 **동기적으로** 처리해야 하는데, 부모의 최신 `scammerTurns` state는 prop으로
-    // 내려오지 않는다(리렌더 지연). (T191 — 예전 `deliveredSmsIds` Set은 화면이 smsId를 고를 때만 필요했다. 폐기.)
-    let modelToolScammerTurns = 0;
+    // ⭐ §59.6(reviewer Critical #1) — Live 도구 라우팅이 쓰는 상태. (T191 — 예전 `deliveredSmsIds` Set은 화면이 smsId를 고를 때만 필요했다. 폐기.)
+    // ⭐ 2026-11-08(#538 발견 1) — 종전 지역 사본 `modelToolScammerTurns`(이 effect 안 `let` · 연결마다 0)를 없앴다. 도구 경로가 넘기는 사기범 전사 수는
+    // 부모 누적 getter다 — 부모 `handleTranscriptTurn`이 아래 flush의 `onTranscriptTurn("scammer")` 호출 안에서 **동기적으로** 올리므로(같은 경계 ·
+    // 빈 전사 0 — `countTranscriptFlush`) 리렌더 지연 없이 최신 값이고, 다음 통화 · 재연결 재마운트에도 세션 값이 유지된다(사용자 발화 수와 같은 방식).
+    // ⭐ 2026-11-08(라이브 재시험 7) — 도구는 사기범이 턴을 말하는 **도중**에 온다. 이미 말한 이 턴(아직 flush 전)도 곧 문서 1개가 되므로 더한다
+    // (판정 K6 · K7 = `claimedScammerTranscriptTurns` — 응답 중인 사용자 발화 +1과 같은 규칙). 거르는 식은 flush와 같은 `guardScammer`.
+    const sessionScammerTurns = () =>
+      claimedScammerTranscriptTurns(handlersRef.current.getSessionScammerTurns(), guardScammer(scammerBuffer) !== "");
     // ⭐ T192 C5(§79.18 (3) ↳ ② · §79.19 (7) · G552 ⓒ) — 예전 지역 사용자 발화 사본은 없앴다. 모델 도구 경로가
     // 서버에 넘기는 사용자 발화 수는 이제 부모 누적값(`getSessionUserTurns` — 같은 flush에서 오른다 · leg 재마운트에도 유지)
     // + 응답 중 발화 1이다. `send_prepared_sms` · `end_call` 두 분기가 **이 함수 하나**를 쓴다(오늘 동작 변화 0 — §79.18 끝).
@@ -788,7 +800,7 @@ export default function GeminiVoiceSession({
             // 있고 flush(`turnComplete`)되지 않았으므로 flush 수만 보내면 폴백(이번 발화 포함)보다 1 작다. §82.3.4는
             // 카운터를 "flush 수"로 정의했지만 시점을 정하지 않았다 — 3경로 동일(AC-099 (f))을 위해 응답 중인 발화를 더한다.
             userTurns: claimedUserTurns(),
-            scammerTranscriptTurns: modelToolScammerTurns,
+            scammerTranscriptTurns: sessionScammerTurns(),
             trigger: "model_tool",
           });
           // PR-A2(audit-A R1) — 서버 결과 신호는 도구 응답에 섞지 않고, 응답을 **보낸 뒤** 부모에 넘긴다(아래 `toolCall` 처리부).
@@ -835,7 +847,7 @@ export default function GeminiVoiceSession({
         const result = await deliverVerifyOffer({
           sessionId,
           callMode: "realtime",
-          scammerTurns: modelToolScammerTurns,
+          scammerTurns: sessionScammerTurns(),
           stage: "announce",
           trigger: "model_tool",
         });
@@ -890,8 +902,7 @@ export default function GeminiVoiceSession({
         noteEmittedTurn("user", u);
       }
       if (s) {
-        // ⭐ §82.3.4(G539) — 부모의 `scammerTurnsRef`(비어 있지 않은 사기범 전사 flush 수)와 **같은 지점**.
-        modelToolScammerTurns += 1;
+        // ⭐ §82.3.4(G539) — 부모의 `scammerTurnsRef`(비어 있지 않은 사기범 전사 flush 수)가 이 호출 안에서 오른다(도구 경로 getter의 원천).
         handlersRef.current.onTranscriptTurn("scammer", s);
         noteEmittedTurn("scammer", s);
         lastEmittedScammerLine = s;
@@ -917,8 +928,7 @@ export default function GeminiVoiceSession({
     const flushScammerTurn = () => {
       const s = guardScammer(scammerBuffer);
       if (s) {
-        // §82.3.4 — 끊긴 조각 flush도 사기범 전사 턴이다(`messages`에 문서 1개로 남는다).
-        modelToolScammerTurns += 1;
+        // §82.3.4 — 끊긴 조각 flush도 사기범 전사 턴이다(`messages`에 문서 1개로 남는다 · 부모 계수도 이 호출 안에서 오른다).
         handlersRef.current.onTranscriptTurn("scammer", s);
         noteEmittedTurn("scammer", s);
         lastEmittedScammerLine = s;
@@ -1641,8 +1651,8 @@ export default function GeminiVoiceSession({
           const participantTurnText = userBuffer;
           flushTranscript();
           thoughtGate = stepThoughtLeakGate(thoughtGate, { type: "boundary" }).state;
-          // ⭐ §59.6 ③ → §82.3.4 — `modelToolScammerTurns`는 이제 위 `flushTranscript`/`flushScammerTurn`이
-          // 비어 있지 않은 사기범 전사를 내보낼 때 오른다(부모 `scammerTurnsRef`와 같은 지점 · 같은 정의).
+          // ⭐ §59.6 ③ → §82.3.4 → 2026-11-08 — 도구 경로의 사기범 전사 수는 위 `flushTranscript`/`flushScammerTurn`이
+          // 비어 있지 않은 사기범 전사를 부모에 넘길 때 오르는 부모 누적값이다(`sessionScammerTurns`).
           // T68 — 사기범 발화 1턴 완료. 부모가 이 경계만 세어 통화 중 문자 도착을 판단한다
           // (§15.1.2 "앱 오케스트레이션"). 세션 자체에는 아무 영향이 없다.
           // ⚠️ 병합 정합(T90+T68, 2026-07-26): T90이 핸들러를 "오디오 먼저 → 게이트 계산
