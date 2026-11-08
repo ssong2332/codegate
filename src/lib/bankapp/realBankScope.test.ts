@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { poisonedComponentSource, renderLandingScreen } from "../mockscreenrender/renderHarness.ts";
 import { FICTIONAL_BANK_NAMES, fictionalBalanceFor, myBankNameFor, spokenAccountFrom } from "./bankApp.ts";
 import {
@@ -284,7 +284,8 @@ function leaksIn(path: string, source: string): string[] {
 
 test("[RB5] 가드 범위 — 실제 은행 글자는 표 R 블록 · 자막 가드 사본에만 + 역검증", () => {
   const root = new URL("../../", import.meta.url);
-  const files = sourceFiles(root.pathname.replace(/^\/([A-Za-z]:)/, "$1").replace(/\/$/, "")).map((path) => path.replace(/\\/g, "/"));
+  // 경로에 한글이 있으면 `URL.pathname`은 퍼센트 인코딩이라 폴더를 못 연다 — `fileURLToPath`로 푼다(검증 워크트리 실측).
+  const files = sourceFiles(fileURLToPath(root).replace(/\\/g, "/").replace(/\/$/, "")).map((path) => path.replace(/\\/g, "/"));
   assert.ok(files.length > 200, `src 파일을 실제로 훑는다(${files.length})`);
   const leaks = files.filter((path) => !path.endsWith(SCRUBBER)).flatMap((path) => leaksIn(path, readFileSync(path, "utf8")));
   assert.deepEqual(leaks, [], "표 R 밖 실제 은행 글자 0(화면 · 문구 · 사기 쪽 · 리포트 · 문자)");
