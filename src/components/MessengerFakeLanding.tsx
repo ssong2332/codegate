@@ -53,6 +53,8 @@ import {
 // ⭐ 2026-11-08 웹 안의 웹 PR-4 — 안내 화면 새 문구(잎 모듈 · 상대 경로).
 import {
   AGENCY_SITE_COPY,
+  AGENCY_TRANSFER_SITE_COPY,
+  SEND_SITE_LOGO,
   INSTALL_APP_NAMES,
   INSTALL_PERMISSIONS,
   INSTALL_PERMISSION_HEADING,
@@ -308,7 +310,7 @@ export default function MessengerFakeLanding({
         ? ("install" as const)
         : undefined
       : purchaseFamily === undefined && landingKind === "credential-form"
-        ? guideFormFamilyOf(landingId, landingId !== undefined && BANK_TRANSFER_LANDINGS.includes(landingId))
+        ? guideFormFamilyOf(landingId)
         : undefined;
   const pageFamily = purchaseFamily ?? guideFamily;
   const pageBg = pageFamily ? SITE_SKINS[pageFamily].pageBg : LANDING_PAGE_TOKENS.pageBg;
@@ -1455,6 +1457,107 @@ function SiteHeader({ skin, name, aside }: { skin: SiteSkin; name: string; aside
 }
 
 /** F1 — 사이트 꼬리말(이름 · 사업자 정보 줄 · ⓒ 줄). 값은 `siteSkins.ts`(실재와 겹칠 수 없는 임의 값 — PR-2 판정표). */
+/**
+ * ⭐ PR-4 G5(D1) — 송금 링크 페이지 머리: 마름모 마크 + '간편 송금' 로고(사용자 확정) · 아래 작은 줄 = 그 링크의 발급처 이름.
+ * ⚠️ 발급처 이름은 **한 줄 텍스트 노드**(렌더 게이트 [T190]).
+ */
+function SendSiteHeader({ skin, name }: { skin: SiteSkin; name: string }) {
+  return (
+    <div className="flex shrink-0 items-center gap-2 px-4 pb-1 pt-3.5" style={{ backgroundColor: skin.headerBg }}>
+      <span aria-hidden="true" className="relative inline-block h-5 w-5 shrink-0 rounded-full" style={{ backgroundColor: skin.accent }}>
+        <span className="absolute left-[5px] top-[5px] h-2.5 w-2.5 rotate-45 rounded-[2px]" style={{ backgroundColor: skin.buttonText }} />
+      </span>
+      <span className="flex min-w-0 flex-col leading-tight">
+        <span className="text-[15px] font-extrabold" style={{ color: skin.headerText }}>
+          {SEND_SITE_LOGO}
+        </span>
+        <span className="truncate text-[12px]" style={{ color: GUIDE_SITE_TOKENS.send.muted }}>
+          {name}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+/** D1 숫자 자판 단추(누른 순서). "back" = 한 글자 지우기. */
+const SEND_PAD_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "00", "0", "back"] as const;
+/** D1 — 금액 숫자 최대 자릿수(조 단위 아래 — 한도 판정은 종전 `errorFor`가 한다). */
+const SEND_PAD_MAX_DIGITS = 12;
+
+/**
+ * ⭐ PR-4 G5(D1 · 사용자 결정 2026-11-08 (가)) — 송금 링크 페이지의 가운데 큰 금액 + 화면 숫자 자판.
+ * 기기 자판을 띄우지 않는다(입력 칸 0 — 단추만). 값은 숫자 문자열로 상위 `values`에 그대로 들어가 검증 · 한도 · 요구액 비교가 종전과 같다.
+ * ⛔ 표시만 한다 — 네트워크 · 저장소 0(G138).
+ */
+function SendAmountPad({
+  label,
+  value,
+  error,
+  hint,
+  noteId,
+  headline,
+  hintText,
+  errorText,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  error?: string;
+  hint?: string;
+  noteId: string;
+  headline: string;
+  hintText: string;
+  errorText: string;
+  onChange: (next: string) => void;
+}) {
+  const tokens = GUIDE_SITE_TOKENS.send;
+  const digits = value.replace(/[^\d]/g, "");
+  const shown = digits ? `${Number(digits).toLocaleString("ko-KR")}원` : "0원";
+  const labelId = `${noteId}-label`;
+  const press = (key: (typeof SEND_PAD_KEYS)[number]) => {
+    if (key === "back") return onChange(digits.slice(0, -1));
+    return onChange(`${digits}${key}`.replace(/^0+/, "").slice(0, SEND_PAD_MAX_DIGITS));
+  };
+  return (
+    <div role="group" aria-labelledby={labelId} className="flex flex-col gap-1">
+      <span id={labelId} className="text-center text-[15px] font-semibold" style={{ color: headline }}>
+        {label}
+      </span>
+      <output
+        aria-live="polite"
+        aria-describedby={error || hint ? noteId : undefined}
+        className="block py-1 text-center text-[36px] font-extrabold tabular-nums tracking-[-0.02em]"
+        style={{ color: digits ? headline : tokens.amountPlaceholder }}
+      >
+        {shown}
+      </output>
+      {error ? (
+        <span id={noteId} role="alert" className="text-center text-[14px]" style={{ color: errorText }}>
+          {error}
+        </span>
+      ) : hint ? (
+        <span id={noteId} className="text-center text-[15px] font-semibold" style={{ color: hintText }}>
+          {hint}
+        </span>
+      ) : null}
+      <div className="mt-1 grid grid-cols-3">
+        {SEND_PAD_KEYS.map((key) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => press(key)}
+            aria-label={key === "back" ? "지우기" : undefined}
+            className="flex h-12 items-center justify-center rounded-xl text-[21px] font-semibold tabular-nums active:bg-black/5"
+            style={{ color: tokens.keypadText }}
+          >
+            {key === "back" ? <PhoneIcon name="backspace" size={24} /> : key}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SiteFooter({ skin, name, copyright }: { skin: SiteSkin; name: string; copyright: ReactNode }) {
   return (
     <footer
@@ -3045,17 +3148,23 @@ function CredentialFormMockup({
     stepScreens && stepIndex > 0
       ? stepScreens[stepIndex - 1]
       : { headline: copy.headline, bodyLines: copy.bodyLines, fields: copy.fields, actionLabel: copy.submitLabel };
-  // ⭐ PR-4 판정표 G1 ~ G4 · G7 — 안내 계열 머리 · 색 · 꼬리말(이체 화면 G5 · 표 밖 id = 종전 `LANDING_PAGE_TOKENS` 그대로).
-  const guideFamily = guideFormFamilyOf(landingId, bankTransfer);
-  const site = guideFamily ? SITE_SKINS[guideFamily] : undefined;
-  const page = guideFamily
-    ? { ...LANDING_PAGE_TOKENS, ...(guideFamily === "loan" ? purchasePalette("loan") : guidePalette(guideFamily)) }
-    : LANDING_PAGE_TOKENS;
+  // ⭐ PR-4 판정표 G1 ~ G5 · G7 — 안내 계열 머리 · 색 · 꼬리말(표 밖 id = 종전 `LANDING_PAGE_TOKENS` 그대로).
+  const guideFamily = guideFormFamilyOf(landingId);
+  // G5′(사용자 결정 2026-11-08 (가)) — 이체 화면은 **첫 화면(계좌 · 금액 입력)만** 사이트다. 확인 → 인증 → 영수증은 종전 '{내 은행} 모바일뱅킹' 머리띠 · 색(N2).
+  const siteStage = guideFamily !== undefined && !(bankTransfer && (submitted || bankStage !== "form"));
+  const site = siteStage && guideFamily ? SITE_SKINS[guideFamily] : undefined;
+  const page =
+    site && guideFamily
+      ? { ...LANDING_PAGE_TOKENS, ...(guideFamily === "loan" ? purchasePalette("loan") : guidePalette(guideFamily)) }
+      : LANDING_PAGE_TOKENS;
   const corners =
-    guideFamily && guideFamily !== "loan"
+    site && guideFamily && guideFamily !== "loan"
       ? GUIDE_SITE_TOKENS[guideFamily]
       : { inputRadius: 10, buttonRadius: guideFamily === "loan" ? 12 : 10 };
-  const agencyCopy = guideFamily === "agency" && landingId ? AGENCY_SITE_COPY[landingId] : undefined;
+  const agencyLike = site?.id === "agency" || site?.id === "agency-transfer";
+  const sendPage = site?.id === "send";
+  const agencyCopy =
+    site?.id === "agency-transfer" ? AGENCY_TRANSFER_SITE_COPY : site?.id === "agency" && landingId ? AGENCY_SITE_COPY[landingId] : undefined;
   const refundCopy = guideFamily === "refund" && landingId ? REFUND_SITE_COPY[landingId] : undefined;
   const parcelCopy = guideFamily === "parcel" && landingId ? PARCEL_SITE_COPY[landingId] : undefined;
   // 렌더 게이트 역검증 ① 앵커 — 이 화면의 ⓒ 줄은 이 노드 하나로만 그린다(종전 꼬리말 · 사이트 꼬리말 공용).
@@ -3143,8 +3252,10 @@ function CredentialFormMockup({
     </p>
   );
   const issuerBar = site ? (
-    site.id === "agency" ? (
+    agencyLike ? (
       <AgencySiteHeader skin={site} name={issuerNameOf(copy.issuerLabel)} copy={agencyCopy} activeStep={submitted ? 1 : 0} />
+    ) : sendPage ? (
+      <SendSiteHeader skin={site} name={issuerNameOf(copy.issuerLabel)} />
     ) : (
       <>
         <SiteHeader skin={site} name={issuerNameOf(copy.issuerLabel)} />
@@ -3517,7 +3628,17 @@ function CredentialFormMockup({
           </span>
         </section>
       )}
-      <div className="flex flex-col gap-2.5 px-5 pt-4">
+      <div className={sendPage ? "flex flex-col items-center gap-2.5 px-5 pt-4 text-center" : "flex flex-col gap-2.5 px-5 pt-4"}>
+        {/* ⭐ PR-4 G5(D1) — 받는 사람 원형 이니셜(문자 · 대화에서 받은 예금주 첫 글자 · 모르면 사람 아이콘 — 지어낸 이름 0). */}
+        {sendPage && (
+          <span
+            aria-hidden="true"
+            className="flex h-[52px] w-[52px] items-center justify-center rounded-full text-[21px] font-extrabold"
+            style={{ backgroundColor: GUIDE_SITE_TOKENS.send.avatar?.bg, color: GUIDE_SITE_TOKENS.send.avatar?.text }}
+          >
+            {prefilledTransfer?.holder ? prefilledTransfer.holder.slice(0, 1) : <PhoneIcon name="person" size={26} />}
+          </span>
+        )}
         {/* ⭐ PR-4 G3 — 빨간 보류 배지(시안 C · O3 배지 = 넣기). */}
         {parcelCopy && (
           <span
@@ -3530,7 +3651,7 @@ function CredentialFormMockup({
         {/* §130(UX D-161 (6)) — 낱말 단위로만 줄을 바꾼다(360폭에서 "…이체합니 / 다" 한 글자 줄바꿈). PR-4 G1 — 기관은 명조 제목. */}
         <h1
           className="text-xl font-bold leading-snug [word-break:keep-all]"
-          style={{ color: page.headline, fontFamily: guideFamily === "agency" ? "var(--font-display)" : undefined }}
+          style={{ color: page.headline, fontFamily: agencyLike ? "var(--font-display)" : undefined }}
         >
           {screen.headline}
         </h1>
@@ -3559,8 +3680,8 @@ function CredentialFormMockup({
             ))}
           </ol>
         )}
-        {/* ⭐ PR-4 G1 — 기관 안내는 왼쪽 굵은 선 공지 상자 안에 본문. 그 밖은 종전 그대로. */}
-        {guideFamily === "agency" && site ? (
+        {/* ⭐ PR-4 G1 · G5(D2) — 기관 안내 · 기관형 이체는 왼쪽 굵은 선 공지 상자 안에 본문. 그 밖은 종전 그대로. */}
+        {agencyLike && site ? (
           <div
             role="note"
             className="mt-1 flex flex-col gap-1.5 border border-l-4 px-3 py-2.5"
@@ -3573,7 +3694,7 @@ function CredentialFormMockup({
         )}
         {/* P2 — 실제 이체 화면처럼 출금 계좌를 맨 위에 둔다. 2026-11-07 — 눌러서 고른다(가상 계좌 · 번호 가운데 가림 · 출금 가능 금액). */}
         {bankTransfer && (
-          <div className="mt-1">
+          <div className="mt-1 w-full text-left">
             <WithdrawAccountRow
               account={account}
               ledgerKey={ledger}
@@ -3637,6 +3758,26 @@ function CredentialFormMockup({
               ? identityHint(field.format, values[field.label] ?? "")
               : undefined;
           const noteId = `landing-note-${stepIndex}-${field.label}`;
+          // ⭐ PR-4 G5(D1 · 사용자 결정 2026-11-08 (가)) — 송금 요청 페이지의 금액은 화면 숫자 자판으로 넣는다(기기 자판 0). 값 · 검증 · 한도 · 요구액 비교는 같은 `values` · `errorFor` 그대로.
+          if (sendPage && field.amount) {
+            return (
+              <SendAmountPad
+                key={field.label}
+                label={field.label}
+                value={values[field.label] ?? ""}
+                error={error}
+                hint={hint}
+                noteId={noteId}
+                headline={page.headline}
+                hintText={page.hintText}
+                errorText={page.errorText}
+                onChange={(next) => {
+                  setValues((current) => ({ ...current, [field.label]: next }));
+                  if (error) setErrors((current) => ({ ...current, [field.label]: "" }));
+                }}
+              />
+            );
+          }
           return (
             <label
               key={field.label}
@@ -3652,7 +3793,7 @@ function CredentialFormMockup({
                   aria-readonly="true"
                   value={prefilledAccount}
                   className="min-h-[52px] rounded-[10px] px-3.5 text-[17px] font-normal outline-none"
-                  style={{ backgroundColor: page.fieldReadonlyBg, color: page.inputText }}
+                  style={{ backgroundColor: page.fieldReadonlyBg, color: page.inputText, borderRadius: site ? corners.inputRadius : undefined }}
                 />
               ) : (
                 // T190-5(D-93) — 숫자 칸은 숫자 자판 힌트만(`inputMode` — 필드별 명시). 입력값 자동 서식 0.
@@ -3725,14 +3866,14 @@ function CredentialFormMockup({
           닫기
         </button>
         {/* ⑧ 발급처 — 13px · #6B655C(흰 바탕 대비 약 5.8:1 · 옛 #C9C2B6 미달 Superseded). PR-4 — 안내 계열은 아래 사이트 꼬리말의 ⓒ 줄로. */}
-        {!site && (
+        {!site?.footer && (
           <p className="text-center text-[13px]" style={{ color: page.issuerFooter }}>
             {issuerMark}
           </p>
         )}
       </form>
-      {/* ⭐ PR-4 F1 — 안내 계열 사이트 꼬리말(이름 · 정보 줄 · ⓒ 줄 = 카탈로그 `issuerLabel`). 입력 화면 끝에만. */}
-      {site && <SiteFooter skin={site} name={issuerNameOf(copy.issuerLabel)} copyright={issuerMark} />}
+      {/* ⭐ PR-4 F1 — 안내 계열 사이트 꼬리말(이름 · 정보 줄 · ⓒ 줄 = 카탈로그 `issuerLabel`). 입력 화면 끝에만 · 송금 링크(D1)는 꼬리말 없음(시안). */}
+      {site?.footer && <SiteFooter skin={site} name={issuerNameOf(copy.issuerLabel)} copyright={issuerMark} />}
     </>
   );
 }

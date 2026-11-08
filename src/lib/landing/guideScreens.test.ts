@@ -3,7 +3,8 @@
 // | # | 고정하는 것 |
 // |---|---|
 // | GS1 | 안내 화면 색 쌍(글자 4.5:1 · 로고 큰 글자 3:1 · 비텍스트 3:1)이 전부 기준 이상 · 역검증 |
-// | GS2 | 판정표 G1 ~ G7 — 기관 4 · 환급 1 · 택배 2 · 맥락 없는 대출 2 · 설치 7은 계열 바탕 · 머리 · 꼬리말, 이체 14 · 표 밖 id는 무변경 · 역검증 |
+// | GS2 | 판정표 G1 ~ G7 — 기관 4 · 환급 1 · 택배 2 · 맥락 없는 대출 2 · 설치 7 · 이체 14(첫 화면)는 계열 바탕 · 머리 · 꼬리말, 이체 확인 단계(G5′)는 '{내 은행} 모바일뱅킹' · 표 밖 id는 무변경 · 역검증 |
+// | GS7 | 이체 화면(사용자 결정 2026-11-08 (가)) — D2 기관형 이체 머리(방패 · 띠 · 공지 상자) · D1 '간편 송금' 로고(사용자 확정) · 받는 사람 원 · 큰 금액 · 화면 숫자 자판(금액 입력 칸 0) |
 // | GS3 | 재현 — 기관 띠 · 작은 줄 · 단계 칸 · 공지 상자 / 환급 조회 결과 카드 / 택배 운송장 띠 · 보류 배지 · 타임라인 / 설치 앱 이름 · 권한 목록(사용자 확정 요소) |
 // | GS4 | 금지 — 16화면 첫 렌더 · 새 문구에 세션 금지 낱말(G437) · 8자리 이상 숫자열 · 실존 앱 · 스토어 이름 · 서비스 밖 안내 0 · 꼬리말이 주소창 호스트를 품지 않음 |
 // | GS5 | 새 조각 — 네트워크 · 저장소 · 권한 API 0 · 설치 응낙 콜백 · 입력 화면 제출 흐름은 종전 그대로 |
@@ -27,6 +28,8 @@ import {
 } from "./siteSkins.ts";
 import {
   AGENCY_SITE_COPY,
+  AGENCY_TRANSFER_SITE_COPY,
+  SEND_SITE_LOGO,
   INSTALL_APP_NAMES,
   INSTALL_PERMISSIONS,
   INSTALL_PERMISSION_HEADING,
@@ -36,7 +39,7 @@ import {
 import { pairContrast, type ContrastPair } from "../phone/skinTokens.ts";
 
 type Pair = ContrastPair & { min: number };
-const FAMILIES: readonly GuideFamilyId[] = ["agency", "refund", "parcel", "install"];
+const FAMILIES: readonly GuideFamilyId[] = ["agency", "agency-transfer", "refund", "parcel", "send", "install"];
 
 function guidePairs(family: GuideFamilyId): Pair[] {
   const skin = SITE_SKINS[family];
@@ -76,7 +79,10 @@ function guidePairs(family: GuideFamilyId): Pair[] {
   if (t.resultAmount) pairs.push(text("resultAmount", t.resultAmount, t.surface));
   if (t.resultTag) pairs.push(text("resultTag", t.resultTag.text, t.resultTag.bg));
   if (t.permissionIcon) pairs.push(non("permissionIcon", t.permissionIcon.fg, t.permissionIcon.bg));
-  if (family === "agency") pairs.push(text("steps.on", skin.buttonText, skin.accent), text("steps.off", skin.accent, skin.headerBg));
+  if (t.avatar) pairs.push(text("avatar", t.avatar.text, t.avatar.bg));
+  if (t.keypadText) pairs.push(text("keypad", t.keypadText, t.surface));
+  if (t.amountPlaceholder) pairs.push(text("amountPlaceholder", t.amountPlaceholder, t.surface));
+  if (family === "agency" || family === "agency-transfer") pairs.push(text("steps.on", skin.buttonText, skin.accent), text("steps.off", skin.accent, skin.headerBg));
   return pairs;
 }
 
@@ -137,7 +143,7 @@ const GUIDE_ROWS: readonly { row: string; props: Record<string, unknown>; family
   { row: "G6", props: install("card-delivery-app-install"), family: "install", copyright: "ⓒ 카드 사고접수 안내" },
 ];
 
-/** G5 — 이체 화면 14종(머리 결정 대기 — 이 PR에서 무변경). */
+/** G5 — 이체 화면 14종(첫 화면 = 계열 머리 · 확인 뒤 = 내 은행 머리띠 — 사용자 결정 2026-11-08 (가)). */
 const TRANSFER_IDS = [
   "loan-repay-transfer",
   "asset-deposit-transfer",
@@ -169,28 +175,66 @@ test("[GS2] 판정표 G1 ~ G4 · G6 — 16화면은 계열 바탕 · 진행 막�
     assert.ok(text.split("\n").includes(item.copyright), `${item.row} ${id}: ⓒ 줄 "${item.copyright}"`);
     assert.equal(text.split("\n").filter((line) => line === item.copyright).length, 1, `${item.row} ${id}: ⓒ 줄은 한 번`);
     assert.equal(markup.includes(bgOf(OLD_BAR)), false, `${item.row} ${id}: 종전 남색 머리띠 · 진행 막대가 남았다`);
-    if (item.row !== "G6") assert.equal(guideFormFamilyOf(id, false), item.family, `${id} 매핑`);
+    if (item.row !== "G6") assert.equal(guideFormFamilyOf(id), item.family, `${id} 매핑`);
     lines.push(`${item.row} ${id}=${item.family}`);
   }
   t.diagnostic(lines.join(" | "));
 });
 
-test("[GS2] 판정표 G5 · G7 — 이체 14화면 · 표 밖 id는 종전 그대로(남색 머리띠 · 사이트 꼬리말 0)", () => {
+/** G5 이체 첫 화면 공통 대조(D2 = 꼬리말 있음 · D1 = 꼬리말 없음 — 시안). ⓒ 줄은 한 번. */
+function transferFirstScreen(id: string, props: Record<string, unknown>) {
+  const family = guideFormFamilyOf(id);
+  assert.ok(family === "agency-transfer" || family === "send", `${id}: 이체 계열 ${family}`);
+  const skin = SITE_SKINS[family!];
+  const { markup, text } = renderLandingScreen(props);
+  assert.ok(markup.includes(bgOf(skin.accent)), `${id}: 진행 막대 = 사이트 색`);
+  assert.equal(markup.includes(bgOf(OLD_BAR)), false, `${id}: 첫 화면에 종전 남색 머리띠가 남았다`);
+  assert.equal(text.includes("모바일뱅킹 송금 요청") ? false : text.includes(" 모바일뱅킹"), false, `${id}: 첫 화면에 은행 앱 머리띠가 남았다`);
+  assert.equal(text.split("\n").filter((line) => line.startsWith("ⓒ ")).length, 1, `${id}: ⓒ 줄 한 번`);
+  assert.equal(markup.includes("<footer"), family === "agency-transfer", `${id}: 꼬리말 = D2만`);
+  return { family, markup, text };
+}
+
+const BANK = { bankName: "누리은행", holder: "노은채", myBankName: "새솔은행", ledgerKey: "guide-screen-session-01" };
+const transferProps = (id: string, extra: Record<string, unknown> = {}) =>
+  base(id, { prefilledAccount: "302-1184-5527-61", prefilledTransfer: { ...BANK, ...extra } });
+
+test("[GS2] 판정표 G5 · G7 — 이체 14화면 첫 화면은 계열 머리 · 색 / 표 밖 id는 종전 그대로", (t) => {
+  const lines: string[] = [];
   for (const id of TRANSFER_IDS) {
-    assert.equal(guideFormFamilyOf(id, true), undefined, `${id}: 이체 화면은 판정 밖`);
-    const { markup } = renderLandingScreen(base(id));
-    assert.ok(markup.includes(bgOf(OLD_BAR)), `${id}: 종전 남색 머리띠 그대로`);
-    assert.equal(markup.includes("<footer"), false, `${id}: 사이트 꼬리말이 붙으면 안 된다(G5)`);
+    const { family } = transferFirstScreen(id, transferProps(id));
+    lines.push(`${id}=${family}`);
   }
-  assert.equal(guideFormFamilyOf("no-such-landing", false), undefined);
-  assert.equal(guideFormFamilyOf(undefined, false), undefined);
+  assert.equal(guideFormFamilyOf("no-such-landing"), undefined);
+  assert.equal(guideFormFamilyOf(undefined), undefined);
   const generic = renderLandingScreen(base("no-such-landing")).markup;
   assert.ok(generic.includes(bgOf(OLD_BAR)) && !generic.includes("<footer"), "G7 표 밖 id = 종전 범용 화면");
+  t.diagnostic(lines.join(" · "));
+});
+
+/** 확인 단계로 바로 그린 사본(이체 흐름 단계 state 초기값만 바꾼다 — loanScreens S5와 같은 방법). */
+const confirmStage = () =>
+  poisonedComponentSource(
+    'const [bankStage, setBankStage] = useState<"form" | "confirm" | "auth">("form");',
+    'const [bankStage, setBankStage] = useState<"form" | "confirm" | "auth">("confirm");',
+  );
+
+test("[GS2] 판정표 G5′ — 이체 확인 단계는 종전 '{내 은행} 모바일뱅킹' 머리띠 · 색(사이트 머리 · 꼬리말 0)", () => {
+  const { poisoned, original, overrides } = confirmStage();
+  assert.notEqual(poisoned, original, "단계 state 앵커를 찾지 못했다");
+  for (const id of ["safe-account-transfer", "friend-bank-transfer"]) {
+    const { markup, text } = renderLandingScreen(transferProps(id, { amount: "3000000" }), overrides);
+    assert.ok(text.split("\n").includes("새솔은행 모바일뱅킹"), `${id}: 확인 단계 머리띠 = 내 은행`);
+    assert.ok(markup.includes(bgOf(OLD_BAR)), `${id}: 확인 단계 = 종전 남색 머리띠`);
+    assert.equal(markup.includes("<footer"), false, `${id}: 확인 단계에 사이트 꼬리말 0`);
+    assert.equal(text.includes(SEND_SITE_LOGO), false, `${id}: 확인 단계에 '간편 송금' 로고 0`);
+    assert.ok(text.includes("받는 분") && text.includes("노은채") && text.includes("보내는 금액"), `${id}: 확인 단계 행 그대로`);
+  }
 });
 
 test("[GS2 역검증] 입력 화면의 계열 판정을 끊은 사본은 종전 머리띠로 돌아가 검사에 걸린다", () => {
   const { poisoned, original, overrides } = poisonedComponentSource(
-    "  const guideFamily = guideFormFamilyOf(landingId, bankTransfer);\n",
+    "  const guideFamily = guideFormFamilyOf(landingId);\n",
     "  const guideFamily = undefined as ReturnType<typeof guideFormFamilyOf>;\n",
   );
   assert.notEqual(poisoned, original, "오염 지점(입력 화면 계열 판정)을 찾지 못했다");
@@ -277,7 +321,7 @@ test("[GS3] 앱 이름 표 = 설치 화면 표와 같은 키 · 각 이름은 �
 
 // ── GS4 금지 ─────────────────────────────────────────────────────────────────────────────────────────
 
-const NEW_COPY_TEXT = JSON.stringify([AGENCY_SITE_COPY, REFUND_SITE_COPY, PARCEL_SITE_COPY, INSTALL_APP_NAMES, INSTALL_PERMISSION_HEADING, INSTALL_PERMISSIONS]);
+const NEW_COPY_TEXT = JSON.stringify([AGENCY_TRANSFER_SITE_COPY, SEND_SITE_LOGO, AGENCY_SITE_COPY, REFUND_SITE_COPY, PARCEL_SITE_COPY, INSTALL_APP_NAMES, INSTALL_PERMISSION_HEADING, INSTALL_PERMISSIONS]);
 
 test("[GS4] 16화면 첫 렌더 · 새 문구 — 세션 금지 낱말 · 8자리 이상 숫자열 · 실존 앱 · 스토어 이름 · 서비스 밖 안내 0", (t) => {
   const lines: string[] = [];
@@ -291,6 +335,10 @@ test("[GS4] 16화면 첫 렌더 · 새 문구 — 세션 금지 낱말 · 8자�
   for (const item of GUIDE_ROWS) {
     const id = String(item.props.landingId);
     check(id, renderLandingScreen(item.props).text);
+    lines.push(`${id}=0`);
+  }
+  for (const id of TRANSFER_IDS) {
+    check(id, renderLandingScreen(transferProps(id)).text);
     lines.push(`${id}=0`);
   }
   t.diagnostic(lines.join(" · "));
@@ -336,10 +384,68 @@ test("[GS6] 이 파일의 여러 줄 소스 앵커는 LF · CRLF 원본 모두�
   const file = readFileSync(resolvePath(COMPONENT_PATH), "utf8");
   const lf = file.replace(/\r\n/g, "\n");
   const crlf = lf.replace(/\n/g, "\r\n");
-  const anchor = "  const guideFamily = guideFormFamilyOf(landingId, bankTransfer);\n";
+  const anchor = "  const guideFamily = guideFormFamilyOf(landingId);\n";
   for (const [label, source] of [["LF", lf], ["CRLF", crlf]] as const) {
     assert.notEqual(replaceOnceAnyLineEnding(source, anchor, "X\n"), source, `${label}: 앵커를 못 찾았다`);
   }
   // 역검증 — 글자 그대로 찾는 종전 방식은 CRLF 원본에서 못 찾는다.
   assert.equal(crlf.includes(anchor), false);
+});
+
+// ── GS7 이체 화면(D1 · D2) ────────────────────────────────────────────────────────────────────────────
+
+const D2_IDS = TRANSFER_IDS.filter((id) => guideFormFamilyOf(id) === "agency-transfer");
+const D1_IDS = TRANSFER_IDS.filter((id) => guideFormFamilyOf(id) === "send");
+
+test("[GS7] D2 기관형 이체 7종 — 띠 · 방패 엠블럼 · 작은 줄 · 공지 상자 · 미리 채운 계좌 · 출금 계좌 줄 · 한도 안내 그대로", () => {
+  assert.equal(D2_IDS.length, 7, `D2 ${D2_IDS.join(", ")}`);
+  for (const id of D2_IDS) {
+    const { markup, text } = renderLandingScreen(transferProps(id));
+    const lines = text.split("\n");
+    assert.ok(lines.includes(AGENCY_TRANSFER_SITE_COPY.band) && lines.includes(AGENCY_TRANSFER_SITE_COPY.sub), `${id}: 띠 · 작은 줄`);
+    assert.ok(/role="note"/.test(markup), `${id}: 공지 상자`);
+    assert.ok(/value="302-1184-5527-61"/.test(markup), `${id}: 계좌 미리 채움`);
+    assert.ok(text.includes("출금 계좌") && text.includes("출금 가능 금액"), `${id}: 출금 계좌 줄(결정 — 첫 화면에 그대로)`);
+    assert.ok(text.includes("1회"), `${id}: 한도 안내`);
+  }
+});
+
+test("[GS7] D1 송금 요청 7종 — '간편 송금' 로고 · 받는 사람 원 · 큰 금액(0원) · 화면 숫자 자판 12개 · 금액 입력 칸 0", () => {
+  assert.equal(D1_IDS.length, 7, `D1 ${D1_IDS.join(", ")}`);
+  for (const id of D1_IDS) {
+    const { markup, text } = renderLandingScreen(transferProps(id));
+    const lines = text.split("\n");
+    assert.ok(lines.includes(SEND_SITE_LOGO), `${id}: 로고`);
+    assert.ok(lines.includes("노"), `${id}: 받는 사람 원 = 예금주 첫 글자`);
+    assert.ok(lines.includes("0원"), `${id}: 금액 자리`);
+    const inputs = markup.match(/<input[^>]*>/g) ?? [];
+    assert.equal(inputs.length, 1, `${id}: 입력 칸은 미리 채운 계좌 하나뿐(금액 = 자판 · 기기 자판 0)`);
+    assert.ok(/readOnly|readonly/.test(inputs[0]!), `${id}: 남은 입력 칸 = 읽기 전용 계좌`);
+    const keys = markup.match(/<button type="button"[^>]*class="flex h-12 items-center justify-center rounded-xl[^"]*"/g) ?? [];
+    assert.equal(keys.length, 12, `${id}: 숫자 자판 단추 12개`);
+    assert.ok(markup.includes('aria-label="지우기"'), `${id}: 지우기 단추 이름`);
+    assert.ok(text.includes("출금 계좌") && text.includes("출금 가능 금액"), `${id}: 출금 계좌 줄 그대로`);
+  }
+  // 문자 금액 미리 채움 = 큰 금액 · 한글 단위 그대로(검증 경로는 종전 `values` — 같은 값이 그대로 보인다).
+  const filled = renderLandingScreen(transferProps("friend-bank-transfer", { amount: "3000000" })).text.split("\n");
+  assert.ok(filled.includes("3,000,000원") && filled.includes("300만 원"), "미리 채운 금액 · 한글 단위");
+  // 예금주 모름(메신저 칩) = 사람 아이콘(지어낸 이름 0).
+  const anonymous = renderLandingScreen(base("friend-bank-transfer", { prefilledAccount: "302-1184-5527-61" })).text.split("\n");
+  assert.equal(anonymous.includes("노"), false);
+});
+
+test("[GS7] D1 자판 — 값은 같은 `values` · 오류 지우기 그대로 · 단추만(입력 칸 0) · 네트워크 · 저장소 0 · 역검증", () => {
+  const file = readFileSync(resolvePath(COMPONENT_PATH), "utf8").replace(/\r\n/g, "\n");
+  const s = file.indexOf("function SendAmountPad(");
+  const pad = file.slice(s, file.indexOf("\nfunction ", s + 10));
+  assert.ok(s > 0, "자판 조각");
+  assert.doesNotMatch(pad.replace(/^\s*\/\/.*$/gm, ""), /<input|fetch\(|localStorage|sessionStorage|indexedDB|navigator\./);
+  assert.ok(pad.includes('type="button"'), "자판 단추는 제출 단추가 아니다");
+  const form = file.slice(file.indexOf("function CredentialFormMockup("));
+  assert.ok(form.includes("setValues((current) => ({ ...current, [field.label]: next }));"), "자판 값 = 같은 `values` 칸");
+  // 역검증 — 자판 분기를 끊은 사본은 금액 입력 칸이 되살아나 위 단언(입력 칸 1개)에 걸린다.
+  const { poisoned, original, overrides } = poisonedComponentSource("if (sendPage && field.amount) {", "if (false) {");
+  assert.notEqual(poisoned, original, "자판 분기 앵커");
+  const dirty = renderLandingScreen(transferProps("friend-bank-transfer"), overrides).markup;
+  assert.equal((dirty.match(/<input[^>]*>/g) ?? []).length, 2, "오염 사본 = 금액 입력 칸이 돌아온다");
 });

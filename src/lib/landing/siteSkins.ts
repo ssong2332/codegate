@@ -482,13 +482,14 @@ export function purchasePalette(family: PurchaseFamilyId): PurchasePalette {
 // | G2 | 같은 조건 · 계열 = refund | 흰 머리 + 기관 마크 · 첫 화면 위 조회 결과 카드(금액 · 내역 · 태그) |
 // | G3 | 같은 조건 · 계열 = parcel | 상자 마크 + 주황 큰 로고 · 운송장 띠 · 보류 배지 · 단계 타임라인 · 검은 꼬리말 |
 // | G4 | 같은 조건 · 계열 = loan(맥락 없는 대출 · 대환 — PR-3 판정표 P5가 넘긴 것) | 대출 계열 머리 · 색(`purchasePalette("loan")`) · 꼬리말 |
-// | G5 | 이체 화면(`BANK_TRANSFER_LANDINGS` — D1 송금 요청 · D2 기관형 이체) | 이 PR에서 무변경(머리 결정 대기) |
+// | G5 | 이체 화면(`BANK_TRANSFER_LANDINGS` — D1 송금 요청 · D2 기관형 이체) **첫 화면**(계좌 · 금액 입력) | D2 = 기관 머리(방패) · 공지 상자 · 꼬리말, D1 = '간편 송금' 로고 · 받는 사람 원 · 가운데 큰 금액 · 화면 숫자 자판(기기 자판 0) |
+// | G5′ | 이체 화면의 확인 → 인증 → 영수증 | 종전 '{내 은행} 모바일뱅킹' 머리 그대로(사용자 결정 2026-11-08 (가) · N2) |
 // | G6 | 설치 화면(`AppInstallMockup`) | 앱 소개 페이지(큰 앱 아이콘 · 이름 · 만든 곳 · 요청하는 권한 목록 · 파란 버튼 · 꼬리말) |
 // | G7 | 표에 없는 id(범용 폴백 · 옛 문서) | 종전 화면 그대로 |
 // | C1 | 모든 글자 | 바탕 위 4.5:1(로고 큰 글자 3:1) · 입력 칸 테두리 3:1 — `guideScreens.test.ts`가 전부 잰다 |
 
-/** 안내 화면 계열(G1 ~ G3 · G6). 대출(G4)은 구매 계열 값을 그대로 쓴다. */
-export type GuideFamilyId = "agency" | "refund" | "parcel" | "install";
+/** 안내 화면 계열(G1 ~ G3 · G5 · G6). 대출(G4)은 구매 계열 값을 그대로 쓴다. */
+export type GuideFamilyId = "agency" | "agency-transfer" | "refund" | "parcel" | "send" | "install";
 
 export type GuideSiteTokens = {
   /** 입력 칸 · 카드 바탕. */
@@ -513,6 +514,10 @@ export type GuideSiteTokens = {
   /** 환급 — 조회 결과 카드의 큰 금액 · 태그. */
   resultAmount?: string;
   resultTag?: { bg: string; text: string };
+  /** 송금 요청(D1) — 받는 사람 원 · 숫자 자판 글자 · 금액 0원 자리 글자. */
+  avatar?: { bg: string; text: string };
+  keypadText?: string;
+  amountPlaceholder?: string;
   /** 설치 — 앱 아이콘 그라데이션 · 권한 아이콘 바탕. */
   appIcon?: { from: string; via: string; to: string };
   permissionIcon?: { bg: string; fg: string };
@@ -520,6 +525,17 @@ export type GuideSiteTokens = {
 
 export const GUIDE_SITE_TOKENS: Readonly<Record<GuideFamilyId, GuideSiteTokens>> = {
   agency: {
+    surface: "#FFFFFF",
+    muted: "#4A5568",
+    border: "#6B7280",
+    noteBg: "#F7F9FC",
+    hint: "#14254A",
+    inputRadius: 3,
+    buttonRadius: 3,
+    headerSub: "#4A5568",
+  },
+  // D2 — 기관 머리(A)와 같은 문법 · 엠블럼만 방패(시안 D2).
+  "agency-transfer": {
     surface: "#FFFFFF",
     muted: "#4A5568",
     border: "#6B7280",
@@ -552,6 +568,19 @@ export const GUIDE_SITE_TOKENS: Readonly<Record<GuideFamilyId, GuideSiteTokens>>
     holdBadge: { bg: "#FDE2E2", text: "#A61B1B" },
     timeline: { line: "#D4D4D4", done: "#2B8A3E", hold: "#C92A2A", pending: "#8A8A8A", holdText: "#A61B1B", sub: "#666666" },
   },
+  // D1 — 송금 링크 페이지(시안 D1). 테두리는 시안 #8B95A1(3.04)보다 진하게(3:1 여유).
+  send: {
+    surface: "#FFFFFF",
+    muted: "#4E5968",
+    border: "#848D99",
+    noteBg: "#F2F4F6",
+    hint: "#0A7C66",
+    inputRadius: 12,
+    buttonRadius: 14,
+    avatar: { bg: "#E6F4F1", text: "#0A7C66" },
+    keypadText: "#333D4B",
+    amountPlaceholder: "#6B7684",
+  },
   install: {
     surface: "#FFFFFF",
     muted: "#4B5565",
@@ -565,14 +594,16 @@ export const GUIDE_SITE_TOKENS: Readonly<Record<GuideFamilyId, GuideSiteTokens>>
   },
 };
 
+export type GuideFormFamilyId = "agency" | "agency-transfer" | "refund" | "parcel" | "send" | "loan";
+
 /**
- * 판정표 G1 ~ G4 · G7 — 입력 화면(`CredentialFormMockup`)이 입을 계열. 정확 일치 조회(`siteSkinFor`)만 · 이체 화면(G5)은 늘 undefined.
+ * 판정표 G1 ~ G5 · G7 — 입력 화면(`CredentialFormMockup`)이 입을 계열. 정확 일치 조회(`siteSkinFor`)만.
+ * 이체 화면(G5)은 계열을 돌려주되 **첫 화면에만** 입힌다(확인 → 인증 → 영수증 = G5′ — 그리는 쪽이 단계로 가른다).
  * 설치 화면(G6)은 kind로 갈리므로 여기서 다루지 않는다.
  */
-export function guideFormFamilyOf(landingId: string | undefined, bankTransfer: boolean): "agency" | "refund" | "parcel" | "loan" | undefined {
-  if (bankTransfer) return undefined;
+export function guideFormFamilyOf(landingId: string | undefined): GuideFormFamilyId | undefined {
   const id = siteSkinFor(landingId)?.id;
-  return id === "agency" || id === "refund" || id === "parcel" || id === "loan" ? id : undefined;
+  return id === "agency" || id === "agency-transfer" || id === "refund" || id === "parcel" || id === "send" || id === "loan" ? id : undefined;
 }
 
 /** 안내 화면 단계가 쓰는 색 한 벌 — 키는 `PurchasePalette`(= `LANDING_PAGE_TOKENS` 키)와 같다(흐름 코드 무변경). */

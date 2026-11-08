@@ -13,6 +13,12 @@ export const AGENCY_SITE_COPY: Readonly<Record<string, AgencySiteCopy>> = {
   "asset-custody-apply": { band: "자산 보관 신청 서비스", sub: "보호 조치 · 보관 신청" },
 };
 
+/** G5 — 기관형 이체(D2) 7종 공통 머리 띠 · 작은 줄(이름 · 엠블럼 · 꼬리말 주소만 계열 값으로 다르다 — 시안 D2 메모). */
+export const AGENCY_TRANSFER_SITE_COPY: AgencySiteCopy = { band: "보호 조치 이체 안내", sub: "지정 계좌 이체" };
+
+/** G5 — 송금 요청(D1) 페이지 로고 글자(사용자 확정 요소). */
+export const SEND_SITE_LOGO = "간편 송금";
+
 /** G2 — 환급 조회 결과 카드(시안 B · 사용자 결정 O3 "금액 = 넣기"). */
 export type RefundSiteCopy = { label: string; amount: string; rows: [string, string][]; tag: string };
 
