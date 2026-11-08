@@ -9,8 +9,9 @@ import type { SmsPurpose } from "../scenarios/flowVariants";
 import { personaCardPromptValue } from "../scenarios/personaCardCatalog";
 import { resolveChildGenderRule } from "../scenarios/messengerChildImpersonationKakao.prompt";
 import { applyFamilyAddressText, buildFamilyAddressBlock, type FamilyAddressPrompt } from "../scenarios/familyAddress";
-import { applyFictionalBank, EXAMPLE_ACCOUNT_NUMBER } from "../shared/fictionalBank";
+import { EXAMPLE_ACCOUNT_NUMBER } from "../shared/fictionalBank";
 import { cardBalanceWonFrom, fitPromptAmounts } from "../session/cardBalanceFit";
+import { applySessionBankText, cardBankUnnamed } from "../session/cardBankDesk";
 import { applyPersonaCardIdentityConfirm } from "./personaCardIdentity";
 
 // 사용자 신고(2026-07-25) — "사람과 대화한다는 느낌이 안 든다", "대화가 자연스럽지 않다",
@@ -1266,7 +1267,8 @@ export function buildSystemPrompt(
     : opts.sessionAccountNumber
       ? applySessionAccount(withCard, opts.sessionAccountNumber)
       : withCard;
-  const withBank = opts.fictionalBankName ? applyFictionalBank(withAccount, opts.fictionalBankName) : withAccount;
+  // 2026-11-09 판정표 BD(`session/cardBankDesk.ts`) — 카드 거래 은행 = 실제 은행이면 은행 창구 이름을 이름 없는 표기로(텍스트 경로 넘김 지시 포함 · 그 밖 = 종전).
+  const withBank = applySessionBankText(withAccount, opts.fictionalBankName, cardBankUnnamed(opts.personaCard));
   // ⭐ 2026-11-09 판정표 BL3 — 카드 잔액이 있으면 잔액형 금액 표기(수법 · 단계의 "980만 원" 등)를 문자와 같은 맞춘 금액으로(부재 = 바이트 무변경).
   return fitPromptAmounts(withBank, cardBalanceWonFrom(opts.personaCard));
 }

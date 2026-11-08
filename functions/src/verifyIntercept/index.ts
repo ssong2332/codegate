@@ -57,6 +57,7 @@ export {
   resolveModelToolVerifyGate,
   resolveVerifyOfferPlan,
 } from "./buildDoc";
+import { cardBankUnnamed } from "../session/cardBankDesk";
 import { resolveFictionalBankName } from "../shared/fictionalBank";
 
 /** 세션 소유권 검증 — 익명 uid(2인 챌린지 사용자2)도 자기 세션이면 그대로 성립한다(§14.7). */
@@ -270,14 +271,20 @@ export const deliverVerifyOffer = onCall<
     // 못하고 함수가 끝난다. 여기도 같은 이유로 "error"를 찍는다 — 판정 로직·게이트 순서는 그대로다.
     try {
       const anchor = await resolveAnchorScammerTurn(sessionId, callMode, scammerTurns);
-      await offerRef.create(buildVerifyInterceptDoc(item, Timestamp.now(), anchor, fictionalBankName));
+      await offerRef.create(buildVerifyInterceptDoc(item, Timestamp.now(), anchor, fictionalBankName, cardBankUnnamed(session.personaCard?.items)));
     } catch (err) {
       logOfferOutcome("error", "persist_failed");
       throw err;
     }
   }
 
-  const response = buildVerifyOfferResponse(item, { placed, ...(stage ? { stage } : {}), fictionalBankName });
+  const response = buildVerifyOfferResponse(item, {
+    placed,
+    ...(stage ? { stage } : {}),
+    fictionalBankName,
+    // 2026-11-09 판정표 BD — 카드 거래 은행 = 실제 은행이면 창구 이름 없는 표기.
+    unnamedCardBank: cardBankUnnamed(session.personaCard?.items),
+  });
   // ⭐ §59.6/§59.11 — 관측용 상태 태그. `announceInstruction` 유무를 그대로 재해석할 뿐 새로운
   // 판정을 추가하지 않는다(응답 필드 추가는 하위호환 — 이 값을 읽는 클라는 아직 없다).
   const status: DeliverVerifyOfferStatus = plan.includeInstruction ? "announced" : "already_announced";
@@ -312,6 +319,7 @@ export const deliverVerifyReconnect = onCall<
   const reconnectParts = buildVerifyReconnectParts(
     item,
     resolveFictionalBankName({ sessionId, fictionalBankName: session.fictionalBankName }),
+    cardBankUnnamed(session.personaCard?.items),
   );
 
   const db = getFirestore();
