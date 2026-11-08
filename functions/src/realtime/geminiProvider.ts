@@ -325,12 +325,19 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
             // ⚠️ `prefixPaddingMs: 300`은 **측정값이 아니라 판단값이다**(`agentSpeechGate.ts`의
             // `STALL_GRACE_MS`와 같은 형식) — 라이브 A/B로 검증하지 못했다(P-0/P-1 미실행, 아래
             // implementer 보고서 참고).
+            // ⭐ 2026-11-08(Edge 재시험 7 ~ 10 — 관찰 e · 사용자 결정 "전부 수정") — 위 두 값을 바꾼다. 판정표 E(`docs/research/asr-digits-drop-2026-11-08.md`):
+            // | # | 관찰 | 원인(근거) | 조치 |
+            // |---|---|---|---|
+            // | E1 | 두 문장 중 뒷문장 통째 누락("…김영희고요. 생년월일은 …" → 앞 문장만) | 문장 사이 쉼(Heami 860~870ms · 오프라인 측정) > 침묵 400ms → 턴 종료 → 응답 오디오가 오면 반이중 게이트가 뒷문장 프레임을 버림(2026-11-02 실 키 실측 400ms 4/15 · 800ms 0/5 — `card-realdevice-1102.md`) | `silenceDurationMs` 400 → 1000 |
+            // | E2 | 띄어 읽은 숫자 "칠, 팔, 오, 일, 삼, 육이요" → 전사 "6요" | 음절 200~330ms < `prefixPaddingMs` 300 → 발화 시작으로 확정 안 됨(추정 — 마지막 긴 음절만 남은 것과 맞다) · 음절 사이 쉼 500~580ms > 400 → 음절마다 턴 종료 | `prefixPaddingMs` 300 → 150(위 ⚠️가 미리 적어 둔 대응 · LOW 유지) · E1의 1000ms |
+            // ⚠️ 대가(G311): 모든 응답이 약 0.6초 늦어진다(침묵 대기 +600ms) · 짧은 잡음이 발화 시작으로 잡힐 여지가 조금 는다(반이중 게이트가 사기범 발화 중 마이크를 막는 것은 그대로).
+            // ⚠️ 1000 · 150은 오프라인 측정에서 고른 값이다 — 실 키 확인 실측은 승인 대기(PR 본문).
             realtimeInputConfig: {
               automaticActivityDetection: {
                 startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_LOW,
-                prefixPaddingMs: 300,
+                prefixPaddingMs: 150,
                 endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
-                silenceDurationMs: 400,
+                silenceDurationMs: 1000,
               },
             },
             // §59.5/§59.10 커밋 C — 이 세션에 걸리는 도구만 서버가 고정해 선언한다. ⚠️ T192 C3 — 빈 배열은 이제

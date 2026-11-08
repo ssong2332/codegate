@@ -99,14 +99,17 @@ const check429 = (text) => {
 
 const apiKey = readApiKey();
 // --silence-ms N — 발화 끝 판정(`silenceDurationMs`)만 바꿔 본다(측정용 · 나머지 토큰 설정은 운영 그대로). 토큰 발급 직전에 그 한 값만 덮는다.
+// --prefix-ms N — 2026-11-08(관찰 e) 발화 시작 문턱(`prefixPaddingMs`)도 같은 방식으로 덮는다(측정용).
 const silenceOverride = argVal("--silence-ms", "");
-if (silenceOverride) {
+const prefixOverride = argVal("--prefix-ms", "");
+if (silenceOverride || prefixOverride) {
   const tokensProto = Object.getPrototypeOf(new GoogleGenAI({ apiKey: "x" }).authTokens);
   const originalCreate = tokensProto.create;
   tokensProto.create = function (params) {
     const detection = params?.config?.liveConnectConstraints?.config?.realtimeInputConfig?.automaticActivityDetection;
     if (!detection) throw new Error("토큰 설정에 automaticActivityDetection 없음 — 덮지 않고 멈춘다");
-    detection.silenceDurationMs = Number(silenceOverride);
+    if (silenceOverride) detection.silenceDurationMs = Number(silenceOverride);
+    if (prefixOverride) detection.prefixPaddingMs = Number(prefixOverride);
     return originalCreate.call(this, params);
   };
 }

@@ -37,6 +37,24 @@ const HANGUL_TO_DIGIT: Record<string, string> = {
  * 발화에서 (D3)·(D4)로 잡히는 숫자열을 **아라비아 숫자만 남긴 문자열**로 돌려준다(공백·하이픈 제거, 한글 숫자 변환).
  * 없으면 빈 배열. 예: "공 사 팔 이 삼 일이요" → ["048231"], "048-231이요" → ["048231"], "1332로 전화" → [].
  */
+/**
+ * ⭐ 2026-11-08(Edge 재시험 7 · 8 — 관찰 e) — 인증번호 대조 후보. 음성 인식은 말끝 "이요"의 "이"를 숫자 2로 받아쓴다
+ * ("칠팔오일삼육이요" → 전사 "7851362" · "이공일팔육육이요" → "2018662" — 어미 "요"도 사라져 `extractSpokenCodes`의 "이"+"요" 처리가 못 닿는다).
+ * | # | If(뽑은 숫자열 · 정답 자릿수 L) | Then |
+ * |---|---|---|
+ * | C1 | 자릿수 = L | 후보(종전) |
+ * | C2 | 자릿수 = L + 1 · 끝 = "2" | 끝 "2"를 뺀 L자리를 후보로(말끝 "이"로 본다) |
+ * | C3 | 그 밖 | 후보 아님(전화 · 금액 등 — 종전) |
+ */
+export function otpCandidatesForLength(codes: readonly string[], length: number): string[] {
+  const out: string[] = [];
+  for (const code of codes) {
+    const candidate = code.length === length ? code : code.length === length + 1 && code.endsWith("2") ? code.slice(0, -1) : undefined;
+    if (candidate !== undefined && !out.includes(candidate)) out.push(candidate);
+  }
+  return out;
+}
+
 export function extractSpokenCodes(text: string): string[] {
   const codes: string[] = [];
   const add = (raw: string): void => {
