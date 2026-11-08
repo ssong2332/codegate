@@ -30,7 +30,7 @@
  * `repeatBreak` 행은 §104(메인 세션 지시 — 전수 검수 2차 결함 수정)로 추가했다.
  * | `chatDuringCall` | §121.7 — 통화 중 대화방 카톡 1쌍(참가자 · 사기범 답장) 메모(`chatDuringCall.ts`) | 맥락 주입(`turnComplete:false`) · **G31 큐 밖** · 침묵 넛지 대상 아님 |
  * `chatDuringCall` 행은 §121.7(메인 결정 "두 채널 맥락" — 통화 · 메신저 동시 사용 PR-3)으로 추가했다.
- * | `landingSubmitted` | §132.7 — 참가자가 문자 링크의 이체 화면을 처음 제출했다(서버 `recordInCallSmsEvent` 응답 `contextInstruction`) | 맥락 주입(`turnComplete:false`) · **G31 큐 밖** · 침묵 넛지 대상 아님 |
+ * | `landingSubmitted` | §132.7 — 참가자가 문자 링크의 이체 화면을 처음 제출했다(서버 `recordInCallSmsEvent` 응답 `contextInstruction`) | 맥락 주입(`turnComplete:false`) · **G31 큐 밖** · **화면 결과 침묵 넛지 대상**(아래 판정표 N — 2026-11-08 관찰 d) |
  * `landingSubmitted` 행은 §132.7(메인 세션 지시 — 실 키 회귀 프로브 N4)로 추가했다.
  * | `installConsented` | U2 — 참가자가 통화 중 문자 링크의 설치 화면에서 권한 허용을 처음 눌렀다(서버 `recordMockScreenEvent` 응답 `contextInstruction`) | 맥락 주입(`turnComplete:false`) · **G31 큐 밖** · 침묵 넛지 대상 아님 |
  * `installConsented` 행은 U2(실기기 신고 2026-11-01 — 말로만 "설치했다"에 다음 단계로 넘어감 · 메인 "권고 순서대로")로 추가했다.
@@ -86,18 +86,64 @@ export const SILENCE_NUDGE_RECHECK_MS = 1000;
  */
 export const SILENCE_NUDGE_TEXT = "(상대가 말이 없다. 방금 보낸 문자를 한 문장으로 언급하고 기다려라.)";
 
+/**
+ * ⭐ 2026-11-08(Edge 라이브 재시험 7 관찰 d · 사용자 결정 "전부 수정") — 화면 결과 침묵 넛지의 대기(초). **판단값**.
+ * 재시험 7: 출금 예약 보류 화면 뒤 사기범이 40초 넘게 말하지 않았다 — 보류 · 구매 · 예약 · 이체 결과 지시(`landingSubmitted`)가
+ * `turnComplete:false`라 응답을 부르지 않고, 침묵 넛지도 문자 안내(`smsAnnounce`)에만 걸렸기 때문이다. 실제 사기범은 상대가 화면을 마치면
+ * 몇 초 안에 먼저 확인 · 압박한다 ⇒ 문자 안내(8초)보다 짧게 둔다. 참가자가 그 전에 말하면 넛지는 취소되고 그 대답에 주입이 반영된다(종전대로).
+ */
+export const SCREEN_RESULT_SILENCE_SEC = 4;
+
+/**
+ * 화면 결과 침묵 넛지 문면 — `SILENCE_NUDGE_TEXT`와 같은 오케스트레이션 신호(낭독 대상 아님 · `silence` 종류라 전사에 남지 않는다).
+ * 무엇을 말할지는 방금 들어온 서버 지시(`(앱 확인: … 이번 대답에서 …)`)가 정한다 — 이 문면은 "지금 네가 먼저 말하라"만 준다.
+ * ⛔ 끊기 · 포기 · 횟수를 여기서 말하지 않는다(보류 지시의 H1 · H2를 이 문면이 덮지 않게 — `liveProbeObservations.test.ts` O1).
+ */
+export const SCREEN_RESULT_NUDGE_TEXT = "(상대가 화면을 마치고 말이 없다. 방금 들어온 앱 확인 내용대로 지금 네가 먼저 말하라.)";
+
+/** 침묵 넛지를 건 주입 종류. 표에 없는 종류는 넛지를 걸지 않는다. */
+export type SilenceNudgeReason = "smsAnnounce" | "landingSubmitted";
+
+/**
+ * 판정표 N — 어떤 맥락 주입 뒤 침묵 넛지를 거는가(2026-11-08 관찰 d). 전송 방식은 모든 행이 그대로 맥락 주입(`turnComplete:false` · X5)이고,
+ * 넛지는 기존 침묵 넛지 길(`silence` 큐 턴 — §71.5 큐 · 모델 유휴 · 종료 래치 G510 · 참가자 발화 취소 · 주입 1건당 1회)을 그대로 탄다.
+ *
+ * | 주입 종류 | 넛지 | 대기 | 문면 |
+ * |---|---|---|---|
+ * | N1 `smsAnnounce` | 예(종전 §82.4.2) | 8초 `SMS_MENTION_SILENCE_SEC` | `SILENCE_NUDGE_TEXT` |
+ * | N2 `landingSubmitted`(보류 · 금 구매 · 출금 예약 · 이체 · 상품권 · 대출 신청 결과) | **예(신규)** | 4초 `SCREEN_RESULT_SILENCE_SEC` | `SCREEN_RESULT_NUDGE_TEXT` |
+ * | N3 그 밖(`verifyAnnounce` · `speakerSwitch` · `smsNudge` · `confirmResult` · `verifyReconnectFailed` · `repeatBreak` · `chatDuringCall` · `installConsented` · `screenStatus`) | 아니오(종전) | — | — |
+ */
+export const SILENCE_NUDGE_RULES: Readonly<Record<SilenceNudgeReason, { silenceSec: number; text: string }>> = {
+  smsAnnounce: { silenceSec: SMS_MENTION_SILENCE_SEC, text: SILENCE_NUDGE_TEXT },
+  landingSubmitted: { silenceSec: SCREEN_RESULT_SILENCE_SEC, text: SCREEN_RESULT_NUDGE_TEXT },
+};
+
+/** 이 주입 종류가 침묵 넛지를 거는가(판정표 N) — 걸면 그 이유, 아니면 `null`. */
+export function silenceNudgeReasonFor(delivery: InstructionDelivery): SilenceNudgeReason | null {
+  return delivery === "smsAnnounce" || delivery === "landingSubmitted" ? delivery : null;
+}
+
+/** 대기 중인 넛지의 대기 시간(ms). 대기 중이 아니면 `null`. 이유가 없는 상태는 문자 안내(N1)로 본다. */
+export function silenceNudgeDelayMs(state: SilenceNudgeState): number | null {
+  if (state.armedAt === null) return null;
+  return SILENCE_NUDGE_RULES[state.reason ?? "smsAnnounce"].silenceSec * 1000;
+}
+
 /** 침묵 넛지 로그 접두어 — production에서도 남긴다(지연 로그 `LIVE_LATENCY_LOG_PREFIX`와 같은 관례). */
 export const LIVE_TURN_LOG_PREFIX = "[live-turn]";
 
 export type SilenceNudgeState = {
   /** 넛지를 기다리는 맥락 주입의 시각(ms). `null` = 대기 중인 주입 없음(취소됐거나 이미 넛지함). */
   armedAt: number | null;
+  /** 2026-11-08 관찰 d — 그 대기를 건 주입 종류(판정표 N). 없으면 문자 안내(N1). */
+  reason?: SilenceNudgeReason;
 };
 
 export const INITIAL_SILENCE_NUDGE_STATE: SilenceNudgeState = { armedAt: null };
 
 export type SilenceNudgeEvent =
-  /** 맥락 주입을 보냈다. 문자 안내(`smsAnnounce`)만 넛지 대상이다(문면이 "방금 보낸 문자"다). */
+  /** 맥락 주입을 보냈다. 넛지 대상은 판정표 N의 N1(문자 안내) · N2(화면 결과)뿐이다. */
   | { type: "injected"; delivery: InstructionDelivery; nowMs: number }
   /** 참가자가 말했다(음성 전사 조각 수신 · 타이핑 전송). 대기 중인 넛지를 취소한다. */
   | { type: "userSpeech"; nowMs: number }
@@ -108,34 +154,43 @@ export type SilenceNudgeEvent =
    */
   | { type: "tick"; nowMs: number; modelIdle: boolean; userSpeakingLocally: boolean };
 
-export type SilenceNudgeStep = { state: SilenceNudgeState; fire: boolean };
+export type SilenceNudgeStep = {
+  state: SilenceNudgeState;
+  fire: boolean;
+  /** `fire`일 때 보낼 넛지 문면(판정표 N — 대기를 건 주입 종류의 문면). */
+  text?: string;
+};
 
 /**
  * 침묵 넛지 전이(결정론적).
  *
  * | 이벤트 | 조건 | 결과 |
  * |---|---|---|
- * | `injected` | `smsAnnounce` | 이 시각으로 대기 시작(새 주입이 이전 대기를 대신한다 — 주입 1건당 1회) |
- * | `injected` | 그 외 | 변화 없음 |
+ * | `injected` | 판정표 N의 N1 · N2(`smsAnnounce` · `landingSubmitted`) | 이 시각 · 그 종류로 대기 시작(새 주입이 이전 대기를 대신한다 — 주입 1건당 1회) |
+ * | `injected` | 그 외(N3) | 변화 없음 |
  * | `userSpeech` | — | 대기 취소 |
  * | `tick` | 대기 중 · 로컬 입력 레벨이 임계 초과(참가자가 말하는 중) | 변화 없음(보류 — 전사가 오면 `userSpeech`로 취소된다) |
- * | `tick` | 대기 중 · `nowMs − armedAt ≥ 8초` · 모델 유휴 · 로컬 발화 없음 | **넛지 1회** + 대기 해제(같은 주입으로 두 번 나가지 않는다) |
+ * | `tick` | 대기 중 · `nowMs − armedAt ≥ 그 종류의 대기(N1 8초 · N2 4초)` · 모델 유휴 · 로컬 발화 없음 | **넛지 1회**(그 종류의 문면) + 대기 해제(같은 주입으로 두 번 나가지 않는다) |
  * | `tick` | 그 외 | 변화 없음 |
  */
 export function stepSilenceNudge(state: SilenceNudgeState, event: SilenceNudgeEvent): SilenceNudgeStep {
   switch (event.type) {
-    case "injected":
-      if (event.delivery !== "smsAnnounce") return { state, fire: false };
-      return { state: { armedAt: event.nowMs }, fire: false };
+    case "injected": {
+      const reason = silenceNudgeReasonFor(event.delivery);
+      if (reason === null) return { state, fire: false };
+      return { state: { armedAt: event.nowMs, reason }, fire: false };
+    }
     case "userSpeech":
       if (state.armedAt === null) return { state, fire: false };
       return { state: { armedAt: null }, fire: false };
-    case "tick":
-      if (state.armedAt === null) return { state, fire: false };
-      if (event.nowMs - state.armedAt < SMS_MENTION_SILENCE_SEC * 1000) return { state, fire: false };
+    case "tick": {
+      const delayMs = silenceNudgeDelayMs(state);
+      if (state.armedAt === null || delayMs === null) return { state, fire: false };
+      if (event.nowMs - state.armedAt < delayMs) return { state, fire: false };
       if (!event.modelIdle) return { state, fire: false };
       if (event.userSpeakingLocally) return { state, fire: false };
-      return { state: { armedAt: null }, fire: true };
+      return { state: { armedAt: null }, fire: true, text: SILENCE_NUDGE_RULES[state.reason ?? "smsAnnounce"].text };
+    }
   }
 }
 
