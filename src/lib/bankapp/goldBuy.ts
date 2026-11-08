@@ -98,6 +98,25 @@ export function lastGoldPurchase(ledgerKey: string, landingId: string): GoldPurc
 }
 
 /** 화면 문구(서버 카탈로그의 headline · bodyLines · submitLabel · successHeadline · issuerLabel은 `CREDENTIAL_LANDING_COPY`가 같은 글자로 갖는다 — 드리프트 테스트). */
+/**
+ * ⭐ 2026-11-08 웹 안의 웹 PR-3(시안 E · 사용자 승인 계획) — 금 거래소 첫 화면의 사이트 장식 문구(새 문구). 판정 · 금액 계산 · 한도에 쓰지 않는다.
+ * 1돈 환산 금액은 위 `GOLD_PRICE_PER_GRAM` × `donGrams`로 화면이 계산한다(새 숫자 0). 매장 수령 · 금 보관 메뉴 없음(서비스 밖 — §15.7).
+ */
+export const GOLD_SITE_COPY = {
+  sealGlyph: "海",
+  kicker: "GOLD BAR · 999.9",
+  donLabel: "1돈(3.75g)",
+  donGrams: 3.75,
+  barMark: "FINE GOLD",
+  cardBadge: "보증서 발급",
+  trust: ["순도 99.99%", "품질 보증서 발급"],
+} as const;
+
+/** 상품 카드 금괴 그림 위 중량 표기(10g · 37.5g · 1kg) — 상품 표의 그램 값에서 만든다. */
+export function goldWeightMark(grams: number): string {
+  return grams >= 1000 ? `${grams / 1000}kg` : `${grams}g`;
+}
+
 export const GOLD_COPY = {
   priceNote: "오늘 판매가 1g",
   quantityUnit: "개",

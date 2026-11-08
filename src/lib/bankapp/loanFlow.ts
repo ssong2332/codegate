@@ -12,6 +12,12 @@ export const LOAN_SAFE_TRANSFER_LANDING_ID = "loan-safe-transfer";
 /** 대출 용도(D-L2 — 사기범이 미리 정해 주지 않으면 참가자가 고른다). */
 export const LOAN_PURPOSES: readonly string[] = ["생활비", "사업자금", "주택 관련", "다른 대출 상환", "기타"];
 
+/**
+ * ⭐ 2026-11-08 웹 안의 웹 PR-3(시안 G) — 대출 화면 큰 제목 아래 진행 칩. 지금 흐름의 실제 순서(안내 · 본인 확인 → 한도 · 신청 → 약정 · 전자서명)다.
+ * ⚠️ 시안 그림은 "신청 · 본인 확인 · 전자서명" 순이었으나 흐름은 본인 확인이 먼저라 흐름 순서를 따른다(판정표 P 메모 · 흐름 무변경).
+ */
+export const LOAN_SITE_STEPS: readonly string[] = ["본인 확인", "신청", "전자서명"];
+
 /** 가상 캐피탈 이름을 문자 본문에서 읽는다(서버가 "○○캐피탈" 자리를 세션 이름으로 바꿔 저장한 값). 없으면 일반명. */
 export function lenderNameFromSmsBody(body: string | undefined): string {
   const match = body?.match(/([가-힣]{1,6}캐피탈)/);
