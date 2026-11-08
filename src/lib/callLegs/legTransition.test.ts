@@ -198,11 +198,11 @@ test("[11-07 수정 3 표] 넘김 뒤 라벨 — 넘김이면 보이던 라벨 �
 });
 
 test("[11-07 수정 3 표] 다시 연결 안내 — 통화 사이 · 새 통화 연결은 숨김 · 화면 꺼짐 뒤 다시 잇기만 보임", () => {
-  assert.equal(showsReconnectingNotice({ reconnecting: false, legScreen: "none", legOpening: false }), false);
-  assert.equal(showsReconnectingNotice({ reconnecting: true, legScreen: "holding", legOpening: false }), false);
-  assert.equal(showsReconnectingNotice({ reconnecting: true, legScreen: "dialer", legOpening: false }), false);
-  assert.equal(showsReconnectingNotice({ reconnecting: true, legScreen: "none", legOpening: true }), false);
-  assert.equal(showsReconnectingNotice({ reconnecting: true, legScreen: "none", legOpening: false }), true);
+  assert.equal(showsReconnectingNotice({ reconnecting: false, legScreen: "none", legOpening: false, endLatched: false }), false);
+  assert.equal(showsReconnectingNotice({ reconnecting: true, legScreen: "holding", legOpening: false, endLatched: false }), false);
+  assert.equal(showsReconnectingNotice({ reconnecting: true, legScreen: "dialer", legOpening: false, endLatched: false }), false);
+  assert.equal(showsReconnectingNotice({ reconnecting: true, legScreen: "none", legOpening: true, endLatched: false }), false);
+  assert.equal(showsReconnectingNotice({ reconnecting: true, legScreen: "none", legOpening: false, endLatched: false }), true);
 });
 
 test("[11-07 수정 3] 대기음 = 합성 톤(음원 0) · 발신 연결음과 다른 소리 · 상한이 넘김 대기보다 길다", () => {
@@ -233,7 +233,7 @@ test("[11-07 수정 3 배선] 넘김 = 통화 화면 유지 · 대기음 · 연�
   const hangup = page.slice(page.indexOf("const handleHangup = async () => {"), page.indexOf("const handleHangup = async () => {") + 900);
   assert.ok(hangup.includes("const meaning = hangupMeaning({") && hangup.includes('void hangupCurrentLeg("hangup");'));
   // 배너는 순수 판정으로만.
-  assert.ok(page.includes('reconnecting={showsReconnectingNotice({ reconnecting: realtime.status === "reconnecting", legScreen: legScreen.kind, legOpening })}'));
+  assert.ok(page.includes('reconnecting={showsReconnectingNotice({ reconnecting: realtime.status === "reconnecting", legScreen: legScreen.kind, legOpening, endLatched })}'));
   assert.ok(!page.includes('reconnecting={realtime.status === "reconnecting"}'));
   // 통화 사이 화면은 넘김 대기 때 아무것도 그리지 않는다(검은 화면 0).
   const screens = read("src/components/CallLegScreens.tsx");

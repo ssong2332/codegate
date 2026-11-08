@@ -28,7 +28,7 @@ import {
 } from "../scenarios/tacticFlavor";
 import type { MessengerChannel, RiskSignal, RiskSignalKind } from "../shared/types";
 import { resolveTacticCategory, type TacticCategory } from "./tacticCategory";
-import { CODE_DIGITS_WITH_ENDING, CODE_HANGUL_DIGITS, extractSpokenCodes } from "../shared/spokenDigits";
+import { CODE_DIGITS_WITH_ENDING, CODE_HANGUL_DIGITS, extractSpokenCodes, otpCandidatesForLength } from "../shared/spokenDigits";
 import { PHOTO_DEMAND } from "../roleplay/photoTurn";
 import { resolveAttemptedTacticLabels, resolveSecretCodeLabel } from "./attemptedTactics";
 
@@ -605,7 +605,9 @@ const OTP_ASKED =
 function isWrongOtpReply(scammerText: string, replyText: string, otpCodes: readonly string[]): boolean {
   if (otpCodes.length === 0 || !OTP_ASKED.test(scammerText)) return false;
   const lengths = new Set(otpCodes.map((code) => code.length));
-  const candidates = extractSpokenCodes(replyText).filter((code) => lengths.has(code.length));
+  // 2026-11-08(관찰 e) — 말끝 "이"가 숫자 2로 붙은 L+1자리도 끝 2를 빼고 후보로 본다(`otpCandidatesForLength` C2 — 서버 대조와 같은 규칙).
+  const spoken = extractSpokenCodes(replyText);
+  const candidates = [...lengths].flatMap((length) => otpCandidatesForLength(spoken, length));
   return candidates.length > 0 && !candidates.some((code) => otpCodes.includes(code));
 }
 

@@ -105,12 +105,13 @@ test("[§82.4 T1] 맥락 주입은 응답 대기 큐(dispatchClientTurn)를 거�
 });
 
 test("[§82.4.2 G543 배선] 침묵 넛지는 silence 큐 턴으로만 나가고 · 사용자 발화(음성 전사 · 타이핑)가 취소하며 · cause 로그를 남긴다", () => {
-  assert.ok(code.includes('dispatchClientTurn({ type: "request", turn: { kind: "silence", text: SILENCE_NUDGE_TEXT }, nowMs })'));
+  // 2026-11-08 관찰 d — 문면은 대기를 건 주입 종류가 정한다(판정표 N · `screenResultNudge.test.ts`).
+  assert.ok(code.includes('dispatchClientTurn({ type: "request", turn: { kind: "silence", text: step.text ?? SILENCE_NUDGE_TEXT }, nowMs })'));
   assert.ok(code.includes("console.info(LIVE_TURN_LOG_PREFIX, formatSilenceNudgeLog("));
   assert.ok(code.includes("if (sc.inputTranscription.text.trim()) noteUserSpeechForNudge();"));
   const sendFn = code.slice(code.indexOf("const sendClientTurn = "), code.indexOf("const dispatchClientTurn = "));
   assert.ok(sendFn.includes("noteUserSpeechForNudge();"), "타이핑 전송도 참가자 발화다");
-  assert.ok(code.includes("}, SMS_MENTION_SILENCE_SEC * 1000);"), "대기는 설계값 상수로만 건다");
+  assert.ok(code.includes("}, silenceNudgeDelayMs(silenceNudgeState) ?? SMS_MENTION_SILENCE_SEC * 1000);"), "대기는 설계값 상수(판정표 N)로만 건다");
   assert.ok(code.includes("clearSilenceNudgeTimer();\n      logLatencySummary();"), "언마운트 때 넛지 타이머를 지운다");
 });
 

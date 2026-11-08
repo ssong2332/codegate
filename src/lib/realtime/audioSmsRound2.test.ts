@@ -76,7 +76,8 @@ test("[§126 문자] 말하는 도중 주장 — 응답 중인 발화 수(flush 
 test("[§126 배선] 세션은 출력 전사에서 턴당 1회 알리고 · 화면은 같은 주장을 턴 끝에서 다시 세지 않는다", () => {
   const session = read("./GeminiVoiceSession.tsx");
   assert.ok(session.includes("if (!smsClaimRaisedThisTurn && scammerClaimsSmsSent(stripLeakedThought(scammerBuffer))) {"));
-  assert.ok(session.includes("handlersRef.current.onScammerSmsClaim?.(claimedUserTurns());"));
+  // 2026-11-08 판정표 CL(B1) — 같은 호출에 주장 대상 목적(그 시점 버퍼)을 함께 넘긴다.
+  assert.ok(session.includes("handlersRef.current.onScammerSmsClaim?.(claimedUserTurns(), smsClaimPurposes(stripLeakedThought(scammerBuffer)));"));
   // 선언 1 + flushTranscript · flushScammerTurn 초기화 2.
   assert.equal((session.match(/smsClaimRaisedThisTurn = false;/g) ?? []).length, 3, "선언 · flushTranscript · flushScammerTurn");
   const page = read("../../app/session/play/page.tsx");

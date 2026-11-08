@@ -23,6 +23,12 @@ export type DeliverInCallSmsRequest = {
   /** §104 — 백스톱에서만: 사기범이 이미 "문자를 보냈다"고 말했다(클라 주장 · 불리언 1개). 게이트가 열린 순간 바로 보낸다. 부재 = 종전. */
   smsClaimed?: boolean;
   /**
+   * 판정표 CL(2026-11-08 · 사용자 결정 B1 · `smsGate.ts` `claimTargetsPending`) — `smsClaimed`일 때만: 주장 문장이 가리키는 문자 목적(표기 판정 ·
+   * 화면 `toolWindow.ts` `smsClaimPurposes`). 모두 이미 도착한 목적이면 서버는 주장으로 보지 않는다. 부재 · 빈 목록 · enum 밖 값만 = 판정 불가(종전).
+   * 문장 원문은 싣지 않는다(목적 enum만).
+   */
+  smsClaimedPurposes?: string[];
+  /**
    * @deprecated 이 계약 이전 클라(캐시된 화면)가 보내는 값. 서버는 **읽지 않는다** — `userTurns`가 없는 요청은
    * 문자를 보내지 않고 `not_allowed`로 응답한다(옛 화면은 그 응답에 오류를 띄우지 않는다).
    */

@@ -325,12 +325,18 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
             // ⚠️ `prefixPaddingMs: 300`은 **측정값이 아니라 판단값이다**(`agentSpeechGate.ts`의
             // `STALL_GRACE_MS`와 같은 형식) — 라이브 A/B로 검증하지 못했다(P-0/P-1 미실행, 아래
             // implementer 보고서 참고).
+            // ⭐ 2026-11-08(Edge 재시험 7 ~ 10 — 관찰 e · 사용자 결정 "전부 수정") — 발화 끝 침묵만 바꾼다. 판정표 E(`docs/research/asr-digits-drop-2026-11-08.md`):
+            // | # | 관찰 | 원인(근거) | 조치 |
+            // |---|---|---|---|
+            // | E1 | 두 문장 중 뒷문장 통째 누락("…김영희고요. 생년월일은 …" → 앞 문장만) | 문장 사이 쉼(Heami 860~870ms · 오프라인 측정) > 침묵 400ms → 턴 종료 → 응답 오디오가 오면 반이중 게이트가 뒷문장 프레임을 버림(2026-11-02 실 키 실측 400ms 4/15 · 800ms 0/5 — `card-realdevice-1102.md`) | `silenceDurationMs` 400 → 1000(실 키 확인: 뒷문장 버림 2/2 → 0/2 · `live-mic-probe` 2026-11-08) |
+            // | E2 | 띄어 읽은 숫자 "칠, 팔, 오, 일, 삼, 육이요" → 전사 "6요" | 시작 문턱 추정(음절 200~330ms < 300ms)은 **실 키 실측에서 기각** — 400/300 · 1000/300 · 1000/150 세 조건 모두 6자리 전부 전사. Edge "6요"의 원인은 미확정 | 조치 없음 — `prefixPaddingMs` 300 유지(150은 효과 근거 0 · 잡음 위험만 남는다) |
+            // ⚠️ 대가(G311): 응답이 늦어진다 — 실 키 실측(같은 한 문장 클립 4개) 클립 끝 → 사기범 첫 오디오 평균 253ms → 877 · 730ms.
             realtimeInputConfig: {
               automaticActivityDetection: {
                 startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_LOW,
                 prefixPaddingMs: 300,
                 endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
-                silenceDurationMs: 400,
+                silenceDurationMs: 1000,
               },
             },
             // §59.5/§59.10 커밋 C — 이 세션에 걸리는 도구만 서버가 고정해 선언한다. ⚠️ T192 C3 — 빈 배열은 이제

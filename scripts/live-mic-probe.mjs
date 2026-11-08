@@ -99,14 +99,17 @@ const check429 = (text) => {
 
 const apiKey = readApiKey();
 // --silence-ms N — 발화 끝 판정(`silenceDurationMs`)만 바꿔 본다(측정용 · 나머지 토큰 설정은 운영 그대로). 토큰 발급 직전에 그 한 값만 덮는다.
+// --prefix-ms N — 2026-11-08(관찰 e) 발화 시작 문턱(`prefixPaddingMs`)도 같은 방식으로 덮는다(측정용).
 const silenceOverride = argVal("--silence-ms", "");
-if (silenceOverride) {
+const prefixOverride = argVal("--prefix-ms", "");
+if (silenceOverride || prefixOverride) {
   const tokensProto = Object.getPrototypeOf(new GoogleGenAI({ apiKey: "x" }).authTokens);
   const originalCreate = tokensProto.create;
   tokensProto.create = function (params) {
     const detection = params?.config?.liveConnectConstraints?.config?.realtimeInputConfig?.automaticActivityDetection;
     if (!detection) throw new Error("토큰 설정에 automaticActivityDetection 없음 — 덮지 않고 멈춘다");
-    detection.silenceDurationMs = Number(silenceOverride);
+    if (silenceOverride) detection.silenceDurationMs = Number(silenceOverride);
+    if (prefixOverride) detection.prefixPaddingMs = Number(prefixOverride);
     return originalCreate.call(this, params);
   };
 }
@@ -142,6 +145,9 @@ const scheduleGateClose = () => {
   }, remaining + (turnInProgress ? STALL_GRACE_MS : TAIL_GRACE_MS));
 };
 
+// 2026-11-08(관찰 e) — 측정 전용: 사기범 첫 오디오 시각들 · 마지막 참가자 클립이 끝난 시각.
+const agentStartTimes = [];
+let speechEndAt = null;
 let scammerText = "";
 let inputText = "";
 let scammerTurns = 0;
@@ -193,6 +199,7 @@ const session = await ai.live.connect({
         const ms = (Buffer.from(data, "base64").length / 2 / OUTPUT_RATE) * 1000;
         nextPlayAt = Math.max(nextPlayAt, now()) + ms;
         if (!agentSpeaking) {
+          agentStartTimes.push(now()); // 2026-11-08(관찰 e) — 응답 지연 측정용
           agentSpeaking = true;
           ev({ ev: "agentSpeaking" });
         }
@@ -243,7 +250,10 @@ const micTimer = setInterval(() => {
     }
     frame[i] = Math.max(-32768, Math.min(32767, Math.round(v * 32767)));
   }
-  if (speech && speech.pos >= speech.pcm.length) speech = null;
+  if (speech && speech.pos >= speech.pcm.length) {
+    speech = null;
+    speechEndAt = now();
+  }
   if (agentSpeaking) {
     stats.dropped++;
     if (inSpeech) stats.speechDropped++;
@@ -275,6 +285,8 @@ if (await waitFor((k) => k === "turn" || k === "close", 20000)) {
     const turnsBefore = scammerTurns;
     const pcm = readWavPcm(path.join(clipsDir, clipFiles[i]));
     speech = { pcm, pos: 0 };
+    speechEndAt = null;
+    const speakAt = now();
     ev({ ev: "userSpeak", i, phrase: phrases[i], gateOpen: !agentSpeaking });
     const replied = await waitFor((k) => (k === "turn" && scammerTurns > turnsBefore) || k === "close", REPLY_TIMEOUT_MS + (pcm.length / 16000) * 1000);
     const row = {
@@ -284,6 +296,13 @@ if (await waitFor((k) => k === "turn" || k === "close", 20000)) {
       replied,
       speechFramesSent: stats.speechSent - before.speechSent,
       speechFramesDropped: stats.speechDropped - before.speechDropped,
+      // 관찰 e — 클립 끝 → 사기범 첫 오디오(ms). 음수 = 클립이 끝나기 전에 사기범이 말하기 시작(뒷부분이 게이트에 막힌다). null = 응답 없음 · 클립 미완.
+      speechEndToAgentMs: (() => {
+        const start = agentStartTimes.find((t) => t > speakAt);
+        if (start === undefined) return null;
+        const clipEnd = speechEndAt ?? speakAt + (pcm.length / 16000) * 1000;
+        return Math.round(start - clipEnd);
+      })(),
     };
     results.push(row);
     ev({ ev: "result", ...row });
@@ -303,6 +322,7 @@ const summary = {
   legIndex,
   gainDb: Number(argVal("--gain-db", "0")),
   silenceMs: silenceOverride || "운영값",
+  prefixMs: prefixOverride || "운영값",
   overlapMs,
   stop429,
   utterances: results.length,

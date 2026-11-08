@@ -205,7 +205,7 @@ test("GeminiRealtimeProvider: 고정 프리셋 음성이라 클론 voiceId를 �
   }
 });
 
-test("GeminiRealtimeProvider: 응답 지연 튜닝 — 발화 종료 침묵 대기(silenceDurationMs)를 400ms로 토큰에 고정한다(2026-07-24 재조정)", async () => {
+test("GeminiRealtimeProvider: 발화 종료 침묵 대기(silenceDurationMs)를 1000ms로 토큰에 고정한다(2026-07-24 400ms → 2026-11-08 관찰 e 판정표 E1)", async () => {
   const capture = captureTokenRequest();
   try {
     const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
@@ -228,7 +228,8 @@ test("GeminiRealtimeProvider: 응답 지연 튜닝 — 발화 종료 침묵 대�
     // 사용자 신고(지연이 길다) 대응 재조정값 — Google 공식 문서 실측(서버 내부 기본값 약 800ms,
     // 100~200ms 이하는 문서가 명시하는 위험 구간)을 근거로 500ms→400ms로 낮췄다. 이 값이 실제로
     // 토큰 발급 요청에 실려 서버에 고정되는지를 검증해, 향후 되돌아가는 회귀를 잡는다.
-    assert.equal(aad?.silenceDurationMs, 400);
+    // ⭐ 2026-11-08(관찰 e · 판정표 E1) — 400 → 1000. 문장 사이 쉼(Heami 860~870ms)에 턴이 끝나 뒷문장이 반이중 게이트에 버려졌다(`asrInputDrop.test.ts`).
+    assert.equal(aad?.silenceDurationMs, 1000);
     assert.equal(aad?.endOfSpeechSensitivity, "END_SENSITIVITY_HIGH");
   } finally {
     capture.restore();

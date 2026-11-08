@@ -167,6 +167,7 @@ import {
   type VerifyOfferPhase,
 } from "@/lib/verifyintercept";
 import { scammerClaimsSmsSent, shouldFireBackstop, shouldRequestSmsBackstop } from "@/lib/realtime/toolWindow";
+import { mergeClaimPurposes, smsClaimPurposes, type SmsClaimPurpose } from "@/lib/realtime/toolWindow";
 import {
   countTranscriptFlush,
   deliveryForInstruction,
@@ -200,6 +201,7 @@ import InCallSmsOverlay from "@/components/InCallSmsOverlay";
 import CallLegScreens from "@/components/CallLegScreens";
 import {
   LEG_CALLBACK_DELAY_MS,
+  LEG_HANGUP_END_SCREEN_MS,
   LEG_INCOMING_CALL_DELAY_MS,
   LEG_DIAL_CONNECT_MS,
   LEG_TRANSFER_CONNECT_MS,
@@ -590,6 +592,8 @@ export default function SessionCallPage() {
   const currentCallRef = useRef<{ number: string; direction: "in" | "out"; atMs: number } | null>(null);
   // 참가자가 끊은 뒤 상대가 다시 걸어 오는 예약 — 다시 걸려 온 전화를 거절하면 더 걸어 오지 않는다(끝없는 재발신 0).
   const callbackAfterHangupRef = useRef(true);
+  // 2026-11-08 재시험 9(`legTransition.ts` 표 H5) — 참가자 끊기의 서버 기록(전사 제출 → `startCallLeg hangup`)이 끝나기 전 건 번호는 그 뒤에 서버로 간다.
+  const legHangupPendingRef = useRef<Promise<unknown> | null>(null);
   // §142 PR-4(R2) — 세션이 수신 벨이 아니라 시작 문자 · 전화 앱 화면에서 시작한다(세션 문서 `startSurface` — 서버 값). 첫 통화는 참가자가 건다.
   const [smsStart, setSmsStart] = useState(false);
   // 결함 ①(2026-11-06) — 수신 통화로 시작하는 다통화 세션의 첫 통화 발신자(서버 세션 문서 `startCallerLabel`). 받기 전 벨 화면도 이 번호다.
@@ -702,6 +706,8 @@ export default function SessionCallPage() {
   const smsBackstopRef = useRef({ lastRequestedUserTurns: -1, lastClaimRequestedUserTurns: -1, nonePending: false, inFlight: false, wrapUpSent: false });
   // §104 — 사기범이 "문자를 보냈다"고 말했고 아직 그 문자가 오지 않았다(`scammerClaimsSmsSent`). 다음 백스톱 질의에 실린다 · 도착 · none_pending이면 내린다.
   const smsClaimPendingRef = useRef(false);
+  // 판정표 CL(2026-11-08 · B1) — 대기 중인 주장들이 가리키는 문자 목적(합집합). 주장이 내려가면 비운다.
+  const smsClaimPurposesRef = useRef<SmsClaimPurpose[]>([]);
   // §132.9 — 하한 전 "보냈다" 주장에 정정 1줄을 이미 넣었는가(주장이 내려가면 초기화).
   const smsClaimCorrectedRef = useRef(false);
   // §108 — 주장이 생긴 사기범 턴에 바로 백스톱을 묻게 하는 깨우기 값(값 자체는 쓰지 않는다).
@@ -827,6 +833,8 @@ export default function SessionCallPage() {
       smsClaimPendingRef.current = true;
       // §108 — 다음 사용자 발화를 기다리지 않고 지금 묻는다(아래 백스톱 effect의 의존성).
       setSmsClaimTick((n) => n + 1);
+      // 판정표 CL(B1) — 이 주장이 가리키는 문자 목적(백스톱 effect는 렌더 뒤에 돌아 이 값을 읽는다).
+      smsClaimPurposesRef.current = mergeClaimPurposes(smsClaimPurposesRef.current, smsClaimPurposes(text));
     }
     // ⭐ §99 — 탭이 백그라운드에서 정리돼 새로고침되면 메모리의 전사가 사라진다. 같은 탭 sessionStorage에 같이 적어 두고
     // 통화 복원(새로고침) 때 되살린다(아래 로드 effect). 쓰기 실패는 무시한다(비차단).
@@ -1295,6 +1303,7 @@ export default function SessionCallPage() {
           scammerTranscriptTurns: claimedScammerTranscriptTurns(counters.scammerTranscriptTurns, smsClaimRaisedMidTurnRef.current),
           trigger: "backstop",
           ...(smsClaimPendingRef.current ? { smsClaimed: true } : {}),
+          ...(smsClaimPendingRef.current && smsClaimPurposesRef.current.length > 0 ? { smsClaimedPurposes: [...smsClaimPurposesRef.current] } : {}),
         });
         setSmsError(null);
         // R1(#465) — 아직 마치지 않은 화면이 있으면 남은 문자가 없어도 다음 발화에 다시 묻는다(화면 기록 줄이 매 발화 온다).
@@ -1304,6 +1313,8 @@ export default function SessionCallPage() {
         if (result.status === "delivered" || result.status === "none_pending" || result.status === "goal_pending") smsClaimPendingRef.current = false;
         // §132.9 — 주장이 내려가면 정정 1회 표시도 초기화(다음 주장에 다시 1회).
         if (!smsClaimPendingRef.current) smsClaimCorrectedRef.current = false;
+        // 판정표 CL(B1) — 주장이 내려가면 대상 목록도 비운다.
+        if (!smsClaimPendingRef.current) smsClaimPurposesRef.current = [];
         // §53.6 (3) — 전환이 끝난 오퍼가 연 문자에는 announce 값이 없다(서버가 생략) — 그때는 주입하지 않는다.
         if (result.status === "delivered") {
           // PR-A2(audit-A R1) — 결과 신호 판정을 안내를 큐에 넣기 **전에** 한다(위 `offerConfirmResult` 주석).
@@ -1355,9 +1366,10 @@ export default function SessionCallPage() {
 
   // ⭐ §126 — 사기범이 말하는 도중 "문자를 보냈다"가 보였다(`GeminiVoiceSession` 출력 전사 · 턴당 1회). 턴 끝 flush를 기다리지 않고
   // 위 백스톱 effect를 깨워 주장 질의를 보낸다 — 게이트가 열려 있으면 문자가 그 말과 함께 도착한다.
-  const handleScammerSmsClaim = useCallback((claimedUserTurns: number) => {
+  const handleScammerSmsClaim = useCallback((claimedUserTurns: number, purposes: SmsClaimPurpose[]) => {
     smsClaimRaisedMidTurnRef.current = true;
     smsClaimPendingRef.current = true;
+    smsClaimPurposesRef.current = mergeClaimPurposes(smsClaimPurposesRef.current, purposes);
     smsClaimUserTurnsRef.current = Math.max(smsClaimUserTurnsRef.current, claimedUserTurns);
     setSmsClaimTick((n) => n + 1);
   }, []);
@@ -1847,6 +1859,8 @@ export default function SessionCallPage() {
     setLegDialing(false);
     legSwitchingRef.current = false;
     setEndLatched(false);
+    // 2026-11-08 재시험 9(표 H6) — 참가자가 끊은 뒤 내내 "통화 종료"였던 경과 자리를 새 통화에서 되돌린다.
+    setLocalHangup(false);
     // §142 D1 — 새 통화 = 새 레그: 백스톱 질의를 다시 연다. 앞 레그의 `none_pending`(질의 멈춤) · 마무리 지시 1회 표시가 남으면
     // 뒤 레그의 문자(안전계좌) · 넘김 지시가 오지 않는다.
     smsBackstopRef.current.nonePending = false;
@@ -1865,6 +1879,12 @@ export default function SessionCallPage() {
     if (!sessionId) return;
     setLegDialing(true);
     try {
+      // 2026-11-08 재시험 9(표 H5) — 방금 끊은 통화의 서버 기록이 먼저(아직이면 서버가 진행 중 통화로 보고 훈련을 끝낸다).
+      await legHangupPendingRef.current;
+      if (!endCallMountedRef.current || isEndLatched(callEndingRef.current)) {
+        setLegDialing(false);
+        return;
+      }
       const result = await startCallLeg({ sessionId, action, ...(dialed ? { dialed } : {}) });
       if (!endCallMountedRef.current) return;
       if (result.status === "connected") {
@@ -2012,25 +2032,32 @@ export default function SessionCallPage() {
       setPhoneCallLog((log) => [...log, { number: shownLabel, direction: kind === "decline" ? "declined" : "out", atMs: Date.now() }]);
     }
     if (kind === "decline") callbackAfterHangupRef.current = false;
-    try {
-      await flushTranscript(legDiag);
-    } catch {
-      // 제출 실패는 끊기를 막지 않는다(종료 때 다시 제출된다).
-    }
-    let response: { status: string } | null = null;
-    try {
-      response = await startCallLeg({ sessionId, action: "hangup" });
-    } catch {
-      response = null;
-    }
+    // 2026-11-08 재시험 9(`legTransition.ts` 표 H1 · H2) — 끊기는 서버 응답(전사 제출 + 서버 — 콜드 스타트면 10초 넘게)을 기다리지 않고
+    // "통화 종료"를 잠깐 보인 뒤 전화 앱으로 간다. 응답이 훈련 종료(H4)면 `endTrainingFromLeg`가 이 예약을 지운다.
+    if (kind === "hangup") legTimeout(() => setLegScreen(screenAfterParticipantHangup()), LEG_HANGUP_END_SCREEN_MS);
+    const pending = (async (): Promise<{ status: string } | null> => {
+      try {
+        await flushTranscript(legDiag);
+      } catch {
+        // 제출 실패는 끊기를 막지 않는다(종료 때 다시 제출된다).
+      }
+      try {
+        return await startCallLeg({ sessionId, action: "hangup" });
+      } catch {
+        return null;
+      }
+    })();
+    legHangupPendingRef.current = pending;
+    const response = await pending;
+    if (legHangupPendingRef.current === pending) legHangupPendingRef.current = null;
     if (!endCallMountedRef.current) return;
     if (afterHangupResponse(response) === "end_training") {
       // 서버가 이 행동을 모른다(배포 전) · 실패 — 종전대로 훈련 종료(AC-006 종료는 항상 성공).
       endTrainingFromLeg();
       return;
     }
-    setLocalHangup(false);
-    setLegScreen(screenAfterParticipantHangup());
+    // 끊기(hangup)는 위 예약이 전화 앱으로 옮긴다 · 경과 자리 "통화 종료"는 다음 통화 연결(`connectLeg`)까지 둔다(표 H6).
+    if (kind !== "hangup") setLegScreen(screenAfterParticipantHangup());
     // 실제 사기범처럼 상대가 다시 걸어 온다(D4와 같은 시간) — 걸려 온 전화를 거절했으면 더 걸지 않는다.
     if (callbackAfterHangupRef.current) legTimeout(() => void openNextLeg("callback"), LEG_CALLBACK_DELAY_MS);
   };
@@ -3592,7 +3619,7 @@ export default function SessionCallPage() {
           경고색 · 점멸 0(`role="status"`). "계속하기" 탭은 iOS에서 소리 · 마이크를 다시 켜는 사용자 동작도 된다(위 탭 안전망). */}
       {callMode === "realtime" && phase === "live" && (
         <ScreenOffNotice
-          reconnecting={showsReconnectingNotice({ reconnecting: realtime.status === "reconnecting", legScreen: legScreen.kind, legOpening })}
+          reconnecting={showsReconnectingNotice({ reconnecting: realtime.status === "reconnecting", legScreen: legScreen.kind, legOpening, endLatched })}
           returned={showReturnNotice}
           keepAwakeUnavailable={wakeLockStatus === "unsupported" || wakeLockStatus === "denied"}
           onDismissReturned={() => setShowReturnNotice(false)}

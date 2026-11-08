@@ -93,8 +93,59 @@ export type ShouldRequestSmsBackstopInput = {
 // ⭐ §126 — 운영 실기(2026-10-24) 문장 *"방금 문자로 발송해 드린 인증번호"*를 놓쳤다("발송해 드린" · 대상 "인증번호" 없음) ⇒ 두 꼴을 더했다.
 export const SMS_SENT_CLAIM =
   /문자(?:로)?\s*(?:를\s*)?(?:보내\s*드렸|보내드렸|보냈|보내\s*드린|보내드린|보낸|발송(?:해\s*드렸|해\s*드린|했|됐|한|된))|(?:보내\s*드린|보내드린|보낸|발송한|발송된|발송해\s*드린)\s*(?:문자|링크|안내|주소|인증\s*번호)/;
+/**
+ * ⭐ 2026-11-08(라이브 재시험 8 · 사용자 결정 A1) — 이미 와 있는 문자 속 내용을 가리키는 꼴("문자로 간 인증번호" · "문자에 온 계좌").
+ * 위 `SMS_SENT_CLAIM`(폴백 `roleplay/smsClaim.ts`와 글자까지 같아야 한다)은 건드리지 않고 화면 쪽에만 더한다. 대상은 목적을 판정할 수 있는 말
+ * (인증번호 · 계좌)로만 둔다 — 대상 없는 "문자로 온 안내"는 이미 받은 문자를 가리킨 말일 때 다음 문자를 당길 수 있어(판정표 CL2) 넣지 않는다.
+ */
+export const SMS_ARRIVED_REFERENCE = /문자\s*(?:로|에)\s*(?:간|온|도착한|들어간|들어온|받으신)\s*(?:의\s*)?(?:계좌|인증\s*(?:번호|코드))/;
 export function scammerClaimsSmsSent(scammerText: string): boolean {
-  return SMS_SENT_CLAIM.test(scammerText);
+  return SMS_SENT_CLAIM.test(scammerText) || SMS_ARRIVED_REFERENCE.test(scammerText);
+}
+
+// ── 판정표 CL(2026-11-08 라이브 재시험 9 · 사용자 결정 B1) — "보냈다" 주장이 가리키는 문자 목적(표기 판정) ──
+// 서버(`functions/src/inCallSms/smsGate.ts` `claimTargetsPending`)는 대상이 모두 이미 도착한 목적이면 주장으로 보지 않는다(CL3).
+// 주장 꼴이 맞은 자리 앞 15자 ~ 뒤 10자(같은 문장 안)만 본다 — 같은 문장 뒤쪽의 다음 단계 말("… 불러 주시면 안전계좌로 옮기겠습니다")을 대상으로 세지 않게.
+// | 목적 | 대상 말 |
+// |---|---|
+// | identity | 인증번호 · 인증 코드 · 인증 문자 · 확인 번호 |
+// | transfer | 계좌 · 이체 · 입금 · 송금 · 출금 · 거래소 |
+// | link | 앱 · 어플 · 설치 · 사이트 · 신청 |
+// ⛔ "링크 · 주소 · 안내 · 화면"은 목적을 정하지 않는다(계좌 문자에도 링크가 있다) — 그 말만 있으면 빈 목록 = 판정 불가(종전 주장).
+export type SmsClaimPurpose = "identity" | "transfer" | "link";
+const CLAIM_PURPOSE_WORDS: ReadonlyArray<readonly [SmsClaimPurpose, RegExp]> = [
+  ["identity", /인증\s*(?:번호|코드|문자)|확인\s*번호/],
+  ["transfer", /계좌|이체|입금|송금|출금|거래소/],
+  ["link", /앱|어플|설치|사이트|신청/],
+];
+const CLAIM_WINDOW_BEFORE = 15;
+const CLAIM_WINDOW_AFTER = 10;
+const SENTENCE_END = /[.?!。\n]/;
+
+export function smsClaimPurposes(scammerText: string): SmsClaimPurpose[] {
+  const found = new Set<SmsClaimPurpose>();
+  for (const pattern of [SMS_SENT_CLAIM, SMS_ARRIVED_REFERENCE]) {
+    const global = new RegExp(pattern.source, "g");
+    for (const match of scammerText.matchAll(global)) {
+      const start = match.index ?? 0;
+      const end = start + match[0].length;
+      let from = Math.max(0, start - CLAIM_WINDOW_BEFORE);
+      const before = scammerText.slice(from, start);
+      const lastEnd = Math.max(...[...before].map((ch, i) => (SENTENCE_END.test(ch) ? i : -1)));
+      if (lastEnd >= 0) from += lastEnd + 1;
+      let after = scammerText.slice(end, end + CLAIM_WINDOW_AFTER);
+      const cut = after.search(SENTENCE_END);
+      if (cut >= 0) after = after.slice(0, cut);
+      const window = scammerText.slice(from, start) + match[0] + after;
+      for (const [purpose, words] of CLAIM_PURPOSE_WORDS) if (words.test(window)) found.add(purpose);
+    }
+  }
+  return CLAIM_PURPOSE_WORDS.map(([purpose]) => purpose).filter((purpose) => found.has(purpose));
+}
+
+/** 대기 중인 주장의 대상 목록에 새 주장의 대상을 합친다(순서 = 표 순서 · 중복 0). */
+export function mergeClaimPurposes(current: readonly SmsClaimPurpose[], next: readonly SmsClaimPurpose[]): SmsClaimPurpose[] {
+  return CLAIM_PURPOSE_WORDS.map(([purpose]) => purpose).filter((purpose) => current.includes(purpose) || next.includes(purpose));
 }
 
 // ⭐ §108(2026-10-22 실기 신고 *"문자 발송이 여전히 느리게 온다"*) — 주장이 생긴 **그 사기범 턴에 바로** 묻는다(다음 사용자 발화를 기다리지 않는다).

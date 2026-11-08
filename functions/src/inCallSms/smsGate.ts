@@ -15,7 +15,7 @@
 // | 1 | `purpose`가 변형 `sms` 선언에 없다(enum 밖 · 부재 포함) | `not_allowed`(쓰기 0) |
 // | 2 | 그 목적의 문자가 이미 도착 | `already_delivered`(쓰기 0) |
 // | 2-b | ⭐ D-c(P2 실측 2026-11-01) — 선언 순서상 **앞선 필수 문자**가 아직 도착하지 않았다(선택 문자는 막지 않는다) | `too_early` |
-// | 3 | `userTurns < max(item.notBeforeUserTurns, FIRST_SMS_MIN_USER_TURNS)` | `too_early` |
+// | 3 | `userTurns < max(하한, FIRST_SMS_MIN_USER_TURNS)` — 하한 = 판정표 F(`explicitFloor`면 `explicitNotBeforeUserTurns ?? notBeforeUserTurns` · 그 밖 `notBeforeUserTurns`) | `too_early` |
 // | 4 | 직전 문자 도착 이후 사용자 발화 `< MIN_USER_TURNS_BETWEEN_SMS`(명시 요청이면 `MIN_USER_TURNS_BETWEEN_SMS_EXPLICIT` — §126) | `too_soon` |
 // | 5 | 그 외 | `allowed` |
 //
@@ -27,6 +27,27 @@
 // | `userTurns === openAt + 간격` | `nudge` 1회(정확히 그 발화에서만 — 상태 저장 없이 1회가 된다) |
 // | 그 외 | `wait` |
 // 간격 = 그 문자 선언의 `backstopUserTurns`(§124 — 변형별) · 부재면 `BACKSTOP_USER_TURNS`.
+//
+// ── 판정표 F(2026-11-08 라이브 재시험 8 · 사용자 결정 A1) — 3행 하한을 누가 요청했는가로 고른다(`explicitFloor`) ──
+// | # | If | Then(3행 하한) |
+// |---|---|---|
+// | F1 | 실시간 명시 요청(`deliverInCallSms` 모델 도구 · 사기범 "보냈다" 주장 백스톱 — `explicitFloor: true`) ∧ 선언에 `explicitNotBeforeUserTurns`가 있다 | 그 값 |
+// | F2 | 실시간 명시 요청 ∧ 그 값이 없다 | `notBeforeUserTurns`(종전) |
+// | F3 | 그 밖 — 자동 백스톱(넛지 · 강제 발송) · 텍스트 폴백 전부(마커 · 대사 주장 · 인증번호 요구 가드 O2 — §132.17 · §132.19가 하한 5까지 단계를 붙잡는다) | `notBeforeUserTurns`(종전) |
+// ⚠️ 문자 간격(4행 · `explicit`)과 별개 입력이다 — 폴백 대사 주장은 간격 1(§126)이지만 하한은 종전 그대로다.
+// 근거: 기관 사칭 고급 인증번호 문자 하한 5(§127 — 자동 백스톱이 인증번호 단계보다 먼저 강제하던 것을 막으려고 올린 값)가 모델 도구 호출에도 걸려,
+// 흐름이 인증번호 단계에 먼저 이른 통화에서 도구가 거절되고 사기범 말보다 문자가 늦었다(재시험 8 · `smsTimingOrder.test` 재현).
+//
+// ── 판정표 CL(2026-11-08 라이브 재시험 9 · 사용자 결정 B1) — "보냈다" 주장이 가리키는 문자(`claimTargetsPending`) ──
+// 클라가 주장 문장의 대상을 표기로 판정해 목적 목록을 싣는다(`smsClaimedPurposes` — 화면 `toolWindow.ts` `smsClaimPurposes`).
+// | # | If | Then |
+// |---|---|---|
+// | CL1 | 주장 없음 | 종전(주장 아님) |
+// | CL2 | 주장 · 대상 목록이 없거나 비었다(판정 불가) | 주장으로 본다(종전 §104 · §126) |
+// | CL3 | 주장 · 대상이 1개 이상이고 모두 **이미 도착한** 문자의 목적이다 | 주장으로 보지 않는다(이미 받은 문자를 가리킨 말 — 다음 문자를 당기지 않는다 · 정정 문면 0) |
+// | CL4 | 그 밖(아직 안 간 목적을 하나라도 가리킨다) | 주장으로 본다(종전) |
+// 근거: 인증번호 문자가 도착한 뒤 사기범이 "보내 드린 인증번호를 불러 달라"고 하면 그 말이 주장으로 잡혀, 서버가 남은 첫 필수 문자(안전계좌)를 몇 초 만에
+// 보냈다 — 참가자가 인증번호를 불러 주기 전에 계좌 문자가 왔다(재시험 9 · `smsTimingOrder.test` 재현). 폴백 경로는 이미 `claimMatchesPurpose`로 막는다.
 import type { AmountComparison } from "../roleplay/screenAction";
 import { currentLegIndex, legStartUserTurns, type RelayState } from "../callLegs/legPlan";
 import type { FlowVariantSms, SmsPurpose } from "../scenarios/flowVariants";
@@ -91,6 +112,8 @@ export type SmsGateInput = {
   userTurns: number;
   /** §126 — 명시 요청(모델 도구 · 사기범 주장)이면 간격 `MIN_USER_TURNS_BETWEEN_SMS_EXPLICIT`. 부재 · false = 종전 2. */
   explicit?: boolean;
+  /** 판정표 F(2026-11-08 · A1) — 3행 하한에 `explicitNotBeforeUserTurns`를 쓴다(실시간 모델 도구 · 주장 백스톱만). 부재 · false = 종전. */
+  explicitFloor?: boolean;
 };
 
 /** §126 — 판정 4행의 간격. */
@@ -104,9 +127,10 @@ export function lastArrivalUserTurns(delivered: readonly DeliveredSmsRecord[]): 
   return Math.max(...delivered.map((d) => d.userTurnsAtArrival ?? 0));
 }
 
-/** 이 항목의 게이트 3 하한. */
-function earliestUserTurns(item: FlowVariantSms): number {
-  return Math.max(item.notBeforeUserTurns, FIRST_SMS_MIN_USER_TURNS);
+/** 이 항목의 게이트 3 하한(판정표 F — 명시 요청이면 `explicitNotBeforeUserTurns`). */
+function earliestUserTurns(item: FlowVariantSms, explicitFloor?: boolean): number {
+  const floor = explicitFloor === true ? (item.explicitNotBeforeUserTurns ?? item.notBeforeUserTurns) : item.notBeforeUserTurns;
+  return Math.max(floor, FIRST_SMS_MIN_USER_TURNS);
 }
 
 /** ⛔ 판정표 순서 그대로(위 머리 주석). 부수효과 0. */
@@ -118,7 +142,7 @@ export function resolveSmsGate(input: SmsGateInput): SmsGateResult {
   if (input.delivered.some((d) => d.smsId === item.smsId)) return { status: "already_delivered", item };
   // ⭐ D-c(P2 실 키 실측 2026-11-01 — 카드 `fv-w3dq` 이관 문자가 설치 문자보다 먼저 · 환급 `fv-aqx2` 수수료 문자가 신청 링크보다 먼저) — 선언 순서 = 단계 순서다.
   if (earlierRequiredPending(item, input.declared, input.delivered)) return { status: "too_early", item };
-  if (input.userTurns < earliestUserTurns(item)) return { status: "too_early", item };
+  if (input.userTurns < earliestUserTurns(item, input.explicitFloor)) return { status: "too_early", item };
   const last = lastArrivalUserTurns(input.delivered);
   if (last !== undefined && input.userTurns - last < smsSpacingFor(input.explicit)) {
     return { status: "too_soon", item };
@@ -150,10 +174,31 @@ export function gateOpensAtUserTurns(
   item: FlowVariantSms,
   delivered: readonly DeliveredSmsRecord[],
   explicit?: boolean,
+  /** 판정표 F — 부재 · false = 종전 하한. */
+  explicitFloor?: boolean,
 ): number {
   const last = lastArrivalUserTurns(delivered);
   const afterLast = last === undefined ? 0 : last + smsSpacingFor(explicit);
-  return Math.max(earliestUserTurns(item), afterLast);
+  return Math.max(earliestUserTurns(item, explicitFloor), afterLast);
+}
+
+/**
+ * 판정표 CL(머리 주석) — "보냈다" 주장이 아직 안 간 문자를 가리킬 수 있는가. `false`면 이번 질의는 주장 없이 판정한다(CL3).
+ * `claimedPurposes` = 클라가 보낸 대상 목적 목록(검증 전 원값 — 배열이 아니거나 목적 enum 밖 값만 있으면 판정 불가 = CL2).
+ * 도착 기록의 목적은 선언(`declared`)에서 찾는다 — 선언에 없는 도착 문자(다른 레그 등)는 "도착한 목적"으로 세지 않는다(보수 쪽 = 종전).
+ */
+export function claimTargetsPending(
+  claimedPurposes: unknown,
+  declared: readonly FlowVariantSms[],
+  delivered: readonly DeliveredSmsRecord[],
+): boolean {
+  if (!Array.isArray(claimedPurposes)) return true; // CL2
+  const purposes = claimedPurposes.filter(isSmsPurpose);
+  if (purposes.length === 0) return true; // CL2
+  const deliveredPurposes = new Set(
+    declared.filter((item) => delivered.some((d) => d.smsId === item.smsId)).map((item) => item.purpose),
+  );
+  return !purposes.every((purpose) => deliveredPurposes.has(purpose)); // CL3 = false · CL4 = true
 }
 
 /**
@@ -182,7 +227,7 @@ export function planSmsBackstop(
   const openAt = gateOpensAtUserTurns(target, input.delivered);
   // §126 — 주장이 있으면 명시 요청 간격(1)으로 연다(하한 `notBeforeUserTurns` · 첫 문자 하한은 그대로).
   if (input.claimed === true) {
-    if (input.userTurns >= gateOpensAtUserTurns(target, input.delivered, true)) return { action: "deliver", item: target };
+    if (input.userTurns >= gateOpensAtUserTurns(target, input.delivered, true, input.explicitFloor)) return { action: "deliver", item: target };
   }
   // §124 — 변형이 문자마다 간격을 줄 수 있다(부재 = 종전 2).
   const step = target.backstopUserTurns ?? BACKSTOP_USER_TURNS;
@@ -214,12 +259,13 @@ export function correctModelSmsPurpose(input: SmsGateInput): {
   alreadyDeliveredInstruction?: string;
 } {
   // §126 — 모델 도구 호출은 명시 요청이다(간격 1 · 발송 통로도 같은 값으로 다시 판정한다).
+  // 판정표 F — `explicitFloor`는 호출부 값 그대로(실시간 모델 도구 = true).
   const gate = resolveSmsGate({ ...input, explicit: true });
   if (gate.status === "already_delivered" && gate.item !== undefined) {
     return { purpose: input.purpose, alreadyDeliveredInstruction: buildSmsAlreadyDeliveredInstruction(gate.item.purpose) }; // P-2a
   }
   if (gate.status !== "not_allowed") return { purpose: input.purpose };
-  const plan = planSmsBackstop({ declared: input.declared, delivered: input.delivered, userTurns: input.userTurns, claimed: true });
+  const plan = planSmsBackstop({ declared: input.declared, delivered: input.delivered, userTurns: input.userTurns, claimed: true, explicitFloor: input.explicitFloor });
   if (plan.action !== "deliver") return { purpose: input.purpose };
   return {
     purpose: plan.item.purpose,
@@ -259,7 +305,11 @@ export function resolveDeclaredSms(
     declared: declared
       .filter((item) => (item.leg ?? 0) === leg)
       .filter((item) => item.whenLoanReview === undefined || item.whenLoanReview === legScope.loanReview)
-      .map((item) => ({ ...item, notBeforeUserTurns: item.notBeforeUserTurns + offset })),
+      .map((item) => ({
+        ...item,
+        notBeforeUserTurns: item.notBeforeUserTurns + offset,
+        ...(item.explicitNotBeforeUserTurns !== undefined ? { explicitNotBeforeUserTurns: item.explicitNotBeforeUserTurns + offset } : {}),
+      })),
   };
 }
 

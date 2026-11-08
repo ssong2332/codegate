@@ -154,17 +154,40 @@ export function labelAfterLegConnect(input: { via: "dial" | "transfer" | "callba
 }
 
 /**
+ * 2026-11-08 Edge 재시험 9(기관 고급 fv-c5fj · 세션 ef7d1123) — 참가자가 끊은 뒤 통화 화면이 서버 응답(전사 제출 + `startCallLeg hangup`,
+ * 둘 다 콜드 스타트 — 서버 로그로 약 11초)까지 남았고 그동안 "다시 연결" 안내가 떴다. 참가자 끊기(그 통화만) 화면 순서:
+ * | # | If | Then |
+ * |---|---|---|
+ * | H1 | 통화 종료 누름 ~ `LEG_HANGUP_END_SCREEN_MS` | 통화 화면 · 경과 자리 "통화 종료" · 다시 연결 안내 0(아래 R2) |
+ * | H2 | `LEG_HANGUP_END_SCREEN_MS` 지남(서버 응답 전이어도) | 전화 앱 최근 기록(`screenAfterParticipantHangup`) |
+ * | H3 | 서버 응답 `ended` | `LEG_CALLBACK_DELAY_MS` 뒤 상대가 다시 걸어 온다(종전) |
+ * | H4 | 서버 응답 그 밖 · 실패 | 훈련 종료(종전 `afterHangupResponse`) |
+ * | H5 | 서버 끊기 기록 전에 참가자가 번호를 눌러 건다 | 끊기 기록이 끝난 뒤 건다(진행 중 통화로 판정돼 훈련이 끝나지 않게) · 끊기 응답이 훈련 종료면 걸지 않는다 |
+ * | H6 | 끊은 뒤 ~ 다음 통화 연결 | 통화 화면 경과 자리는 "통화 종료" 그대로(가려진 통화 화면의 시간이 다시 흐르지 않는다) |
+ * 다시 걸려 온 전화 거절 · 발신 취소는 종전(서버 응답 뒤 전화 앱).
+ * 1.5초는 판단값(실기 대조 전) — 실제 휴대폰도 끊은 직후 "통화 종료"를 잠깐 보인 뒤 앞 화면으로 돌아간다(추정 — 확인 방법: 실기 화면 녹화 대조).
+ */
+export const LEG_HANGUP_END_SCREEN_MS = 1500;
+
+/**
  * 통화 화면 "다시 연결하고 있어요" 안내(§99)를 보이는가. 통화 사이(`suspendForLeg`)와 새 통화 연결(`startLeg`)도 실시간 상태를
  * `reconnecting`으로 쓰지만 끊긴 통화를 다시 잇는 것이 아니다(2026-11-07 실기기 — 넘김 연결 중 배너가 떴다).
  * | # | If | Then |
  * |---|---|---|
- * | 1 | `reconnecting` 아님 | 숨김 |
- * | 2 | 넘김 대기(`holding`) · 다른 통화 사이 화면이 떠 있다 | 숨김 |
- * | 3 | 새 통화(레그) 연결 중(`legOpening`) | 숨김 |
- * | 4 | 그 밖(화면 꺼짐 뒤 다시 잇기 — `startReconnect`가 `legOpening`을 내린다) | 보임 |
+ * | R1 | `reconnecting` 아님 | 숨김 |
+ * | R2 | 이 통화가 끝나는 중(종료 래치 `endLatched` — 참가자 끊기 · 상대 끊기 승인 · 통화 사이 정리, 통화 사이 화면이 뜨기 전) | 숨김(2026-11-08 재시험 9 — 끊기 직후 약 11초 보였다) |
+ * | R3 | 넘김 대기(`holding`) · 다른 통화 사이 화면이 떠 있다 | 숨김 |
+ * | R4 | 새 통화(레그) 연결 중(`legOpening`) | 숨김 |
+ * | R5 | 그 밖(화면 꺼짐 뒤 다시 잇기 — `startReconnect`가 `legOpening`을 내린다) | 보임 |
  */
-export function showsReconnectingNotice(input: { reconnecting: boolean; legScreen: LegScreen["kind"]; legOpening: boolean }): boolean {
+export function showsReconnectingNotice(input: {
+  reconnecting: boolean;
+  legScreen: LegScreen["kind"];
+  legOpening: boolean;
+  endLatched: boolean;
+}): boolean {
   if (!input.reconnecting) return false;
+  if (input.endLatched) return false;
   if (input.legScreen !== "none") return false;
   return !input.legOpening;
 }

@@ -37,6 +37,8 @@ export type SmsDeliveryInput = {
   trigger: InCallSmsTriggerKind;
   /** §126 — 명시 요청(모델 도구 · 사기범 주장 백스톱)이면 문자 간 간격 1(`smsSpacingFor`). 부재 = 종전 2. */
   explicit?: boolean;
+  /** 판정표 F(2026-11-08 · A1 · `smsGate.ts`) — 실시간 명시 요청이면 3행 하한에 `explicitNotBeforeUserTurns`. 부재 = 종전(텍스트 폴백). */
+  explicitFloor?: boolean;
   /** §81 — 세션 가상 은행명(`resolveFictionalBankName`). 본문 자리표시자 치환 · `bankName`/`accountNumber` 필드의 원천. */
   fictionalBankName?: string;
   /** §114 — 세션 id. 인증번호 문자의 번호를 세션별로 바꾼다(`withSessionOtp`). 부재면 카탈로그 번호(종전). */
@@ -65,6 +67,7 @@ export async function deliverSmsThroughGate(
       delivered,
       userTurns: input.userTurns,
       explicit: input.explicit,
+      explicitFloor: input.explicitFloor,
     });
     if (gate.status !== "allowed") {
       return { status: gate.status, ...(gate.item ? { declared: gate.item } : {}) };

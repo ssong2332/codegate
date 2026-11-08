@@ -22,7 +22,7 @@ import { logger } from "firebase-functions";
 import { buildOtpCompareInstruction, IN_CALL_SMS, listOtpItems } from "../scenarios/inCallSms";
 import { withSessionOtp } from "../scenarios/sessionOtp";
 import type { InCallSmsItem } from "../scenarios/inCallSms";
-import { extractSpokenCodes } from "../shared/spokenDigits";
+import { extractSpokenCodes, otpCandidatesForLength } from "../shared/spokenDigits";
 
 /** 도착 기록 1건(`inCallSms/smsGate.ts` `DeliveredSmsRecord`와 같은 모양 — 순환 import를 피해 구조로만 받는다). */
 type OtpDeliveredRecord = { smsId: string; userTurnsAtArrival?: number };
@@ -149,7 +149,8 @@ export async function evaluateOtpCheck(input: OtpCheckInput): Promise<OtpCheckRe
     }
     // 정답과 자릿수가 같은 숫자열만 인증번호 답으로 본다 — 전화번호·금액·계좌 등 다른 숫자에 "번호가 안 맞는다"를
     // 내지 않는다(리뷰 #2, #300 과발동 방향 회피). 8자리 이상은 저장 전 maskPII가 `[계좌]`로 바꾸는 값이라 자연히 빠진다.
-    const candidates = spoken.filter((code) => code.length === item.otpCode!.length);
+    // 2026-11-08(관찰 e) — 말끝 "이"가 숫자 2로 붙은 L+1자리도 끝 2를 빼고 후보로 본다(`otpCandidatesForLength` C2).
+    const candidates = otpCandidatesForLength(spoken, item.otpCode!.length);
     if (candidates.length === 0) {
       reason = "no-same-length";
       continue;
@@ -200,7 +201,8 @@ function evaluateByArrivalRecords(
       records.some((r) => r.smsId !== item.smsId && (r.userTurnsAtArrival ?? 0) > ownAt) ||
       (input.deliveredThisTurn !== undefined && input.deliveredThisTurn !== item.smsId);
     if (laterArrived) return none("later-sms-arrived");
-    const candidates = spoken.filter((code) => code.length === item.otpCode!.length);
+    // 2026-11-08(관찰 e) — 말끝 "이"가 숫자 2로 붙은 L+1자리도 끝 2를 빼고 후보로 본다(`otpCandidatesForLength` C2).
+    const candidates = otpCandidatesForLength(spoken, item.otpCode!.length);
     if (candidates.length === 0) {
       reason = "no-same-length";
       continue;
