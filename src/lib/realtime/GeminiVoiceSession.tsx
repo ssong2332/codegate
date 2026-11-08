@@ -888,9 +888,15 @@ export default function GeminiVoiceSession({
     };
 
     // 2026-11-07(Edge 시험 판 3 · 16 · 23) — 자막 · 전사 거르기(`liveTranscriptGuard.ts` S1 표식 · S2 실존 회사명 · U1 비밀번호 숫자).
+    // 2026-11-08(라이브 재시험 9) — S2b · S2c 실존 은행 · 카드사. S2b 입력 = 같은 통화의 참가자 줄 — 부모 전사(이전 연결 · 복원분 포함) + 이 연결이 내보낸 줄 +
+    // 아직 flush 전 버퍼(턴 끝 flush는 참가자 줄과 사기범 줄을 함께 내보낸다 · 음성 인식 오인식도 전사 그대로). 겹쳐 들어가도 판정은 같다(있음/없음만 본다).
     // 참가자 줄 U1의 조건 = 바로 앞에 내보낸 사기범 줄(이 연결 안 — 재연결 뒤 첫 참가자 줄은 서버 저장 단계가 다시 거른다).
     let lastEmittedScammerLine: string | undefined;
-    const guardScammer = (raw: string) => guardLiveScammerLine(stripLeakedThought(raw)).trim();
+    const userTextsForGuard = (): string[] => [
+      ...[...(handlersRef.current.readTranscript?.() ?? []), ...instanceTurns].filter((t) => t.role === "user").map((t) => t.text),
+      userBuffer,
+    ];
+    const guardScammer = (raw: string) => guardLiveScammerLine(stripLeakedThought(raw), userTextsForGuard()).trim();
 
     const flushTranscript = () => {
       // ⛔ 참가자 줄은 원문이다 — 단, 바로 앞 사기범 줄이 비밀번호를 물었으면 숫자 묶음만 가린다(U1).

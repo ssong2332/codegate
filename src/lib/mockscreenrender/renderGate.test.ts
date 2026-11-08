@@ -23,6 +23,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
 import {
   COMPONENT_PATH,
   extractText,
@@ -141,13 +142,16 @@ const DIFFICULTY_SENTINEL = "ZZ-DIFF-SENTINEL-ZZ";
  * (카탈로그 값이 kind 분기·정확 일치 조회를 거쳐 주소창까지 흘렀다는 증명 — 옛 `title` 센티널의 prop 흐름
  * 증명을 대신한다).
  * ⭐ 사용자 결정(2026-10-18) 재지정 — 자식 모듈 렌더 증명이던 "훈련 종료"(`EndTrainingButton`)가 브라우저 바에서
- * 빠졌다. 같은 공유 브라우저 바에 남는 자식 모듈 `PhoneIcon`의 **지구본 글리프**(`GLOBE_GLYPH` — 그 파일에만
- * 있는 원 지름)로 옮겼다. 텍스트 노드가 없는 아이콘이라 `text`가 아니라 `markup`을 본다(G140 유지).
+ * 빠졌다. 같은 공유 브라우저 바에 남는 자식 모듈 `PhoneIcon`의 **지구본 글리프**로 옮겼다.
+ * ⭐ 2026-11-08 웹 안의 웹 PR-1 재지정 — 바깥 틀이 3종(판정표 `landingChrome.ts` LC)이 되며 지구본이 빠졌다(안드로이드형 = 조정 막대 ·
+ * iOS형 = 아이콘 없이 주소만 · 메신저 안 브라우저 = ✕ + 제목 · 주소). 그래서 **그 틀이 그리는 `PhoneIcon` 글리프 중 하나**
+ * (`FRAME_GLYPHS` — ✕ · 뒤로 셰브런 · 조정 막대)로 옮겼다. 자식 모듈 렌더 증명이라는 뜻은 같다. 텍스트 노드가 없는 아이콘이라
+ * `text`가 아니라 `markup`을 본다(G140 유지). 역검증은 `PhoneIcon` 모듈 자체의 글리프 분기를 끊는다(아래 G447 역검증).
  */
-const GLOBE_GLYPH = '<circle cx="12" cy="12" r="8.5"';
+const FRAME_GLYPHS = ['<path d="M6 6l12 12"', '<path d="M15 5l-7 7 7 7"', '<circle cx="16" cy="7" r="2"'];
 function isRenderAlive(rendered: { text: string; markup: string }, item: CatalogItem): boolean {
   const host = item.fields.get("mockHost")?.[0];
-  return rendered.markup.includes(GLOBE_GLYPH) && host !== undefined && rendered.text.includes(host);
+  return FRAME_GLYPHS.some((glyph) => rendered.markup.includes(glyph)) && host !== undefined && rendered.text.includes(host);
 }
 
 function propsFor(item: CatalogItem): Record<string, unknown> {
@@ -346,13 +350,17 @@ function existenceViolations(item: CatalogItem, text: string): number {
   return targetTexts(item).filter((entry) => !text.includes(entry.text)).length;
 }
 
-// 사용자 결정(2026-10-18) — 옛 오염 지점(`<EndTrainingButton …/>`)이 사라져 재지정한 자식 모듈(PhoneIcon 지구본) 렌더 지점을 끊는다.
-test("[T187/G447 역검증 · 사용자 결정 2026-10-18 재지정] 지구본 `PhoneIcon` 렌더 지점을 끊으면 생존 신호가 실패하고 G76·AC-079 입력은 불변이다", (t) => {
-  const { original, poisoned, overrides } = poisonedComponentSource(
-    '<PhoneIcon name="globe" size={16} />',
-    "",
-  );
-  assert.notEqual(poisoned, original, "오염 샘플이 실제로 만들어져야 한다 — 치환 대상 문면이 바뀌었으면 여기서 걸린다");
+// 사용자 결정(2026-10-18) — 옛 오염 지점(`<EndTrainingButton …/>`)이 사라져 재지정한 자식 모듈(PhoneIcon) 렌더 지점을 끊는다.
+// ⭐ 2026-11-08 PR-1 — 틀마다 아이콘이 달라 한 렌더 지점이 아니라 **`PhoneIcon` 모듈의 글리프 분기**를 끊는다(같은 훅 · 같은 경로 — G139).
+// 컴포넌트 소스는 그대로라 G76 · AC-079 입력이 불변이다(아래 단언이 기계로 확인).
+test("[T187/G447 역검증 · 2026-11-08 PR-1 재지정] `PhoneIcon` 글리프 렌더를 끊으면 생존 신호가 실패하고 G76·AC-079 입력은 불변이다", (t) => {
+  const iconPath = resolvePath("src/components/PhoneIcon.tsx");
+  const iconSource = readFileSync(iconPath, "utf8");
+  const iconPoisoned = iconSource.replace("switch (name) {", 'switch ("__cut__" as string) {');
+  assert.notEqual(iconPoisoned, iconSource, "오염 샘플이 실제로 만들어져야 한다 — PhoneIcon 글리프 분기 문면이 바뀌었으면 여기서 걸린다");
+  const original = readFileSync(COMPONENT_PATH, "utf8");
+  const poisoned = original;
+  const overrides = new Map([[iconPath, iconPoisoned]]);
   const item = catalogItems.find((entry) => entry.kind === "app-install") ?? catalogItems[0];
   const clean = renderLandingScreen(propsFor(item));
   const dirty = renderLandingScreen(propsFor(item), overrides);
@@ -540,7 +548,8 @@ function closeButtonViolations(messengerMarkup: string, inCallMarkup: string): s
   else {
     if (!/<button[^>]*aria-label="닫기"[^>]*><svg/.test(messengerMarkup)) out.push("✕ 아이콘이 없다");
     // 왼쪽 = 주소 필드(지구본)보다 앞.
-    if (messengerMarkup.search(closeButton) > messengerMarkup.indexOf(GLOBE_GLYPH)) out.push("✕가 주소 필드 왼쪽이 아니다");
+    // ⭐ 2026-11-08 PR-1 — 지구본이 빠져 기준을 그 화면의 가짜 호스트(`.invalid`) 첫 등장으로 옮겼다(메신저 안 브라우저 = ✕ 오른쪽에 제목 · 주소).
+    if (messengerMarkup.search(closeButton) > messengerMarkup.indexOf(".invalid")) out.push("✕가 주소 필드 왼쪽이 아니다");
   }
   if (closeButton.test(inCallMarkup)) out.push("문자함 진입에 ✕가 그려졌다(왼쪽은 '‹ 문자')");
   return out;

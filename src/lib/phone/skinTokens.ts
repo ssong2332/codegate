@@ -425,45 +425,105 @@ export type BrowserBarSkinTokens = {
   barBorder: string;
   fieldBg: string;
   fieldRadiusPx: number;
-  /** 지구본 아이콘(비텍스트) · 주소 글. */
+  /** 주소 왼쪽 사이트 정보 아이콘(조정 막대 모양 · 비텍스트 — 안드로이드형만) · 주소 글. */
   icon: string;
   text: string;
-  /** 브라우저 뒤로 셰브런 "문자"(UX-027에서 열었을 때만). */
+  /** 브라우저 뒤로 셰브런 "문자"(문자 진입) · 메신저 안 브라우저 ✕. */
   back: string;
+  /** ⭐ 2026-11-08 웹 안의 웹 PR-1 — 메신저 안 브라우저 둘째 줄(주소) 글. */
+  sub: string;
+  /** ⭐ PR-1 — iOS형 아래 떠 있는 주소 막대 바탕(반투명 · 사이트 본문 위에 뜬다 — 대비는 흰 본문 위 합성으로 본다). */
+  glass: string;
+  /** ⭐ PR-1 — iOS형 맨 위 '◀ 메시지' 줄 글(링크색). */
+  strip: string;
 };
 
-const BROWSER_BAR_TOKENS: Record<MessengerSkin, BrowserBarSkinTokens> = {
-  ios: {
-    barBg: "#F7F7F7",
-    barBorder: "#DADCE0",
-    fieldBg: "#E3E3E8",
-    fieldRadiusPx: 12,
-    icon: "#6E6E73",
-    text: "#3C3C43",
-    back: "#0A63C9",
+/**
+ * 브라우저 틀 색(기기 쪽 — 사이트 본문 색과 무관). ⭐ 2026-11-08 PR-1 — 기기 다크 값을 함께 둔다(시안 1절 "기기 틀만 기기 테마를 따른다").
+ * ⚠️ 지금 훈련 화면 테마는 `deviceTheme.ts` `TRAINING_SCREEN_THEME`(라이트 고정 — 사용자 결정 2026-10-21 · UX D-137 (B))이라 다크 값은
+ * 대비 게이트(G456)만 거친 채 쓰이지 않는다. 그 결정이 바뀌면 호출부가 테마만 넘기면 된다.
+ */
+const BROWSER_BAR_TOKENS: Record<DeviceTheme, Record<MessengerSkin, BrowserBarSkinTokens>> = {
+  light: {
+    ios: {
+      barBg: "#F7F7F7",
+      barBorder: "#DADCE0",
+      fieldBg: "#E3E3E8",
+      fieldRadiusPx: 12,
+      icon: "#6E6E73",
+      text: "#3C3C43",
+      back: "#0A63C9",
+      sub: "#5F6368",
+      glass: "rgba(248, 248, 250, 0.94)",
+      strip: "#0A63C9",
+    },
+    samsung: {
+      barBg: "#FFFFFF",
+      barBorder: "#DADCE0",
+      fieldBg: "#F1F3F4",
+      fieldRadiusPx: 18,
+      icon: "#5F6368",
+      text: "#3C3C43",
+      back: "#1B1B1F",
+      sub: "#5F6368",
+      glass: "rgba(255, 255, 255, 0.94)",
+      strip: "#0A63C9",
+    },
+    default: {
+      barBg: "#FFFFFF",
+      barBorder: "#DADCE0",
+      fieldBg: "#F1F3F4",
+      fieldRadiusPx: 18,
+      icon: "#5F6368",
+      text: "#3C3C43",
+      back: "#1B1B1F",
+      sub: "#5F6368",
+      glass: "rgba(255, 255, 255, 0.94)",
+      strip: "#0A63C9",
+    },
   },
-  samsung: {
-    barBg: "#FFFFFF",
-    barBorder: "#DADCE0",
-    fieldBg: "#F1F3F4",
-    fieldRadiusPx: 18,
-    icon: "#5F6368",
-    text: "#3C3C43",
-    back: "#1B1B1F",
-  },
-  default: {
-    barBg: "#FFFFFF",
-    barBorder: "#DADCE0",
-    fieldBg: "#F1F3F4",
-    fieldRadiusPx: 18,
-    icon: "#5F6368",
-    text: "#3C3C43",
-    back: "#1B1B1F",
+  dark: {
+    ios: {
+      barBg: "#1F1F23",
+      barBorder: "#3A3B40",
+      fieldBg: "#2E2F34",
+      fieldRadiusPx: 12,
+      icon: "#A9ABB0",
+      text: "#ECECEF",
+      back: "#6AAEFF",
+      sub: "#A9ABB0",
+      glass: "rgba(44, 44, 50, 0.94)",
+      strip: "#6AAEFF",
+    },
+    samsung: {
+      barBg: "#1F1F23",
+      barBorder: "#3A3B40",
+      fieldBg: "#2E2F34",
+      fieldRadiusPx: 18,
+      icon: "#A9ABB0",
+      text: "#ECECEF",
+      back: "#ECECEF",
+      sub: "#A9ABB0",
+      glass: "rgba(44, 44, 50, 0.94)",
+      strip: "#6AAEFF",
+    },
+    default: {
+      barBg: "#1F1F23",
+      barBorder: "#3A3B40",
+      fieldBg: "#2E2F34",
+      fieldRadiusPx: 18,
+      icon: "#A9ABB0",
+      text: "#ECECEF",
+      back: "#ECECEF",
+      sub: "#A9ABB0",
+      glass: "rgba(44, 44, 50, 0.94)",
+      strip: "#6AAEFF",
+    },
   },
 };
 
-export function browserBarTokensFor(skin: MessengerSkin): BrowserBarSkinTokens {
-  return BROWSER_BAR_TOKENS[skin];
+export function browserBarTokensFor(skin: MessengerSkin, theme: DeviceTheme = "light"): BrowserBarSkinTokens {
+  return BROWSER_BAR_TOKENS[theme][skin];
 }
 
 /**
@@ -910,7 +970,6 @@ export function gridPressedPairs(skin: MessengerSkin, call: CallSkinTokens): Con
 function smsSurfacePairs(skin: MessengerSkin): ContrastPair[] {
   const thread = smsThreadTokensFor(skin);
   const list = smsListTokensFor(skin);
-  const bar = browserBarTokensFor(skin);
   const page = LANDING_PAGE_TOKENS;
   const chat = messengerSmsTokensFor(skin);
   return [
@@ -928,9 +987,7 @@ function smsSurfacePairs(skin: MessengerSkin): ContrastPair[] {
     list.unreadStyle === "count"
       ? { name: `${skin}.smsList.unreadCount`, fg: list.unreadText, bg: list.unreadBg, kind: "text" }
       : { name: `${skin}.smsList.unreadDot`, fg: list.unreadBg, bg: list.bg, kind: "nonText" },
-    { name: `${skin}.browserBar.text`, fg: bar.text, bg: bar.fieldBg, kind: "text" },
-    { name: `${skin}.browserBar.globe`, fg: bar.icon, bg: bar.fieldBg, kind: "nonText" },
-    { name: `${skin}.browserBar.back`, fg: bar.back, bg: bar.barBg, kind: "text" },
+    ...browserFramePairs(skin),
     { name: "landing.issuerBar", fg: page.issuerBarText, bg: page.issuerBarBg, kind: "text" },
     { name: "landing.headline", fg: page.headline, bg: page.pageBg, kind: "text" },
     { name: "landing.body", fg: page.body, bg: page.pageBg, kind: "text" },
@@ -947,6 +1004,28 @@ function smsSurfacePairs(skin: MessengerSkin): ContrastPair[] {
     { name: `${skin}.messenger.placeholder`, fg: chat.placeholder, bg: chat.fieldBg, kind: "text" },
     { name: `${skin}.messenger.sendIcon`, fg: chat.sendIcon, bg: chat.sendBg, kind: "nonText" },
   ];
+}
+
+/**
+ * ⭐ 2026-11-08 웹 안의 웹 PR-1 — 브라우저 틀 3종(위 주소 막대 · 아래 떠 있는 막대 · 메신저 안 브라우저)의 대비 쌍. 라이트 · 다크 둘 다.
+ * 떠 있는 막대(반투명)는 그 아래 사이트 본문(흰 바탕) 위에 합성해 본다.
+ */
+function browserFramePairs(skin: MessengerSkin): ContrastPair[] {
+  return (["light", "dark"] as const).flatMap((theme) => {
+    const bar = browserBarTokensFor(skin, theme);
+    const tag = theme === "light" ? "" : "@dark";
+    const page = LANDING_PAGE_TOKENS.pageBg;
+    return [
+      { name: `${skin}.browserBar.text${tag}`, fg: bar.text, bg: bar.fieldBg, kind: "text" },
+      { name: `${skin}.browserBar.siteInfo${tag}`, fg: bar.icon, bg: bar.fieldBg, kind: "nonText" },
+      { name: `${skin}.browserBar.back${tag}`, fg: bar.back, bg: bar.barBg, kind: "text" },
+      { name: `${skin}.browserBar.title${tag}`, fg: bar.text, bg: bar.barBg, kind: "text" },
+      { name: `${skin}.browserBar.sub${tag}`, fg: bar.sub, bg: bar.barBg, kind: "text" },
+      { name: `${skin}.browserBar.strip${tag}`, fg: bar.strip, bg: bar.barBg, kind: "text" },
+      { name: `${skin}.browserBar.pillText${tag}`, fg: bar.text, bg: bar.glass, base: page, kind: "text" },
+      { name: `${skin}.browserBar.pillBack${tag}`, fg: bar.back, bg: bar.glass, base: page, kind: "text" },
+    ] satisfies ContrastPair[];
+  });
 }
 
 /** 쌍 하나의 대비(반투명 바탕은 합성 후). */

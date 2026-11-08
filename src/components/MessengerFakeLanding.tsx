@@ -32,6 +32,9 @@ import { Button } from "./ui";
 // ⚠️ 상대 경로로 import한다 — 렌더 게이트 하네스(`src/lib/mockscreenrender/renderHarness.ts`)가 CommonJS require로
 // 이 파일을 불러와 `@/` 별칭을 풀지 못한다. 토큰 모듈은 값 import가 없는 잎 모듈이다.
 import { LANDING_PAGE_TOKENS, browserBarTokensFor } from "../lib/phone/skinTokens";
+// ⭐ 2026-11-08 웹 안의 웹 PR-1 — 바깥 틀(브라우저 틀) 판정표 · 훈련 화면 테마(잎 모듈 · 상대 경로).
+import { landingChromeFor } from "../lib/landing/landingChrome";
+import { TRAINING_SCREEN_THEME } from "../lib/phone/deviceTheme";
 import type { MessengerSkin } from "../lib/messenger/detectSkin";
 // §101 추가 — 금액 검증 · 한글 단위 표기 · 필수 칸 안내(잎 모듈 · 상대 경로 — 렌더 하네스 관례).
 import { TRANSFER_LIMIT_NOTE, amountError, amountHint, requiredFieldError, transferLimitError } from "../lib/landing/amountInput";
@@ -138,6 +141,16 @@ type MessengerFakeLandingProps = {
   entrySurface?: MessengerFakeLandingEntrySurface;
   /** 브라우저 바의 기기 스킨(UX-023 v1.33 (2)(8) — 바의 모서리·배경만 다르다). 부재 = 기본. */
   skin?: MessengerSkin;
+  /**
+   * ⭐ 2026-11-08 웹 안의 웹 PR-1 — 메신저 진입일 때 그 화면이 문자형(`sms`)인지 대화방형(`kakao`)인지. 문자형 = 기기 브라우저 틀,
+   * 대화방형 = 메신저 안 브라우저 틀(판정표 `landingChrome.ts` LC). 부재 = 대화방형(종전 ✕ 동작 · 렌더 하네스 무변경).
+   */
+  messengerSurface?: "sms" | "kakao";
+  /**
+   * ⭐ PR-1 — 문자함 진입 전용: 문자함이 맨 위에 초록 통화 표시줄을 그리는가. iOS형 '◀ 메시지' 줄은 통화 표시줄이 없을 때만 그린다
+   * (사용자 확정 2026-11-08). 부재 = 그린다(종전 문자함은 늘 통화 중).
+   */
+  callBarShown?: boolean;
   /** 닫기/복귀 — 연 표면(채팅 또는 문자함)으로 되돌아간다. */
   onClose: () => void;
   /** `"in-call-sms"` 전용 — 브라우저 뒤로 "문자"(랜딩을 **숨기기만** 한다 · 입력값은 이 컴포넌트 안에 남는다). */
@@ -228,6 +241,8 @@ export default function MessengerFakeLanding({
   landingId,
   entrySurface = "messenger",
   skin = "default",
+  messengerSurface,
+  callBarShown = true,
   onClose,
   onHide,
   onInstallConsent,
@@ -239,9 +254,13 @@ export default function MessengerFakeLanding({
   bankIdentity,
   spokenAccountNow,
 }: MessengerFakeLandingProps) {
-  const bar = browserBarTokensFor(skin);
+  // ⭐ PR-1 — 틀 색은 기기 쪽이다. 테마는 훈련 화면 테마(지금 라이트 고정 — 사용자 결정 2026-10-21 · `deviceTheme.ts`)를 따른다.
+  const bar = browserBarTokensFor(skin, TRAINING_SCREEN_THEME);
   const returnLabel = RETURN_LABELS[entrySurface];
   const isMessenger = entrySurface === "messenger";
+  // ⭐ PR-1 — 바깥 틀 판정표(LC1 ~ LC6). 틀 안 단추는 동작하는 것만: "‹ 문자"(문자함 = 숨기기 · 문자형 메신저 = 닫기) · ✕ · '◀ 메시지'.
+  const chrome = landingChromeFor({ entrySurface, messengerSurface, skin, callBarShown });
+  const backAction = entrySurface === "in-call-sms" ? onHide : onClose;
 
   // ── 메신저 진입 대화상자의 포커스(사용자 결정 2026-10-18 · UX-023 v1.36 표 · D-116) ───────────────────────────
   // 진입 = 대화상자 컨테이너(이름 "{표시} 화면") · 트랩 = ✕ → 입력 칸 → 제출 → 하단 닫기(첫/끝은 매 Tab마다 실제 보이는
@@ -295,60 +314,117 @@ export default function MessengerFakeLanding({
   // T194-a(§84.13.3 ③ ⓑ) — 표에 없는 id의 `app-install`은 설치 화면을 그리지 않는다(지원금 문구 · credential 폴백 0 — UF-012 Failure (a) 생략).
   if (landingKind === "app-install" && installCopyFor(landingId) === undefined) return null;
 
+  // ⭐ 2026-11-08 웹 안의 웹 PR-1 — 가짜 호스트(`.invalid` · 호스트만 · 스킴 0 · 누를 수 없는 텍스트). 세 틀이 같은 노드를 쓴다.
+  const hostNode = <>{landingHostFor(landingKind, landingId)}</>;
+  // ⭐ PR-1 — 메신저 안 브라우저 첫 줄(페이지 제목) = 그 사이트 이름(카탈로그 `issuerLabel`에서 'ⓒ ' 정확 접두 1회 제거 — 새 문구 0).
+  const siteTitle = landingTitleFor(landingKind, landingId);
+  // ⭐ PR-1(사용자 결정 O4 (a)) — 주소 아래 사이트 색 진행 막대(약 1.2초 뒤 사라짐 · 움직임 줄이기면 그리지 않음 — globals.css). 장식.
+  const progressBar = (
+    <span
+      aria-hidden="true"
+      className="landing-progress block h-0.5 w-full origin-left"
+      style={{ backgroundColor: LANDING_PAGE_TOKENS.issuerBarBg }}
+    />
+  );
+  // ⭐ PR-1 — "‹ 문자"(문자 진입 두 틀이 같은 단추를 쓴다). 문자함 = 숨기기(입력값 유지 — D-94) · 문자형 메신저 = 닫기.
+  const backButton =
+    chrome.control === "back-sms" && backAction ? (
+      <button
+        type="button"
+        onClick={backAction}
+        className="flex h-12 min-w-[56px] shrink-0 items-center text-[15px]"
+        style={{ color: bar.back }}
+      >
+        <PhoneIcon name="chevron-back" size={22} />
+        문자
+      </button>
+    ) : null;
+
   const content: ReactNode = (
     <>
-      {/* ② 브라우저 바(UX-023 v1.33 (2) · D-92) — 높이 52px · 왼쪽(메신저 진입 = ✕ 닫기 · 문자함 진입 = "‹ 문자")
-          + 주소 필드(지구본 + 가짜 호스트 · 오른쪽 끝 8px 앞까지 = 바의 `px-2`).
-          ⚠️ 사용자 결정(2026-10-18) — 오른쪽 끝의 종료 버튼을 **없앴다**(메신저 진입·문자함 진입 둘 다). 주소 필드가
-          `flex-1`로 남은 폭을 채우므로 옛 `justify-end`(종료 버튼을 오른쪽 끝에 붙이던 G449 클래스)도 뺐다.
-          ⚠️ T84: 이 바는 **두 kind가 공유**한다 — 바가 kind와 무관하게 하나라는 것이 파일 분리를 금지하는 두 번째
-          이유다(§15.9.4 표 #2). T187(§72 · AC-086 · D-82·D-84) — 세션 중 표식·난이도 배지는 없다.
-          ⭐ T190-2/T190-5(§74.9 · D-101 · D-92) — 주소 = 그 랜딩의 **가짜 호스트**(`.invalid` · 호스트만 · 스킴 0 ·
-          누를 수 없는 텍스트). 빨간 ⚠(사이트 위험 판정 힌트 — D-6 위반)·모노 글꼴·자물쇠("안전한 연결"이라는 새
-          주장)를 그리지 않는다. 글꼴은 system-ui. `title`은 대화상자 이름(A5)으로만 쓴다. */}
-      <div
-        className="sticky top-0 z-10 flex h-[52px] shrink-0 items-center gap-1.5 border-b px-2"
-        style={{ backgroundColor: bar.barBg, borderColor: bar.barBorder, fontFamily: "system-ui, sans-serif" }}
-      >
-        {/* ⭐ 메신저 진입 전용 ✕(닫기 — UX-023 v1.36 표 · D-116 (3)): 종료 버튼이 빠진 뒤 위쪽 출구가 0이 되지 않게
-            한다. 터치 48px · 단색 선 아이콘 22px · 이름 "닫기"(그 화면에 이미 있는 말 — 새 문구 0) · 동작 = 하단 닫기와
-            같은 `onClose`. */}
-        {isMessenger && (
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="닫기"
-            className="flex h-12 w-12 shrink-0 items-center justify-center"
-            style={{ color: bar.back }}
-          >
-            <PhoneIcon name="close" size={22} />
-          </button>
-        )}
-        {entrySurface === "in-call-sms" && onHide && (
-          <button
-            type="button"
-            onClick={onHide}
-            className="flex h-12 min-w-[56px] shrink-0 items-center text-[15px]"
-            style={{ color: bar.back }}
-          >
-            <PhoneIcon name="chevron-back" size={22} />
-            문자
-          </button>
-        )}
-        <div
-          className="flex h-9 min-w-0 flex-1 items-center gap-1.5 px-2.5"
-          style={{ backgroundColor: bar.fieldBg, borderRadius: bar.fieldRadiusPx }}
+      {/* ② 바깥 틀(⭐ 2026-11-08 웹 안의 웹 PR-1 — 판정표 `landingChrome.ts` LC · 시안 1절). 종전엔 모든 진입이 같은 흰 막대였다.
+          - device-top(안드로이드형 · 문자 진입) = 위 주소 막대 52px: "‹ 문자" + 주소 필드(사이트 정보 아이콘 = 조정 막대 · 가짜 호스트).
+          - device-bottom(iOS형 · 문자 진입) = 아래 떠 있는 주소 막대(아래에서 그린다) + 통화 표시줄이 없을 때 맨 위 24px '◀ 메시지'.
+          - in-app(대화방형 메신저 진입) = 메신저 안 브라우저 52px: ✕ + 제목 · 주소 두 줄.
+          ⛔ 동작하는 단추만(사용자 결정 O1 = (b)) — 아래 툴바 · ⋯ · 새로고침 · 공유 0. 자물쇠 · 빨간 ⚠ · 모노 글꼴 0(D-92 · D-6).
+          ⚠️ 사용자 결정(2026-10-18) — 종료 버튼은 어느 틀에도 없다. T187(§72) — 세션 중 표식 · 난이도 배지 없음.
+          ⚠️ T84: 이 틀은 **두 kind가 공유**한다(§15.9.4 표 #2 — 파일 분리 금지 이유). 글꼴은 system-ui. */}
+      {chrome.messagesStrip && backAction && (
+        // iOS형 '◀ 메시지'(사용자 확정 2026-11-08) — 실제 상태 표시줄은 OS가 그리므로 랜딩 맨 위 24px 줄로 그린다. 누르면 문자로.
+        <button
+          type="button"
+          onClick={backAction}
+          className="sticky top-0 z-20 flex h-6 w-full shrink-0 items-center gap-1 px-4 text-[13px] font-semibold"
+          style={{ backgroundColor: bar.barBg, color: bar.strip, fontFamily: "system-ui, sans-serif" }}
         >
-          <span className="shrink-0" style={{ color: bar.icon }}>
-            <PhoneIcon name="globe" size={16} />
-          </span>
-          <p className="truncate text-sm" style={{ color: bar.text }}>
-            {landingHostFor(landingKind, landingId)}
-          </p>
+          <span aria-hidden="true" className="text-[10px]">◀</span>
+          메시지
+        </button>
+      )}
+      {chrome.frame === "device-top" && (
+        <div
+          className="sticky top-0 z-10 shrink-0"
+          style={{ backgroundColor: bar.barBg, fontFamily: "system-ui, sans-serif" }}
+        >
+          <div className="flex h-[52px] items-center gap-1.5 border-b px-2" style={{ borderColor: bar.barBorder }}>
+            {backButton}
+            <div
+              className="flex h-9 min-w-0 flex-1 items-center gap-1.5 px-2.5"
+              style={{ backgroundColor: bar.fieldBg, borderRadius: bar.fieldRadiusPx }}
+            >
+              {chrome.siteInfoIcon && (
+                <span className="shrink-0" style={{ color: bar.icon }}>
+                  <PhoneIcon name="tune" size={16} />
+                </span>
+              )}
+              <p className="truncate text-sm" style={{ color: bar.text }}>
+                {hostNode}
+              </p>
+            </div>
+          </div>
+          {progressBar}
         </div>
-      </div>
+      )}
+      {chrome.frame === "in-app" && (
+        <div
+          className="sticky top-0 z-10 shrink-0"
+          style={{ backgroundColor: bar.barBg, fontFamily: "system-ui, sans-serif" }}
+        >
+          <div className="flex h-[52px] items-center border-b pl-1 pr-12" style={{ borderColor: bar.barBorder }}>
+            {/* ⭐ 메신저 진입 ✕(닫기 — UX-023 v1.36 표 · D-116 (3)): 터치 48px · 단색 선 아이콘 22px · 이름 "닫기" · 동작 = 하단 닫기와
+                같은 `onClose`. 오른쪽 48px 여백은 가운데 두 줄을 화면 가운데에 맞춘다(동작 없는 단추를 두지 않는다 — O1 b). */}
+            {isMessenger && (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="닫기"
+                className="flex h-12 w-12 shrink-0 items-center justify-center"
+                style={{ color: bar.back }}
+              >
+                <PhoneIcon name="close" size={22} />
+              </button>
+            )}
+            <div className="flex min-w-0 flex-1 flex-col items-center leading-tight">
+              <p className="max-w-full truncate text-[15px] font-semibold" style={{ color: bar.text }}>
+                {siteTitle}
+              </p>
+              <p className="max-w-full truncate text-[13px]" style={{ color: bar.sub }}>
+                {hostNode}
+              </p>
+            </div>
+          </div>
+          {progressBar}
+        </div>
+      )}
 
-      <div className="mx-auto flex min-h-0 w-full max-w-sm flex-1 flex-col">
+      {/* ⚠️ iOS형(아래 떠 있는 막대)은 본문이 줄지 않게 둔다 — 줄면 넘친 본문 위에 막대가 걸린다(막대는 본문 끝 다음 자리). */}
+      <div
+        className={
+          chrome.frame === "device-bottom"
+            ? "mx-auto flex w-full max-w-sm flex-[1_0_auto] flex-col"
+            : "mx-auto flex min-h-0 w-full max-w-sm flex-1 flex-col"
+        }
+      >
         {/* ⚠️ **kind 분기가 먼저 끝난다**(§19.4 R7). 상황별 콘텐츠 조회는 선택된 서브 컴포넌트
             **안쪽**에서만 일어나며, 조회 결과가 kind를 바꾸는 경로는 존재하지 않는다. */}
         {/* ⚠️ T194-a — `app-install`도 상황별 콘텐츠를 갖게 됐다(`subsidy-install` · `parcel-install` 2종 — UF-012 v1.38
@@ -417,6 +493,25 @@ export default function MessengerFakeLanding({
           />
         )}
       </div>
+      {chrome.frame === "device-bottom" && (
+        // ⭐ PR-1 — iOS형 아래 떠 있는 주소 막대(iOS 26 Safari 기본 '컴팩트' 배치 근사): "‹ 문자" + 가운데 주소. 아이콘 · ⋯ 없음(O1 b).
+        // 스크롤 영역 끝에 붙어(sticky) 본문 위에 뜬다. 진행 막대는 막대 아래 가장자리.
+        <div
+          className="sticky bottom-0 z-10 shrink-0 px-3 pt-2"
+          style={{ paddingBottom: "calc(10px + env(safe-area-inset-bottom))", fontFamily: "system-ui, sans-serif" }}
+        >
+          <div
+            className="relative flex h-12 items-center overflow-hidden rounded-full pl-1 pr-14 backdrop-blur-xl"
+            style={{ backgroundColor: bar.glass, boxShadow: "0 2px 14px rgba(0, 0, 0, 0.2)" }}
+          >
+            {backButton}
+            <p className="min-w-0 flex-1 truncate text-center text-[15px] font-medium" style={{ color: bar.text }}>
+              {hostNode}
+            </p>
+            <span className="absolute inset-x-6 bottom-0">{progressBar}</span>
+          </div>
+        </div>
+      )}
     </>
   );
 
@@ -444,7 +539,8 @@ export default function MessengerFakeLanding({
       aria-label={`${title} 화면`}
       // 진입 포커스를 받는 컨테이너(UX-023 v1.36 — 이름을 읽어 전환을 안다). Tab 순서에는 들지 않는다.
       tabIndex={-1}
-      className="fixed inset-0 z-50 flex flex-col overflow-y-auto outline-none"
+      // ⭐ PR-1(사용자 결정 O4 (a)) — 넘어가는 순간 페이지가 오른쪽에서 들어온다(약 0.4초 · 움직임 줄이기면 즉시 — globals.css).
+      className="landing-page-enter fixed inset-0 z-50 flex flex-col overflow-y-auto outline-none"
       style={{ backgroundColor: LANDING_PAGE_TOKENS.pageBg }}
     >
       {content}
@@ -1103,6 +1199,15 @@ function landingHostFor(kind: MessengerFakeLandingKind, landingId?: string): str
 function issuerNameOf(issuerLabel: string): string {
   const prefix = "ⓒ ";
   return issuerLabel.slice(0, prefix.length) === prefix ? issuerLabel.slice(prefix.length) : issuerLabel;
+}
+
+/**
+ * ⭐ 2026-11-08 웹 안의 웹 PR-1 — 메신저 안 브라우저 첫 줄(페이지 제목). 주소창과 같은 정확 일치 조회 · 같은 폴백(`landingHostFor`)이고,
+ * 값은 그 사이트의 `issuerLabel`에서 'ⓒ '만 뗀 이름이다(카탈로그에 이미 있는 글자 — 새 문구 0).
+ */
+function landingTitleFor(kind: MessengerFakeLandingKind, landingId?: string): string {
+  if (kind === "app-install") return issuerNameOf(installCopyFor(landingId)?.issuerLabel ?? "");
+  return issuerNameOf(((landingId ? CREDENTIAL_LANDING_COPY[landingId] : undefined) ?? GENERIC_CREDENTIAL_COPY).issuerLabel);
 }
 
 /**

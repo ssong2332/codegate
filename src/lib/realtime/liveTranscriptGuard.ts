@@ -1,6 +1,6 @@
 // 실시간 통화(Gemini Live) 자막 · 전사 거르기 — 화면 쪽 (2026-11-07 · Edge 시나리오 시험 판 3 · 16 · 23).
 //
-// 판정표 정본은 서버 사본 `functions/src/realtime/liveTranscriptGuard.ts` 머리 주석이다(S1 ~ S3 · U1 · U2). 이 파일은 통화 자막 ·
+// 판정표 정본은 서버 사본 `functions/src/realtime/liveTranscriptGuard.ts` 머리 주석이다(S1 ~ S3 · S2b · S2c · U1 · U2). 이 파일은 통화 자막 ·
 // 메모리 전사(재연결 주입 · 새로고침 백업 · 제출)가 화면을 떠나기 전에 같은 판정을 적용한다(서버가 저장 전에 한 번 더 거른다).
 // ⛔ 아래 "사본 시작" ~ "사본 끝" 구간은 서버 사본과 **글자까지 같아야 한다**(`liveTranscriptGuard.test.ts`가 대조한다).
 // ⛔ "회사명 표 사본" 구간은 서버 `functions/src/guardrails/realCompanyNames.ts`의 `export const GENERIC_COURIER` 줄부터 파일 끝까지와 글자까지 같다
@@ -219,6 +219,154 @@ export function replaceRealCompanyNames(text: string): { text: string; replacedC
 }
 // ── 회사명 표 사본 끝 ──
 
+// ── 은행 · 카드 표 사본 시작 ──
+// 2026-11-08(라이브 재시험 9 · 판정 S2b · S2c) — 서버 `functions/src/guardrails/realFinancialNames.ts`의 `export const FICTIONAL_BANK_NAME` 줄부터 파일 끝까지와
+// 글자까지 같다. 단 `NOT_AFTER_HANGUL` 선언 두 줄(설명 줄 포함)만 뺀다 — 위 회사명 표 사본이 같은 값으로 이미 선언했다(같은 테스트가 대조한다).
+export const FICTIONAL_BANK_NAME = "OO은행";
+export const FICTIONAL_CARD_NAME = "OO카드";
+
+export type RealFinancialNameRule = {
+  /** 실패 메시지에 쓰는 규칙 이름. */
+  label: string;
+  /** 전부 `g`, 라틴 부분 대소문자 무시를 위해 `i`. */
+  pattern: RegExp;
+  replacement: string;
+  /** 이 규칙만이 잡는 양성 샘플 — 앞선 규칙을 통과해 이 규칙에서 치환돼야 한다(생존 테스트). */
+  sample: string;
+};
+
+function bank(label: string, source: string, sample: string): RealFinancialNameRule {
+  return { label, pattern: new RegExp(source, "gi"), replacement: FICTIONAL_BANK_NAME, sample };
+}
+
+function card(label: string, source: string, sample: string): RealFinancialNameRule {
+  return { label, pattern: new RegExp(source, "gi"), replacement: FICTIONAL_CARD_NAME, sample };
+}
+
+/**
+ * ⭐ **배열 순서가 곧 적용 순서다** — 카드사 → 농협 계열 긴 형태 → 은행. 긴 형태가 먼저 와야
+ * "신한카드"가 `신한`(은행)에, "지역농협"이 `농협`에 먼저 잡혀 "OO은행카드"·"지역OO은행"이 되지 않는다.
+ */
+export const REAL_FINANCIAL_NAME_RULES: readonly RealFinancialNameRule[] = [
+  // ── 카드사 → OO카드 ──
+  card("국민카드", "(?:KB\\s?)?국민카드", "KB국민카드"),
+  card("농협카드", "(?:NH\\s?)?농협카드", "NH농협카드"),
+  card("NH카드", "NH카드", "NH카드"),
+  card("신한카드", "신한\\s?카드", "신한카드"),
+  card("삼성카드", "삼성\\s?카드", "삼성카드"),
+  card("현대카드", "현대\\s?카드", "현대카드"),
+  card("롯데카드", "롯데\\s?카드", "롯데카드"),
+  card("하나카드", "하나카드", "하나카드"),
+  card("우리카드", "우리카드", "우리카드"),
+  card("BC카드", "(?:BC|비씨)\\s?카드", "BC카드"),
+  card("씨티카드", "씨티\\s?카드", "씨티카드"),
+  // ── 농협 계열(긴 형태 먼저) → OO은행 ──
+  bank("지역·단위농협", "(?:지역|단위)\\s?농협", "지역농협"),
+  bank("농축협", "농축협", "농축협"),
+  bank("농협", "(?:NH\\s?)?농협(?:\\s?은행|중앙회)?", "NH농협은행"),
+  // ── 은행 → OO은행 ──
+  bank("국민은행", "(?:KB\\s?)?국민\\s?은행", "KB국민은행"),
+  bank("KB국민", "KB\\s?국민", "KB국민"),
+  bank("KB은행", "KB\\s?은행", "KB은행"),
+  bank("신한은행", "신한\\s?은행", "신한은행"),
+  bank("신한", `${NOT_AFTER_HANGUL}신한`, "신한"),
+  bank("우리은행", "우리은행", "우리은행"),
+  bank("하나은행", "(?:KEB\\s?)?하나은행", "KEB하나은행"),
+  bank("KEB하나", "KEB\\s?하나", "KEB하나"),
+  bank("IBK기업은행", "IBK\\s?기업(?:\\s?은행)?", "IBK기업은행"),
+  // "중소기업은행"(정식 명칭)이 "중소OO은행"이 되지 않게 앞 수식어를 함께 먹는다.
+  bank("기업은행", "(?:중소\\s?)?기업은행", "기업은행"),
+  bank("IBK", "IBK", "IBK"),
+  bank("KDB산업은행", "KDB\\s?산업(?:\\s?은행)?", "KDB산업은행"),
+  // "한국산업은행"이 "한국OO은행"이 되지 않게 앞 수식어를 함께 먹는다.
+  bank("산업은행", "(?:한국\\s?)?산업은행", "산업은행"),
+  bank("KDB", "KDB", "KDB"),
+  bank("수협", `${NOT_AFTER_HANGUL}(?:Sh\\s?)?수협(?:\\s?은행)?`, "Sh수협은행"),
+  bank("신협", `${NOT_AFTER_HANGUL}신협`, "신협"),
+  bank("새마을금고", "새마을\\s?금고", "새마을금고"),
+  bank("카카오뱅크", "카카오\\s?뱅크", "카카오뱅크"),
+  bank("카뱅", "카뱅", "카뱅"),
+  bank("케이뱅크", "케이\\s?뱅크", "케이뱅크"),
+  bank("K뱅크", "K\\s?뱅크", "K뱅크"),
+  bank("토스뱅크", "토스\\s?뱅크", "토스뱅크"),
+  bank("제일은행", "(?:SC\\s?)?제일은행", "SC제일은행"),
+  bank("SC제일", "SC\\s?제일", "SC제일"),
+  bank("SC은행", "SC\\s?은행", "SC은행"),
+  // "스탠다드차타드은행"이 "OO은행은행"이 되지 않게 뒤 "은행"을 함께 먹는다.
+  bank("스탠다드차타드", "스탠다드\\s?차타드(?:\\s?은행)?", "스탠다드차타드은행"),
+  bank("씨티은행", "(?:한국\\s?)?[씨시]티\\s?은행", "한국씨티은행"),
+  bank("부산은행", "(?:BNK\\s?)?부산\\s?은행", "BNK부산은행"),
+  bank("경남은행", "(?:BNK\\s?)?경남\\s?은행", "BNK경남은행"),
+  bank("대구은행", "(?:DGB\\s?)?대구\\s?은행", "DGB대구은행"),
+  bank("iM뱅크", "iM\\s?뱅크", "iM뱅크"),
+  bank("광주은행", "광주\\s?은행", "광주은행"),
+  bank("전북은행", "전북\\s?은행", "전북은행"),
+  bank("제주은행", "제주\\s?은행", "제주은행"),
+  bank("한국은행", "한국은행", "한국은행"),
+  // "한국수출입은행"이 "한국OO은행"이 되지 않게 앞 수식어를 함께 먹는다.
+  bank("수출입은행", "(?:한국\\s?)?수출입은행", "한국수출입은행"),
+];
+
+/**
+ * 실존 은행·카드사 이름을 `OO은행`/`OO카드`로 바꾼다. 숫자·기관명·일반어는 건드리지 않는다.
+ * 치환이 0건이면 **입력 문자열을 그대로** 돌려준다.
+ */
+export function replaceRealFinancialNames(text: string): { text: string; replacedCount: number } {
+  // §85 — 실존 민간 회사명(택배·통신·보험·증권·쇼핑몰·캐피탈·저축은행)을 **먼저** 바꾼다. 아래 은행 짧은
+  // 규칙(`신한`·`IBK`·`농협`)이 "신한라이프"·"IBK캐피탈"을 "OO은행라이프"로 깨뜨리지 않게 하기 위해서다.
+  const company = replaceRealCompanyNames(text);
+  let replacedCount = company.replacedCount;
+  let current = company.text;
+  for (const rule of REAL_FINANCIAL_NAME_RULES) {
+    current = current.replace(rule.pattern, () => {
+      replacedCount += 1;
+      return rule.replacement;
+    });
+  }
+  return replacedCount === 0 ? { text, replacedCount: 0 } : { text: current, replacedCount };
+}
+
+/** §127 — 참가자가 먼저 말한 은행 · 카드사 이름을 사기범이 되받을 때 쓰는 중립 표현. */
+export const USER_MENTIONED_BANK = "말씀하신 은행";
+export const USER_MENTIONED_CARD = "말씀하신 카드사";
+/** §132 — 바로 앞이 이미 "말씀하신(·하셨던) (그)"로 끝나는지. */
+const ALREADY_USER_MENTIONED = /말씀\s*(?:하신|하셨던|주신)\s*(?:그\s*)?$/;
+/**
+ * §132.10(메인 라이브 관찰 2026-10-24 — "말씀하신 은행 계좌라고 말씀하셨는데…") — 이름 뒤 같은 문장 안에서 이미 참가자 발언을 가리킨다
+ * ("…라고 말씀하셨는데" · "…이라고 하셨죠" · "…말씀하신 대로"). 그때는 "말씀하신" 대신 "그"로 받는다("그 은행 계좌라고 말씀하셨는데").
+ */
+const USER_ATTRIBUTION_AFTER = /^[^.?!\n]{0,16}?(?:말씀\s*하(?:셨|신|시)|(?:이)?라고\s*하(?:셨|신|시))/;
+
+/**
+ * ⭐ §127(DECISIONS #243 · 메인 세션 라이브 확인 2026-10-24 — 참가자 "국민은행이고 예금은 3천만원" → 사기범 "보담은행에 3천만 원") — 참가자가
+ * **먼저 말한** 실존 은행 · 카드사 이름을 사기범이 되받으면, 가상 은행명(`replaceRealFinancialNames` → `applyFictionalBank`)이 아니라 중립 표현
+ * ("말씀하신 은행")으로 바꾼다. 다른 이름으로 바꾸면 참가자가 말한 사실을 사기범이 틀리게 받아 대화가 어긋난다. 사기범이 **스스로 꺼낸** 실존명은
+ * 그대로 종전 치환을 받는다(이 함수 다음에 `replaceRealFinancialNames`가 돈다). 순수 함수 · 치환 0이면 입력 그대로.
+ */
+export function neutralizeUserMentionedFinancialNames(
+  reply: string,
+  userTexts: readonly string[],
+): { text: string; replacedCount: number } {
+  let replacedCount = 0;
+  let current = reply;
+  for (const rule of REAL_FINANCIAL_NAME_RULES) {
+    const probe = new RegExp(rule.pattern.source, rule.pattern.flags.replace("g", ""));
+    if (!userTexts.some((t) => probe.test(t))) continue;
+    const neutral = rule.replacement === FICTIONAL_CARD_NAME ? USER_MENTIONED_CARD : USER_MENTIONED_BANK;
+    current = current.replace(new RegExp(rule.pattern.source, rule.pattern.flags), (...args: unknown[]) => {
+      replacedCount += 1;
+      // §132 — 모델이 이미 "말씀하신 국민은행"처럼 말했으면 "말씀하신"을 겹쳐 붙이지 않고 업종 이름만 남긴다.
+      const offset = args.find((a, i) => i > 0 && typeof a === "number") as number;
+      const before = current.slice(0, offset);
+      if (ALREADY_USER_MENTIONED.test(before)) return neutral.replace(/^말씀하신\s*/, "");
+      const after = current.slice(offset + String(args[0]).length);
+      return USER_ATTRIBUTION_AFTER.test(after) ? neutral.replace(/^말씀하신/, "그") : neutral;
+    });
+  }
+  return replacedCount === 0 ? { text: reply, replacedCount: 0 } : { text: current, replacedCount };
+}
+// ── 은행 · 카드 표 사본 끝 ──
+
 // ── 사본 시작 ──
 /** S1 — 겹대괄호 표식. 닫는 `]]`가 없어도(끼어들기로 잘린 조각) 줄 끝까지면 지운다. */
 const CONTROL_MARKER = /\[\[[^[\]\n]{0,80}(?:\]\]|$)/g;
@@ -252,15 +400,29 @@ export function guardLiveUserLineWith(text: string, previousScammerLine: string 
   return masked === text ? text : masked;
 }
 
-/** S1 ~ S3 — 회사명 치환은 호출부가 넘긴다(서버 = `guardrails/realCompanyNames.ts` · 화면 = 같은 표의 사본). */
-export function guardLiveScammerLineWith(text: string, replaceCompanies: (t: string) => { text: string }): string {
-  return replaceCompanies(stripControlMarkers(text)).text;
+/** 실명 치환 한 쌍 — 서버 = `guardrails/realFinancialNames.ts`(회사명 표 포함) · 화면 = 같은 표의 사본. */
+export type LiveRealNameReplacers = {
+  /** S2b — 참가자가 먼저 말한 은행 · 카드사 → "말씀하신 은행/카드사". */
+  neutralizeUserMentioned: (text: string, userTexts: readonly string[]) => { text: string };
+  /** S2 · S2c — 실존 회사명 → 업종 이름 · 실존 은행 · 카드사 → "OO은행/OO카드". */
+  replaceRealNames: (text: string) => { text: string };
+};
+
+/** S1 ~ S3. `userTexts` = 같은 통화에서 이 줄보다 앞선(같은 flush 포함) 참가자 줄 원문. */
+export function guardLiveScammerLineWith(text: string, userTexts: readonly string[], replace: LiveRealNameReplacers): string {
+  const stripped = stripControlMarkers(text);
+  return replace.replaceRealNames(replace.neutralizeUserMentioned(stripped, userTexts).text).text;
 }
 // ── 사본 끝 ──
 
-/** 화면 — 사기범 줄(S1 ~ S3). */
-export function guardLiveScammerLine(text: string): string {
-  return guardLiveScammerLineWith(text, replaceRealCompanyNames);
+const CLIENT_REPLACERS: LiveRealNameReplacers = {
+  neutralizeUserMentioned: neutralizeUserMentionedFinancialNames,
+  replaceRealNames: replaceRealFinancialNames,
+};
+
+/** 화면 — 사기범 줄(S1 ~ S3). `userTexts` = 같은 통화의 앞선(같은 flush 포함) 참가자 줄(S2b 입력 · 없으면 S2b 0건). */
+export function guardLiveScammerLine(text: string, userTexts: readonly string[] = []): string {
+  return guardLiveScammerLineWith(text, userTexts, CLIENT_REPLACERS);
 }
 
 /** 화면 — 참가자 줄(U1 · U2). */

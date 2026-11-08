@@ -81,7 +81,7 @@ test("[§116] 사고 파트(thought: true)의 오디오는 고르지 않는다 �
 test("[§116 배선] 통화 컴포넌트 — 전사 flush · 판정 입력은 거른 글, 오디오는 사고 파트 제외 + 게이트", () => {
   const s = read("./GeminiVoiceSession.tsx");
   // 2026-11-07(판 3 · 16 · 23) — 두 flush가 같은 `guardScammer`(사고 문장 제거 → `liveTranscriptGuard.ts` 표식 · 실존 회사명)를 거친다.
-  assert.match(s, /const guardScammer = \(raw: string\) => guardLiveScammerLine\(stripLeakedThought\(raw\)\)\.trim\(\);/);
+  assert.match(s, /const guardScammer = \(raw: string\) => guardLiveScammerLine\(stripLeakedThought\(raw\), userTextsForGuard\(\)\)\.trim\(\);/);
   assert.match(s, /const s = guardScammer\(scammerBuffer\);[\s\S]*const s = guardScammer\(scammerBuffer\);/, "flushTranscript · flushScammerTurn 둘 다");
   assert.match(s, /const scammerTurnText = stripLeakedThought\(scammerBuffer\);/);
   assert.match(s, /const audioData = pickLiveAudioData\(sc\?\.modelTurn\?\.parts\);/);
