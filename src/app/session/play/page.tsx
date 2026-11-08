@@ -200,6 +200,7 @@ import InCallSmsOverlay from "@/components/InCallSmsOverlay";
 import CallLegScreens from "@/components/CallLegScreens";
 import {
   LEG_CALLBACK_DELAY_MS,
+  LEG_HANGUP_END_SCREEN_MS,
   LEG_INCOMING_CALL_DELAY_MS,
   LEG_DIAL_CONNECT_MS,
   LEG_TRANSFER_CONNECT_MS,
@@ -590,6 +591,8 @@ export default function SessionCallPage() {
   const currentCallRef = useRef<{ number: string; direction: "in" | "out"; atMs: number } | null>(null);
   // 참가자가 끊은 뒤 상대가 다시 걸어 오는 예약 — 다시 걸려 온 전화를 거절하면 더 걸어 오지 않는다(끝없는 재발신 0).
   const callbackAfterHangupRef = useRef(true);
+  // 2026-11-08 재시험 9(`legTransition.ts` 표 H5) — 참가자 끊기의 서버 기록(전사 제출 → `startCallLeg hangup`)이 끝나기 전 건 번호는 그 뒤에 서버로 간다.
+  const legHangupPendingRef = useRef<Promise<unknown> | null>(null);
   // §142 PR-4(R2) — 세션이 수신 벨이 아니라 시작 문자 · 전화 앱 화면에서 시작한다(세션 문서 `startSurface` — 서버 값). 첫 통화는 참가자가 건다.
   const [smsStart, setSmsStart] = useState(false);
   // 결함 ①(2026-11-06) — 수신 통화로 시작하는 다통화 세션의 첫 통화 발신자(서버 세션 문서 `startCallerLabel`). 받기 전 벨 화면도 이 번호다.
@@ -1847,6 +1850,8 @@ export default function SessionCallPage() {
     setLegDialing(false);
     legSwitchingRef.current = false;
     setEndLatched(false);
+    // 2026-11-08 재시험 9(표 H6) — 참가자가 끊은 뒤 내내 "통화 종료"였던 경과 자리를 새 통화에서 되돌린다.
+    setLocalHangup(false);
     // §142 D1 — 새 통화 = 새 레그: 백스톱 질의를 다시 연다. 앞 레그의 `none_pending`(질의 멈춤) · 마무리 지시 1회 표시가 남으면
     // 뒤 레그의 문자(안전계좌) · 넘김 지시가 오지 않는다.
     smsBackstopRef.current.nonePending = false;
@@ -1865,6 +1870,12 @@ export default function SessionCallPage() {
     if (!sessionId) return;
     setLegDialing(true);
     try {
+      // 2026-11-08 재시험 9(표 H5) — 방금 끊은 통화의 서버 기록이 먼저(아직이면 서버가 진행 중 통화로 보고 훈련을 끝낸다).
+      await legHangupPendingRef.current;
+      if (!endCallMountedRef.current || isEndLatched(callEndingRef.current)) {
+        setLegDialing(false);
+        return;
+      }
       const result = await startCallLeg({ sessionId, action, ...(dialed ? { dialed } : {}) });
       if (!endCallMountedRef.current) return;
       if (result.status === "connected") {
@@ -2012,25 +2023,32 @@ export default function SessionCallPage() {
       setPhoneCallLog((log) => [...log, { number: shownLabel, direction: kind === "decline" ? "declined" : "out", atMs: Date.now() }]);
     }
     if (kind === "decline") callbackAfterHangupRef.current = false;
-    try {
-      await flushTranscript(legDiag);
-    } catch {
-      // 제출 실패는 끊기를 막지 않는다(종료 때 다시 제출된다).
-    }
-    let response: { status: string } | null = null;
-    try {
-      response = await startCallLeg({ sessionId, action: "hangup" });
-    } catch {
-      response = null;
-    }
+    // 2026-11-08 재시험 9(`legTransition.ts` 표 H1 · H2) — 끊기는 서버 응답(전사 제출 + 서버 — 콜드 스타트면 10초 넘게)을 기다리지 않고
+    // "통화 종료"를 잠깐 보인 뒤 전화 앱으로 간다. 응답이 훈련 종료(H4)면 `endTrainingFromLeg`가 이 예약을 지운다.
+    if (kind === "hangup") legTimeout(() => setLegScreen(screenAfterParticipantHangup()), LEG_HANGUP_END_SCREEN_MS);
+    const pending = (async (): Promise<{ status: string } | null> => {
+      try {
+        await flushTranscript(legDiag);
+      } catch {
+        // 제출 실패는 끊기를 막지 않는다(종료 때 다시 제출된다).
+      }
+      try {
+        return await startCallLeg({ sessionId, action: "hangup" });
+      } catch {
+        return null;
+      }
+    })();
+    legHangupPendingRef.current = pending;
+    const response = await pending;
+    if (legHangupPendingRef.current === pending) legHangupPendingRef.current = null;
     if (!endCallMountedRef.current) return;
     if (afterHangupResponse(response) === "end_training") {
       // 서버가 이 행동을 모른다(배포 전) · 실패 — 종전대로 훈련 종료(AC-006 종료는 항상 성공).
       endTrainingFromLeg();
       return;
     }
-    setLocalHangup(false);
-    setLegScreen(screenAfterParticipantHangup());
+    // 끊기(hangup)는 위 예약이 전화 앱으로 옮긴다 · 경과 자리 "통화 종료"는 다음 통화 연결(`connectLeg`)까지 둔다(표 H6).
+    if (kind !== "hangup") setLegScreen(screenAfterParticipantHangup());
     // 실제 사기범처럼 상대가 다시 걸어 온다(D4와 같은 시간) — 걸려 온 전화를 거절했으면 더 걸지 않는다.
     if (callbackAfterHangupRef.current) legTimeout(() => void openNextLeg("callback"), LEG_CALLBACK_DELAY_MS);
   };
@@ -3592,7 +3610,7 @@ export default function SessionCallPage() {
           경고색 · 점멸 0(`role="status"`). "계속하기" 탭은 iOS에서 소리 · 마이크를 다시 켜는 사용자 동작도 된다(위 탭 안전망). */}
       {callMode === "realtime" && phase === "live" && (
         <ScreenOffNotice
-          reconnecting={showsReconnectingNotice({ reconnecting: realtime.status === "reconnecting", legScreen: legScreen.kind, legOpening })}
+          reconnecting={showsReconnectingNotice({ reconnecting: realtime.status === "reconnecting", legScreen: legScreen.kind, legOpening, endLatched })}
           returned={showReturnNotice}
           keepAwakeUnavailable={wakeLockStatus === "unsupported" || wakeLockStatus === "denied"}
           onDismissReturned={() => setShowReturnNotice(false)}
