@@ -124,7 +124,8 @@ const SENTENCE_END = /[.?!。\n]/;
 
 export function smsClaimPurposes(scammerText: string): SmsClaimPurpose[] {
   const found = new Set<SmsClaimPurpose>();
-  for (const pattern of [SMS_SENT_CLAIM, SMS_ARRIVED_REFERENCE]) {
+  // 판정표 T — 링크 가리킴 둘레의 말("보호계좌로 옮기는 링크")도 대상으로 센다.
+  for (const pattern of [SMS_SENT_CLAIM, SMS_ARRIVED_REFERENCE, SMS_LINK_REFERENCE]) {
     const global = new RegExp(pattern.source, "g");
     for (const match of scammerText.matchAll(global)) {
       const start = match.index ?? 0;
@@ -141,6 +142,32 @@ export function smsClaimPurposes(scammerText: string): SmsClaimPurpose[] {
     }
   }
   return CLAIM_PURPOSE_WORDS.map(([purpose]) => purpose).filter((purpose) => found.has(purpose));
+}
+
+// ── 판정표 T(2026-11-09 라이브 재시험 15 E2 · 16 F1 · 사용자 결정 "고치기") — 아직 오지 않은 링크를 가리키는 말 ──
+// 은행 사칭(직접 확인) 고급에서 '확인 부서로 연결'로 넘겨받은 담당자가 "링크 접속하시면 …" · "링크에서 안내하는 절차에 따라 …"라고 했는데 보호계좌 문자는
+// 1분 · 16초 뒤에 왔다. 이 꼴은 `SMS_SENT_CLAIM` · `SMS_ARRIVED_REFERENCE` 어디에도 맞지 않아 주장 백스톱(§104)이 돌지 않았고, 넘김 뒤에는 서버 넛지도
+// 건너뛰어(`deliverInCallSms` nudge 분기 — 전환 완료면 waiting) 강제 발송(게이트 열림 + 간격 × 2)까지 기다렸다.
+// | # | If(사기범 턴 끝 전사) | Then |
+// |---|---|---|
+// | T1 | 문자 속 링크를 이미 있는 것처럼 가리킨다(`SMS_LINK_REFERENCE` — 접속 · 들어가 · 누르 · 클릭 · 열어 · 안내하는) ∧ 이 세션에 링크 있는 문자가 아직 0통 | "보냈다" 주장으로 본다(게이트 하한 · 간격은 서버 그대로) |
+// | T2 | 같은 꼴 ∧ 링크 있는 문자가 이미 도착 | 주장 아님(이미 받은 링크를 가리킨 말 — 다음 문자를 당기지 않는다) |
+// | T3 | 하지 말라는 꼴("링크는 누르지 마세요") · 링크를 가리키지 않음 | 종전 |
+// ⚠️ 턴 끝(`handleTranscriptTurn`)에서만 본다 — 말하는 도중 경로(`GeminiVoiceSession`)는 도착한 문자 목록을 모른다(지연 = 그 턴의 남은 말).
+export const SMS_LINK_REFERENCE =
+  /링크\s*(?:로|를|에서|에|으로)?\s*(?:접속하|접속해|들어가|들어오|누르시|눌러\s*주|눌러\s*보|클릭하|클릭해|열어\s*주|열어\s*보|여시|안내하는|안내된|나오는)/;
+const LINK_REFERENCE_NEGATION = /^[^.?!\n]{0,6}?(?:지\s*마|지\s*말|면\s*안)/;
+/** 판정표 T — 하지 말라는 꼴을 뺀 링크 가리킴이 있는가. */
+export function scammerRefersToLink(scammerText: string): boolean {
+  for (const match of scammerText.matchAll(new RegExp(SMS_LINK_REFERENCE.source, "g"))) {
+    const after = scammerText.slice((match.index ?? 0) + match[0].length);
+    if (!LINK_REFERENCE_NEGATION.test(after)) return true;
+  }
+  return false;
+}
+/** 판정표 T1 · T2 — 링크 있는 문자가 아직 0통일 때만 주장으로 본다. */
+export function scammerRefersToUnsentLink(scammerText: string, linkSmsArrived: boolean): boolean {
+  return !linkSmsArrived && scammerRefersToLink(scammerText);
 }
 
 /** 대기 중인 주장의 대상 목록에 새 주장의 대상을 합친다(순서 = 표 순서 · 중복 0). */
