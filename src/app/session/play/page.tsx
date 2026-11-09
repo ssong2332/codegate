@@ -167,7 +167,7 @@ import {
   type VerifyOfferPhase,
 } from "@/lib/verifyintercept";
 import { scammerClaimsSmsSent, shouldFireBackstop, shouldRequestSmsBackstop } from "@/lib/realtime/toolWindow";
-import { mergeClaimPurposes, smsClaimPurposes, type SmsClaimPurpose } from "@/lib/realtime/toolWindow";
+import { mergeClaimPurposes, scammerRefersToUnsentLink, smsClaimPurposes, type SmsClaimPurpose } from "@/lib/realtime/toolWindow";
 import {
   countTranscriptFlush,
   deliveryForInstruction,
@@ -708,6 +708,8 @@ export default function SessionCallPage() {
   const smsClaimPendingRef = useRef(false);
   // 판정표 CL(2026-11-08 · B1) — 대기 중인 주장들이 가리키는 문자 목적(합집합). 주장이 내려가면 비운다.
   const smsClaimPurposesRef = useRef<SmsClaimPurpose[]>([]);
+  // 판정표 T(2026-11-09) — 링크 있는 문자(이체 · 링크 화면)가 이미 도착했는가. 턴 끝 링크 가리킴 판정이 읽는다(아래 `inCallSms` effect가 갱신).
+  const linkSmsArrivedRef = useRef(false);
   // §132.9 — 하한 전 "보냈다" 주장에 정정 1줄을 이미 넣었는가(주장이 내려가면 초기화).
   const smsClaimCorrectedRef = useRef(false);
   // §108 — 주장이 생긴 사기범 턴에 바로 백스톱을 묻게 하는 깨우기 값(값 자체는 쓰지 않는다).
@@ -836,6 +838,12 @@ export default function SessionCallPage() {
       setSmsClaimTick((n) => n + 1);
       // 판정표 CL(B1) — 이 주장이 가리키는 문자 목적(백스톱 effect는 렌더 뒤에 돌아 이 값을 읽는다).
       smsClaimPurposesRef.current = mergeClaimPurposes(smsClaimPurposesRef.current, smsClaimPurposes(text));
+    } else if (role === "scammer" && !claimRaisedMidTurn && scammerRefersToUnsentLink(text, linkSmsArrivedRef.current)) {
+      // 판정표 T1 — 링크 있는 문자가 아직 없는데 "링크 접속하시면 …"처럼 가리켰다: "보냈다" 주장과 같게 본다(넘겨받은 담당자 포함).
+      // 대상은 이 말 둘레로 새로 정한다(앞선 주장이 이미 받은 문자만 가리켜 남아 있어도 이 말은 아직 안 온 문자를 가리킨다 — CL3로 걸러지지 않게).
+      smsClaimPendingRef.current = true;
+      setSmsClaimTick((n) => n + 1);
+      smsClaimPurposesRef.current = smsClaimPurposes(text);
     }
     // ⭐ §99 — 탭이 백그라운드에서 정리돼 새로고침되면 메모리의 전사가 사라진다. 같은 탭 sessionStorage에 같이 적어 두고
     // 통화 복원(새로고침) 때 되살린다(아래 로드 effect). 쓰기 실패는 무시한다(비차단).
@@ -1115,6 +1123,11 @@ export default function SessionCallPage() {
     });
     return unsubscribe;
   }, [sessionId, phase, smsStart]);
+
+  // 판정표 T(2026-11-09) — 링크 있는 문자 도착 여부를 턴 끝 판정(`handleTranscriptTurn` — ref만 읽는 콜백)에 넘긴다.
+  useEffect(() => {
+    linkSmsArrivedRef.current = inCallSms.some((sms) => sms.fakeLandingId !== undefined || sms.linkDisplayText !== undefined);
+  }, [inCallSms]);
 
   // T83 — 확인 권유(오퍼) 문서 구독(UX-031). **실시간·폴백 양 경로의 단일 렌더 소스**다(§16.1.3):
   // 콜러블 응답에는 모델 지시만 실리고 창구명·번호는 이 구독으로만 화면에 들어온다(사전 유출 방지).
