@@ -857,9 +857,15 @@ type DemandRow = {
   only?: RegExp;
 };
 
-/** 10행 — 대출 신청 화면 · 신청서 마무리 재촉(SL4 · SL5). */
-const APPLY_FINISH_REQUEST =
-  /(?:링크|신청\s*(?:화면|서|절차)?)[^.?!\n]{0,40}?(?:접속|진행|완료|마무리|제출|마치|끝내|작성)[^.?!\n]{0,12}?(?:주(?:세요|십시오|시겠|시면|셔야)|하셔야|하십시오|하세요|되어야|돼야|되셔야)/;
+/**
+ * 10행 — 대출 신청 화면 · 신청서 마무리 재촉(SL4 · SL5).
+ * SL10(2026-11-09 재시험 20 J3 (a) "문자 속 링크에서 비대면 대출을 신청해 주시고, …" — '신청' 뒤에 접속 · 완료 류 낱말이 없어 행이 안 열렸다) —
+ * 같은 문장에 링크 · 대출이 있고 '신청'을 **직접 시키는** 어형(신청해 주세요 · 주시고 · 신청하세요 · 신청하셔야)도 받는다.
+ */
+const APPLY_FINISH_REQUEST = new RegExp(
+  "(?:링크|신청\\s*(?:화면|서|절차)?)[^.?!\\n]{0,40}?(?:접속|진행|완료|마무리|제출|마치|끝내|작성)[^.?!\\n]{0,12}?(?:주(?:세요|십시오|시겠|시면|셔야)|하셔야|하십시오|하세요|되어야|돼야|되셔야)" +
+    "|(?:링크|대출)[^.?!\\n]{0,40}?신청\\s*(?:해\\s*주(?:세요|십시오|시고|시겠|시면|셔야)|하(?:셔야|십시오|세요|시고))",
+);
 /** 11행 — 금융회사 확인 질문에 이렇게만 답하라는 코칭(SL6). */
 const CHECK_CALL_COACHING =
   /(?:확인\s*전화|전화가?\s*(?:오면|가면)|물으면|물어보면|여쭤보면|용도는)[^.?!\n]{0,40}?(?:라고만|아니라고|라고\s*(?:답|말)(?:하|씀))/;
@@ -987,6 +993,20 @@ export function analyzeConversation(
       if (scammerHasDemand(prev.textMasked)) return prev;
     }
     return msg;
+  };
+  // ⭐ 2026-11-09 Edge 재시험 20 J3 (b)(기관 고급 fv-c5fj — "문자 속 링크 접속하셔서 본인 인증 후 대출 신청을 마저 완료해 주십시오." 뒤
+  // "진행해 주세요"가 최종 폴백 '신원정보 직접 요구') — 실시간 전사는 한 대사가 조각으로 나뉘어 저장될 수 있다. 마지막 조각("마저 완료해
+  // 주십시오.")만 짝 대사가 되면 그 조각에는 링크 · 신청 낱말이 없어 요구 어형 표가 비었다(⚠️ 조각 저장은 재현으로 고른 추정 원인 — 저장
+  // 메시지 확인 전).
+  // | # | If(짝 대사 S' · 그 앞) | Then |
+  // |---|---|---|
+  // | SL9 | S' 자체로 문구 키 · 요구 어형 표가 모두 비고, 바로 앞이 참가자 줄 없이 이어진 **같은 통화**(정당한 제3자 통화 아님) 사기범 조각 P | 'P + S''를 이어 붙인 글로 요구 어형 표를 다시 본다(P 하나만) |
+  // | SL9b | 이어 붙여도 비거나 앞 조각이 없다 | 종전(사진 · 답 내용 범주 → 최종 폴백) |
+  const resolveFragmentDemandTactic = (source: AnalysisMessage, tactics: readonly string[]): string | undefined => {
+    const index = sorted.indexOf(source);
+    const prev = index > 0 ? sorted[index - 1] : undefined;
+    if (!prev || prev.role !== "scammer" || isGenuineLegMessage(prev) || prev.legIndex !== source.legIndex) return undefined;
+    return resolveDemandFallbackTactic(`${prev.textMasked} ${source.textMasked}`, tactics);
   };
   for (let i = 0; i < sorted.length; i += 1) {
     const msg = sorted[i];
@@ -1122,6 +1142,7 @@ export function analyzeConversation(
       : (otpCategoryTactic ??
         l4DemandLabel ??
         resolveDemandFallbackTactic(labelSource.textMasked, scopeTactics) ??
+        resolveFragmentDemandTactic(labelSource, scopeTactics) ??
         (userReply.photo === true && photoDemand ? resolvePhotoProvidedTactic(photoDemand.textMasked, scopeOf(photoDemand).tactics) : undefined) ??
         resolveAnswerCategoryTactic(labelSource.textMasked, userReply, scopeTactics));
     if (fallbackTactic) tacticLabelsUsed.add(fallbackTactic);

@@ -133,3 +133,76 @@ test("SL8 — 신청 · 코칭 단어가 있어도 요구 어형이 아니면 �
     assert.equal(resolveDemandFallbackTactic(line, leg0), undefined, line);
   }
 });
+
+// ── 2026-11-09 Edge 라이브 재시험 20 J3(main `f520f82e` · fv-c5fj) — #571 뒤에도 ④가 일부 남았다(리플레이 원문).
+// (a) 3:47 "…링크에서 비대면 대출을 신청해 주시고, …" → 응함이 '신원정보 직접 요구'. 원인: 10행이 '신청' 뒤 접속 · 완료 류 낱말을 요구했다(SL10).
+// (b) 4:16 "문자 속 링크 접속하셔서 본인 인증 후 대출 신청을 마저 완료해 주십시오." → 같은 라벨. 이 문장 한 줄로는 이미 '대출 신청 링크 유도'다(아래 SL9 전제) —
+//     저장 전사가 조각으로 나뉘어 마지막 조각만 짝 대사가 되면 재현된다(SL9 · 추정 원인).
+const LOAN_APPLY_DIRECT = "안내해 드린 대로 문자 속 링크에서 비대면 대출을 신청해 주시고, 대출 용도는 생활비로 선택해 주십시오.";
+const LOAN_APPLY_FINISH = "문자 속 링크 접속하셔서 본인 인증 후 대출 신청을 마저 완료해 주십시오.";
+
+test("[재현 J3 (a)] SL10 — '대출을 신청해 주시고' 뒤 응함 = '대출 신청 링크 유도'", () => {
+  const result = analyzeLoan([msg(0, "scammer", LOAN_APPLY_DIRECT, 227, 0), msg(1, "user", GO_AHEAD_REPLY, 235, 0)]);
+  assert.deepEqual(result.deceivedMoments.map((m) => m.tactic), ["대출 신청 링크 유도"]);
+});
+
+test("SL10 — 신청을 직접 시키는 어형 표(주세요 · 주시고 · 하세요 · 하셔야 = 열림 / 링크 · 대출 없음 · 요구 아님 = 안 열림)", () => {
+  const leg0 = multiCallLegTactics(findFlowVariant("fv-c5fj"))![0]!;
+  for (const line of [
+    "링크에서 대출을 신청해 주세요.",
+    "비대면 대출을 바로 신청하세요.",
+    "그 링크에서 오늘 안에 대출 신청하셔야 합니다.",
+  ]) {
+    assert.equal(resolveDemandFallbackTactic(line, leg0), "대출 신청 링크 유도", line);
+  }
+  for (const line of ["대출을 신청해 주셔서 감사합니다.", "카드 재발급을 신청해 주세요.", "대출 신청이 접수됐습니다."]) {
+    assert.notEqual(resolveDemandFallbackTactic(line, leg0), "대출 신청 링크 유도", line);
+  }
+});
+
+test("[재현 J3 (b)] SL9 — 한 줄이면 이미 '대출 신청 링크 유도'(전제) · 조각으로 나뉘어도 같은 라벨", () => {
+  const whole = analyzeLoan([msg(0, "scammer", LOAN_APPLY_FINISH, 250, 0), msg(1, "user", GO_AHEAD_REPLY, 256, 0)]);
+  assert.deepEqual(whole.deceivedMoments.map((m) => m.tactic), ["대출 신청 링크 유도"]);
+  const split = analyzeLoan([
+    msg(0, "scammer", "문자 속 링크 접속하셔서 본인 인증 후 대출 신청을", 250, 0),
+    msg(1, "scammer", "마저 완료해 주십시오.", 253, 0),
+    msg(2, "user", GO_AHEAD_REPLY, 256, 0),
+  ]);
+  assert.deepEqual(split.deceivedMoments.map((m) => m.tactic), ["대출 신청 링크 유도"]);
+});
+
+test("SL9b — 앞 조각이 다른 통화 · 참가자 줄 뒤면 이어 붙이지 않는다(종전 최종 폴백)", () => {
+  const otherLeg = analyzeLoan([
+    msg(0, "scammer", "문자 속 링크 접속하셔서 본인 인증 후 대출 신청을", 250, 2),
+    msg(1, "scammer", "마저 완료해 주십시오.", 253, 0),
+    msg(2, "user", GO_AHEAD_REPLY, 256, 0),
+  ]);
+  assert.notDeepEqual(otherLeg.deceivedMoments.map((m) => m.tactic), ["대출 신청 링크 유도"]);
+  const afterUser = analyzeLoan([
+    msg(0, "scammer", "문자 속 링크 접속하셔서 본인 인증 후 대출 신청을", 250, 0),
+    msg(1, "user", "네.", 251, 0),
+    msg(2, "scammer", "마저 완료해 주십시오.", 253, 0),
+    msg(3, "user", GO_AHEAD_REPLY, 256, 0),
+  ]);
+  assert.ok(!afterUser.deceivedMoments.some((m) => m.turnIndex === 3 && m.tactic === "대출 신청 링크 유도"));
+});
+
+test("J3 유지 — 같은 판 확인 전화 코칭 · 통화 3 대출금 이체 라벨은 그대로", () => {
+  const result = analyzeLoan([
+    msg(0, "scammer", LOAN_APPLY_DIRECT, 227, 0),
+    msg(1, "user", GO_AHEAD_REPLY, 235, 0),
+    msg(2, "scammer", LOAN_APPLY_FINISH, 250, 0),
+    msg(3, "user", GO_AHEAD_REPLY, 256, 0),
+    msg(4, "scammer", CHECK_CALL_COACH, 312, 0),
+    msg(5, "user", GO_AHEAD_REPLY, 318, 0),
+  ]);
+  assert.deepEqual(
+    result.deceivedMoments.map((m) => m.tactic),
+    ["대출 신청 링크 유도", "대출 신청 링크 유도", "확인 전화 얼버무리기 코칭"],
+  );
+  const leg2 = multiCallLegTactics(findFlowVariant("fv-c5fj"))![2]!;
+  assert.equal(
+    resolveDemandFallbackTactic("들어온 대출금 2,000만 원을 문자로 보낸 안전계좌로 바로 이체해 주십시오.", leg2),
+    "대출금 이체 요구",
+  );
+});
