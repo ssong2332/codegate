@@ -14,6 +14,7 @@
 import type { FlowVariant, FlowVariantLeg } from "../scenarios/flowVariants";
 import { findDialEntry, lookupDialedNumber, normalizeDialedNumber, type DialEntry } from "../scenarios/dialDirectory";
 import { IN_CALL_SMS } from "../scenarios/inCallSms";
+import { CASE_RECORD_NAMES, FSS_CALLER_NAMES } from "../scenarios/fictionalNames";
 
 export type RelayState = {
   legIndex: number;
@@ -286,11 +287,14 @@ export function buildLegRejoinContext(
  * | K2 | 앞 레그 중 같은 `speakerId` 레그가 없다 | undefined(새 인물 — 종전 `caseBrief` 규칙) |
  * | K3 | 결과 = 실행 | 다시 건 같은 사람 + "대출이 실행돼 대출금이 입금됐다" |
  * | K4 | 그 밖(보류 · 결과 없음) | 다시 건 같은 사람 + "대출 실행이 보류됐다 — 대출금은 들어오지 않았다" |
+ * Edge 재시험 19 ③(2026-11-09) — K3 · K4에 신분 줄을 붙인다(판정표 I · `legPriorIdentity`): 앞 통화에서 밝힌 소속 · 이름이 있으면 그 이름 그대로,
+ * 없으면(I4) "앞 통화에서 밝힌 소속 · 이름 그대로"만. `messages` = 세션 메시지(앞 통화 원문은 싣지 않는다 — 이름 판정 입력으로만 읽는다).
  */
 export function buildLegLoanReviewContext(
   variant: Pick<FlowVariant, "legs">,
   legIndex: number,
   outcome: "approved" | "held" | undefined,
+  messages?: readonly LegRejoinMessage[],
 ): string | undefined {
   const leg = variant.legs[legIndex];
   if (!leg || legIndex <= 0 || leg.genuine) return undefined;
@@ -304,9 +308,64 @@ export function buildLegLoanReviewContext(
   return [
     "[이 통화 전 상황 — 다시 건 통화]",
     "- 너는 앞서 이 사람과 통화한 바로 그 사람이다. 앞 통화에서 안전계좌 이체와 비대면 대출 신청을 시켰고, 금융회사 확인 전화가 끝나면 다시 연락하겠다고 했다. 이번 통화는 네가 같은 번호로 다시 건 것이라 본인 확인 · 사건 설명을 처음부터 다시 하지 않는다.",
+    identityLine(legPriorIdentity(variant, legIndex, messages)),
     `- ${result}`,
   ].join("\n");
 }
+
+/**
+ * Edge 재시험 19 ③ — 판정표 I의 고정 이름표(가상 고유명 정본 `fictionalNames.ts` · 기관 사칭 페르소나가 허용하는 신분과 같다).
+ * `name` = 대사에서 찾는 이름(띄어쓰기 무시) · `identity` = 이어 쓸 소속 · 이름 전체.
+ */
+const LEG_IDENTITY_TABLE: readonly { name: string; identity: string }[] = [
+  { name: FSS_CALLER_NAMES.investigator, identity: `금융감독원 ${FSS_CALLER_NAMES.team} ${FSS_CALLER_NAMES.investigator} 조사관` },
+  { name: CASE_RECORD_NAMES.investigator, identity: `${CASE_RECORD_NAMES.office} ${CASE_RECORD_NAMES.department} ${CASE_RECORD_NAMES.investigator} 수사관` },
+  { name: CASE_RECORD_NAMES.prosecutor, identity: `${CASE_RECORD_NAMES.office} ${CASE_RECORD_NAMES.department} ${CASE_RECORD_NAMES.prosecutor} 검사` },
+];
+
+/**
+ * Edge 재시험 19 ③(2026-11-09 — 통화 1 "금융감독원 … 권도하 조사관" ↔ 통화 3 "한빛지방검찰청 … 정하람 수사관") — 같은 인물이 다시 건 레그가 이어 쓸
+ * 앞 통화 신분. 결정적(추가 LLM 호출 0).
+ * | # | If | Then |
+ * |---|---|---|
+ * | I1 ~ I3 | 같은 `speakerId`의 앞 사기범 레그(정당한 제3자 레그 제외) 대사에서 고정 이름표 이름이 처음 나왔다 | 그 이름의 소속 · 이름 전체 |
+ * | I4 | 이름 0 · `messages` 부재 · 같은 화자 앞 레그 없음 | undefined |
+ * | I5 | 참가자 줄 · 다른 레그 줄 · 낭독 안 된 줄(`notSpoken`) | 세지 않는다(`legIndex` 부재 = 레그 0) |
+ */
+export function legPriorIdentity(
+  variant: Pick<FlowVariant, "legs">,
+  legIndex: number,
+  messages: readonly LegRejoinMessage[] | undefined,
+): string | undefined {
+  const leg = variant.legs[legIndex];
+  if (!leg || !messages || leg.speakerId === undefined) return undefined;
+  const sameSpeakerLegs = new Set(
+    variant.legs.slice(0, legIndex).flatMap((p, i) => (!p.genuine && p.speakerId === leg.speakerId ? [i] : [])),
+  );
+  if (sameSpeakerLegs.size === 0) return undefined;
+  for (const m of messages) {
+    if (m.role !== "scammer" || m.notSpoken === true || !sameSpeakerLegs.has(m.legIndex ?? 0)) continue;
+    const compact = (m.text ?? "").replace(/\s+/g, "");
+    let first: { at: number; identity: string } | undefined;
+    for (const row of LEG_IDENTITY_TABLE) {
+      const at = compact.indexOf(row.name);
+      if (at >= 0 && (first === undefined || at < first.at)) first = { at, identity: row.identity };
+    }
+    if (first) return first.identity;
+  }
+  return undefined;
+}
+
+/** 마지막 글자가 받침 있는 한글 음절인가(조사관 → "이라고" · 검사 → "라고"). */
+const hasFinalConsonant = (text: string): boolean => {
+  const code = text.charCodeAt(text.length - 1) - 0xac00;
+  return code >= 0 && code < 11172 && code % 28 !== 0;
+};
+
+const identityLine = (identity: string | undefined): string =>
+  identity
+    ? `- 앞 통화에서 너는 자신을 "${identity}"${hasFinalConsonant(identity) ? "이라고" : "라고"} 밝혔다. 이번 통화에서도 소속 · 이름을 말할 때는 그대로 말하고, 다른 기관 · 이름으로 바꾸지 않는다.`
+    : "- 소속 · 이름을 말할 때는 앞 통화에서 밝힌 소속 · 이름 그대로 말하고, 다른 기관 · 이름으로 바꾸지 않는다.";
 
 /**
  * 2026-11-07(Edge 시험 판 26 — 다시 걸려 온 배송원이 이미 보낸 반송 문자를 "보내 드릴 테니"라고 다시 말했다) — 이 레그에 선언된 문자 중 이미 도착한 것의 설명

@@ -38,6 +38,7 @@ import {
   type ReplayTimelineItem,
   type ReplayVerifySource,
 } from "@/lib/replay/buildReplayTimeline";
+import { readReplayCallLegs, replayCallerFor, type ReplayCallLeg } from "@/lib/replay/replayCaller";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { cleanStoredLine } from "@/lib/realtime/thoughtLeak";
 import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
@@ -92,6 +93,8 @@ export default function ReplayPage() {
   const [deceivedMoments, setDeceivedMoments] = useState<ReplayDeceivedMomentSource[]>([]);
   const [scenarioTitle, setScenarioTitle] = useState<string | null>(null);
   const [callerLabel, setCallerLabel] = useState<string>("상대방");
+  // Edge 재시험 19 ② — 다통화 변형의 통화별 발신 표시(리포트 `callLegs` · null = 종전 시나리오 번호 하나 · `replayCaller.ts` 판정표 R).
+  const [callLegs, setCallLegs] = useState<ReplayCallLeg[] | null>(null);
   // T194-b(UX-018 v1.38 ① · §84.3.7) — 사기범이 카드 값을 처음 말한 줄의 turnIndex(리포트 `personaBlock` 앵커 · 기록 없으면 null).
   const [personaAnchor, setPersonaAnchor] = useState<number | null>(null);
   // 사용자 결정 2026-10-21 ② — 위험 신호(참가자 줄 turnIndex → 항목). 부재 = 빈 배열.
@@ -144,6 +147,8 @@ export default function ReplayPage() {
         ...(data.notSpoken === true ? { notSpoken: true as const } : {}),
         // §130(UX D-161 (10)) — 사진 턴 표시(이미지는 저장되지 않는다 — 사실만).
         ...(data.photo === true ? { photo: true as const } : {}),
+        // Edge 재시험 19 ② — 통화 번호(발신 표시만 고른다 · `replayCaller.ts`).
+        ...(typeof data.legIndex === "number" ? { legIndex: data.legIndex as number } : {}),
       };
     });
 
@@ -203,6 +208,7 @@ export default function ReplayPage() {
       deceivedMoments,
       scenarioTitle: scenario?.title ?? null,
       callerLabel: scenario?.callerLabel ?? "상대방",
+      callLegs: readReplayCallLegs(reportData.callLegs),
       challenge: challengeContext,
       personaAnchor: personaReplayAnchor(readPersonaBlock(reportData.personaBlock)),
       riskSignals: readRiskSignals(reportData.riskSignals),
@@ -225,6 +231,7 @@ export default function ReplayPage() {
         setDeceivedMoments(result.deceivedMoments);
         setScenarioTitle(result.scenarioTitle);
         setCallerLabel(result.callerLabel);
+        setCallLegs(result.callLegs);
         setChallenge(result.challenge);
         setPersonaAnchor(result.personaAnchor);
         setRiskSignals(result.riskSignals);
@@ -334,6 +341,7 @@ export default function ReplayPage() {
         setDeceivedMoments(result.deceivedMoments);
         setScenarioTitle(result.scenarioTitle);
         setCallerLabel(result.callerLabel);
+        setCallLegs(result.callLegs);
         setChallenge(result.challenge);
         setPersonaAnchor(result.personaAnchor);
         setRiskSignals(result.riskSignals);
@@ -617,7 +625,16 @@ export default function ReplayPage() {
                   </div>
                   <div>
                     <p className="mb-1 ml-1 flex items-center gap-1.5 text-[13px] text-ink-sub">
-                      {callerLabel} <span className="font-semibold text-caution">(사칭)</span>
+                      {(() => {
+                        // Edge 재시험 19 ② — 통화별 번호 · 정당한 제3자 통화(대출 실행 확인 상담원)는 '(사칭)' 없이(`replayCaller.ts` 판정표 R).
+                        const caller = replayCallerFor(item.legIndex, callLegs, callerLabel);
+                        return (
+                          <>
+                            {caller.label}{" "}
+                            {caller.impersonation && <span className="font-semibold text-caution">(사칭)</span>}
+                          </>
+                        );
+                      })()}
                       {hasMultipleChannels && <Badge variant="neutral">{channelBadgeLabel}</Badge>}
                     </p>
                     <div

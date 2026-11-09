@@ -192,7 +192,25 @@ export const createRealtimeCall = onCall<
     // ⭐ PR-B — 정당한 제3자 통화 뒤 같은 인물이 다시 건 레그(기관 고급 통화 3)는 확인 결과 1줄만 싣는다(대화 원문 0 · 판정표 K).
     priorChatContext = undefined;
     const legVariant = findFlowVariant(session.flowVariantId);
-    const loanReviewLine = legVariant ? buildLegLoanReviewContext(legVariant, callLeg.legIndex, session.loanReview?.outcome) : undefined;
+    // Edge 재시험 19 ③ — 확인 결과 줄이 실리는 레그(판정표 K)만 메시지를 읽어 앞 통화 신분 이름을 고른다(판정표 I · 원문은 싣지 않는다).
+    // 읽기 실패 = 신분 이름 없이(I4 문장) — 통화는 막지 않는다.
+    let loanReviewLine = legVariant ? buildLegLoanReviewContext(legVariant, callLeg.legIndex, session.loanReview?.outcome) : undefined;
+    if (legVariant && loanReviewLine) {
+      try {
+        const messagesSnap = await db.collection("sessions").doc(sessionId).collection("messages").orderBy("turnIndex", "asc").get();
+        loanReviewLine = buildLegLoanReviewContext(
+          legVariant,
+          callLeg.legIndex,
+          session.loanReview?.outcome,
+          messagesSnap.docs.map((d) => {
+            const m = d.data() as Pick<MessageDoc, "role" | "textMasked" | "legIndex" | "notSpoken">;
+            return { role: m.role, text: m.textMasked, legIndex: m.legIndex, notSpoken: m.notSpoken === true };
+          }),
+        );
+      } catch {
+        // 종전 줄 그대로
+      }
+    }
     if (loanReviewLine) priorChatContext = loanReviewLine;
   } else if (isEscalatedVoiceCall(session.channel, session.channelHistory)) {
     try {
