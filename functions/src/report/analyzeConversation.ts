@@ -843,6 +843,8 @@ const MONEY_CONTEXT = /\d[\d,]*\s*(?:만|천|백)?\s*원|[일이삼사오육칠�
 const TRANSFER_REQUEST = new RegExp(
   `(?:보내|입금해|이체해|송금해|빌려|옮겨|넣어|결제해|납부해)\\s*(?:${SHORT_REQUEST_ENDING}|두셔야|두세요|두십시오|둬|놓으셔야)|보낼\\s*수\\s*있` +
     `|(?:보내|입금하|이체하|송금하|납부하|넣으)(?:세요|십시오|셔야|실\\s*수)` +
+    // SL14(2026-11-09 재시험 22 ⑩ (a) "…안전 계좌로 이관하셔야 합니다") — '이관'(피해금 이관)도 옮기라는 요구다. 같은 문장의 돈 · 계좌 문맥 조건은 그대로.
+    `|이관하(?:세요|십시오|셔야)|이관해\\s*(?:${SHORT_REQUEST_ENDING})` +
     // §129.8 D4 — 평서 해요체 요구 "…계좌로 돈 보내요"(자녀 납치 초급 · 중급) · "입금 부탁드릴게요"(대환대출 초급).
     `|(?:보내|입금해|이체해|송금해|넣어)요(?![가-힣])|(?:입금|이체|송금|납부)\\s*(?:을|를|좀)?\\s*(?:꼭\\s*|바로\\s*)?부탁`,
 );
@@ -922,6 +924,37 @@ export function resolveDemandFallbackTactic(
     return preferred ?? candidates[0];
   }
   return undefined;
+}
+
+/**
+ * ⭐ 2026-11-09 Edge 라이브 재시험 22 ⑩(기관 고급 fv-c5fj) — 사기범 대사에 **다른 범주 수법 예시 문구의 앞머리**가 섞여(문구 키 5자) 그 대사가 실제로
+ * 요구한 것과 다른 라벨이 붙었다. (a) "본인 확인이 완료되었습니다. … 안전 계좌로 이관하셔야 합니다." → 키 "본인확인이"(신원정보 예시 '본인 확인이 안 되면 …')
+ * = '신원정보 직접 요구'. (b) "… 문자로 보낸 안내 화면에서 대출을 신청해 주십시오." → 키 "문자로보낸"(이체 화면 예시) = '이체 화면 유도'. 판정표 SL13:
+ * | # | If(속은 순간 라벨을 고르는 대사 · 첫 키 라벨) | Then |
+ * |---|---|---|
+ * | SL13 | 첫 키 라벨이 요구 범주(송금 · 개인정보 · 링크 · 설치) ∧ 대사에 **그 범주의 요구 어형이 없다**(`hasCategoryDemand`) ∧ 요구 어형 표가 **다른 범주** 라벨을 고른다 | 표 라벨 |
+ * | SL13b | 키 범주의 요구가 대사에 있다 · 표가 비었다 · 표가 같은 범주 | 종전 키 라벨 |
+ * ⚠️ 인증번호(L3) · L4(확인 차단 키) · 비밀 코드 · 핀 라벨이 정해진 짝은 이 표 밖이다(호출부 조건). 시도된 수법 목록은 무변경(키 라벨 그대로 올라간다).
+ */
+function hasCategoryDemand(category: TacticCategory, scammerText: string): boolean {
+  const sentences = scammerText.split(/[.?!\n]+/).filter((s) => s.trim().length > 0);
+  if (DEMAND_FALLBACK_ROWS.some((row) => row.category === category && row.matches(sentences, scammerText))) return true;
+  if (category === "personal_info_demand") {
+    return OTP_ASKED.test(scammerText) || SECRET_CODE_DEMAND.test(scammerText) || PHOTO_DEMAND.test(scammerText);
+  }
+  if (category === "payment_demand") return isTransferDemand(scammerText) || HANDOFF_DEMAND_CRYPTO_STEPS.test(scammerText);
+  return false;
+}
+
+function resolveKeyCategoryMismatchTactic(
+  scammerText: string,
+  firstKeyTactic: string,
+  weakenedTactics: readonly string[],
+): string | undefined {
+  const keyCategory = resolveTacticCategory(extractTacticLabel(firstKeyTactic));
+  if (!DEMAND_CATEGORIES.includes(keyCategory) || hasCategoryDemand(keyCategory, scammerText)) return undefined;
+  const tableLabel = resolveDemandFallbackTactic(scammerText, weakenedTactics);
+  return tableLabel && resolveTacticCategory(tableLabel) !== keyCategory ? tableLabel : undefined;
 }
 
 export function analyzeConversation(
@@ -1133,14 +1166,20 @@ export function analyzeConversation(
       userReply.photo !== true && (OTP_DIGIT_RUN.test(userReply.textMasked) || extractSpokenCodes(userReply.textMasked).length > 0);
     const secretLabel = secretGiven ? resolveSecretCodeLabel(labelSource.textMasked, scopeTactics) : undefined;
     if (secretLabel) tacticLabelsUsed.add(secretLabel);
+    // SL13 — 첫 키 라벨의 범주 요구가 대사에 없고 요구 어형 표가 다른 범주를 고르면 표 라벨(위 판정표).
+    const keyMismatchLabel =
+      !secretLabel && !otpKeyTactic && !otpCategoryTactic && !keyIsVerificationBlock && firstKeyTactic !== undefined
+        ? resolveKeyCategoryMismatchTactic(labelSource.textMasked, firstKeyTactic, scopeTactics)
+        : undefined;
     const labelTactic = secretLabel
       ? undefined
-      : (otpKeyTactic ?? l4KeyTactic ?? (otpCategoryTactic || l4DemandLabel ? undefined : firstKeyTactic));
+      : (otpKeyTactic ?? l4KeyTactic ?? (otpCategoryTactic || l4DemandLabel || keyMismatchLabel ? undefined : firstKeyTactic));
     // §129 L2 — 요구 어형 표도 비면 답의 내용 범주로(사진 턴 제외).
     const fallbackTactic = labelTactic || secretLabel
       ? undefined
       : (otpCategoryTactic ??
         l4DemandLabel ??
+        keyMismatchLabel ??
         resolveDemandFallbackTactic(labelSource.textMasked, scopeTactics) ??
         resolveFragmentDemandTactic(labelSource, scopeTactics) ??
         (userReply.photo === true && photoDemand ? resolvePhotoProvidedTactic(photoDemand.textMasked, scopeOf(photoDemand).tactics) : undefined) ??

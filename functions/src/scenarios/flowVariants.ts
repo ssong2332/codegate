@@ -83,6 +83,12 @@ export type FlowVariantSms = {
    */
   explicitNotBeforeUserTurns?: number;
   /**
+   * ⭐ 2026-11-09(라이브 재시험 21 · 22 관찰 ⑦ · 판정표 FE — `smsGate.ts`) — 위 명시 하한을 **이 smsId 문자가 연 화면이 제출된 뒤에만** 쓴다.
+   * 제출 전이면 명시 요청도 `notBeforeUserTurns`(종전). 제출 뒤에는 그 문자와의 간격(4행)도 보지 않는다(화면 제출이 두 문자 사이 행동이다).
+   * 부재 = 종전(판정표 F 그대로). 같은 레그에서 이 문자보다 앞에 선언된, 화면을 여는 문자의 smsId만 쓴다(`loanGuideTiming.test.ts`가 고정).
+   */
+  explicitAfterScreenOf?: string;
+  /**
    * §124(DECISIONS #239 · 사용자 실기 신고 (9) *"여전히 문자가 좀 늦게 오는 경우가 존재해"* · PR #390 실측) — 모델이 도구를 부르지 않을 때
    * 백스톱 간격(게이트가 열린 뒤 넛지까지 · 넛지에서 강제 발송까지의 사용자 발화 수). 부재 = `BACKSTOP_USER_TURNS`(2 — 열림 + 4에 강제).
    * ⚠️ 판단값. 하한(`notBeforeUserTurns` · 문자 간격)은 그대로다 — 앞당기는 것은 "열린 뒤 기다리는 시간"뿐이다.
@@ -1168,7 +1174,18 @@ export const INSTITUTION_LOAN_REPORT_LESSONS: readonly string[] = [
 const INSTITUTION_LOAN_SMS: FlowVariantSms[] = [
   { ...INSTITUTION_ADVANCED_SMS_V3[0], leg: 0 },
   { ...INSTITUTION_ADVANCED_SMS_V3[1], leg: 0 },
-  { purpose: "link", smsId: "institution-loan-guide", required: true, notBeforeUserTurns: 9, leg: 0, ...FAST_BACKSTOP },
+  // ⭐ 2026-11-09(라이브 재시험 21 · 22 관찰 ⑦ · 판정표 FE) — 안전계좌 이체 화면 제출 뒤에는 명시 요청(도구 · "보냈다" 주장)이 하한 6으로 연다.
+  // 종전에는 하한 9 하나라 이체를 빨리 마친 참가자에게 사기범이 대출 문자를 말한 뒤 1 ~ 2발화 늦게 왔다. 자동 백스톱 · 폴백은 9 그대로.
+  {
+    purpose: "link",
+    smsId: "institution-loan-guide",
+    required: true,
+    notBeforeUserTurns: 9,
+    explicitNotBeforeUserTurns: 6,
+    explicitAfterScreenOf: "institution-asset-safe-account",
+    leg: 0,
+    ...FAST_BACKSTOP,
+  },
   { purpose: "transfer", smsId: "institution-loan-safe-account", required: true, notBeforeUserTurns: 1, leg: 2, whenLoanReview: "approved", ...FAST_BACKSTOP },
 ];
 

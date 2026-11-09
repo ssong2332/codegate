@@ -38,6 +38,17 @@
 // 근거: 기관 사칭 고급 인증번호 문자 하한 5(§127 — 자동 백스톱이 인증번호 단계보다 먼저 강제하던 것을 막으려고 올린 값)가 모델 도구 호출에도 걸려,
 // 흐름이 인증번호 단계에 먼저 이른 통화에서 도구가 거절되고 사기범 말보다 문자가 늦었다(재시험 8 · `smsTimingOrder.test` 재현).
 //
+// ── 판정표 FE(2026-11-09 라이브 재시험 21 · 22 관찰 ⑦ · 사용자 결정 "고치기") — 판정표 F1을 화면 제출로 좁힌다(`explicitAfterScreenOf`) ──
+// | # | If | Then |
+// |---|---|---|
+// | FE1 | 선언에 `explicitAfterScreenOf` 없음 | 판정표 F 그대로 |
+// | FE2 | 있음 ∧ 명시 요청(`explicitFloor`) ∧ 그 smsId 문자가 도착했고 그 화면을 제출했다 | 3행 하한 = `explicitNotBeforeUserTurns` · 4행 간격 검사 안 함(화면 제출이 두 문자 사이 행동) |
+// | FE3 | 있음 ∧ 명시 요청 ∧ 그 화면 제출 전(문자 미도착 포함) | 3행 하한 = `notBeforeUserTurns`(종전 — 이체 전에는 앞당기지 않는다) · 4행 그대로 |
+// | FE4 | 있음 ∧ 명시 요청 아님(자동 백스톱 · 텍스트 폴백) | 종전(F3) |
+// 근거: 기관 사칭 고급 `fv-c5fj` 대출 안내 문자 하한 9(PR-B) — 참가자가 980만 원 이체 화면을 빨리 마치면 사기범이 발화 7 ~ 8에 "문자로 보내 드린 링크의 대출 신청
+// 화면"이라고 말했고, 주장 백스톱은 하한 전이라 `waiting` + 정정(`SMS_CLAIM_NOT_YET` "하던 이야기를 이어가라")을 돌려줬다 — 문자는 참가자가 1 ~ 2번 더 말한 뒤
+// 왔고(재시험 21 약 1분 · 22 약 1분 30초), 재시험 22에서는 그 사이 사기범이 확인 전화 코칭 단계로 먼저 넘어갔다(`loanGuideTiming.test.ts` 재현).
+//
 // ── 판정표 CL(2026-11-08 라이브 재시험 9 · 사용자 결정 B1) — "보냈다" 주장이 가리키는 문자(`claimTargetsPending`) ──
 // 클라가 주장 문장의 대상을 표기로 판정해 목적 목록을 싣는다(`smsClaimedPurposes` — 화면 `toolWindow.ts` `smsClaimPurposes`).
 // | # | If | Then |
@@ -127,10 +138,28 @@ export function lastArrivalUserTurns(delivered: readonly DeliveredSmsRecord[]): 
   return Math.max(...delivered.map((d) => d.userTurnsAtArrival ?? 0));
 }
 
-/** 이 항목의 게이트 3 하한(판정표 F — 명시 요청이면 `explicitNotBeforeUserTurns`). */
-function earliestUserTurns(item: FlowVariantSms, explicitFloor?: boolean): number {
-  const floor = explicitFloor === true ? (item.explicitNotBeforeUserTurns ?? item.notBeforeUserTurns) : item.notBeforeUserTurns;
+/** 판정표 FE — `explicitAfterScreenOf` 문자가 도착했고 그 화면을 제출했는가(필드 부재 = 거짓). */
+export function priorScreenSubmitted(item: FlowVariantSms, delivered: readonly DeliveredSmsRecord[]): boolean {
+  if (item.explicitAfterScreenOf === undefined) return false;
+  return delivered.some((d) => d.smsId === item.explicitAfterScreenOf && d.landingSubmitted === true);
+}
+
+/** 판정표 F · FE — 이 명시 요청에 명시 하한을 쓰는가. */
+function usesExplicitFloor(item: FlowVariantSms, delivered: readonly DeliveredSmsRecord[], explicitFloor?: boolean): boolean {
+  if (explicitFloor !== true) return false; // F3 · FE4
+  if (item.explicitAfterScreenOf === undefined) return true; // F1 · F2 · FE1
+  return priorScreenSubmitted(item, delivered); // FE2 · FE3
+}
+
+/** 이 항목의 게이트 3 하한(판정표 F · FE — 명시 요청이면 `explicitNotBeforeUserTurns`). */
+function earliestUserTurns(item: FlowVariantSms, delivered: readonly DeliveredSmsRecord[], explicitFloor?: boolean): number {
+  const floor = usesExplicitFloor(item, delivered, explicitFloor) ? (item.explicitNotBeforeUserTurns ?? item.notBeforeUserTurns) : item.notBeforeUserTurns;
   return Math.max(floor, FIRST_SMS_MIN_USER_TURNS);
+}
+
+/** 판정표 FE2 — 앞 화면 제출 뒤 명시 요청이면 4행 간격을 보지 않는다. */
+function skipsSpacing(item: FlowVariantSms, delivered: readonly DeliveredSmsRecord[], explicitFloor?: boolean): boolean {
+  return explicitFloor === true && priorScreenSubmitted(item, delivered);
 }
 
 /** ⛔ 판정표 순서 그대로(위 머리 주석). 부수효과 0. */
@@ -142,9 +171,9 @@ export function resolveSmsGate(input: SmsGateInput): SmsGateResult {
   if (input.delivered.some((d) => d.smsId === item.smsId)) return { status: "already_delivered", item };
   // ⭐ D-c(P2 실 키 실측 2026-11-01 — 카드 `fv-w3dq` 이관 문자가 설치 문자보다 먼저 · 환급 `fv-aqx2` 수수료 문자가 신청 링크보다 먼저) — 선언 순서 = 단계 순서다.
   if (earlierRequiredPending(item, input.declared, input.delivered)) return { status: "too_early", item };
-  if (input.userTurns < earliestUserTurns(item, input.explicitFloor)) return { status: "too_early", item };
+  if (input.userTurns < earliestUserTurns(item, input.delivered, input.explicitFloor)) return { status: "too_early", item };
   const last = lastArrivalUserTurns(input.delivered);
-  if (last !== undefined && input.userTurns - last < smsSpacingFor(input.explicit)) {
+  if (last !== undefined && !skipsSpacing(item, input.delivered, input.explicitFloor) && input.userTurns - last < smsSpacingFor(input.explicit)) {
     return { status: "too_soon", item };
   }
   return { status: "allowed", item };
@@ -178,8 +207,8 @@ export function gateOpensAtUserTurns(
   explicitFloor?: boolean,
 ): number {
   const last = lastArrivalUserTurns(delivered);
-  const afterLast = last === undefined ? 0 : last + smsSpacingFor(explicit);
-  return Math.max(earliestUserTurns(item, explicitFloor), afterLast);
+  const afterLast = last === undefined || skipsSpacing(item, delivered, explicitFloor) ? 0 : last + smsSpacingFor(explicit);
+  return Math.max(earliestUserTurns(item, delivered, explicitFloor), afterLast);
 }
 
 /**
