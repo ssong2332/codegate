@@ -566,7 +566,16 @@ function representativeTactic(weakenedTactics: readonly string[]): string | unde
   return demand ?? labels[0];
 }
 
-/** L2 — 범주에 맞는 세션 목록 안 라벨(부인 대응 · 암시 라벨 제외). */
+/**
+ * L2 — 범주에 맞는 세션 목록 안 라벨(부인 대응 · 암시 라벨 제외).
+ * ⭐ 2026-11-09 Edge 재시험 19 ①(금 구매형 fv-g2ld — "현재 거래 중인 은행은 어디입니까?" → "새마을은행에 1,200만 원 있어요."가 아직 오지 않은
+ * '실물 조사 명목 금 구매 인출 요구'에 응함) — 잔액 공개 답을 송금 범주로 보고 목록 첫 송금 라벨(그 변형의 결말 수법)을 붙였다. 판정표 SL:
+ * | # | If(답 · 세션 목록) | Then |
+ * |---|---|---|
+ * | SL1 | 답 = 잔액 공개(`BALANCE_DISCLOSURE`) ∧ 이체 이행 보고 아님 ∧ 목록에 자산 · 잔액 · 거래 은행 라벨(`ASSET_INFO_LABEL` — 판정표 O2와 같은 표) | 그 라벨 |
+ * | SL1b | SL1이되 목록에 그런 라벨이 없다 | 종전(송금 범주 첫 라벨) |
+ * ⚠️ 이 함수는 문구 키 · 요구 어형 표가 모두 빈 뒤에만 불린다 — 금 구매 · 이체를 실제로 요구한 대사(키 · 표 일치)는 종전 라벨 그대로다.
+ */
 function resolveAnswerCategoryTactic(
   scammerText: string,
   reply: AnalysisMessage,
@@ -574,9 +583,14 @@ function resolveAnswerCategoryTactic(
 ): string | undefined {
   const category = answerContentCategory(scammerText, reply);
   if (!category) return undefined;
-  return weakenedTactics
-    .map(extractTacticLabel)
-    .find((label) => !NON_DEMAND_LABEL.test(label) && resolveTacticCategory(label) === category);
+  const labels = weakenedTactics.map(extractTacticLabel).filter((label) => !NON_DEMAND_LABEL.test(label));
+  const balanceOnly =
+    reply.photo !== true && BALANCE_DISCLOSURE.test(reply.textMasked) && !TRANSFER_DONE_REPORT.test(reply.textMasked);
+  // 개인정보 범주로 좁힌다 — '자산 보호 이체 요구'(송금 범주)도 '자산'을 품는다.
+  const assetLabel = balanceOnly
+    ? labels.find((label) => ASSET_INFO_LABEL.test(label) && resolveTacticCategory(label) === "personal_info_demand")
+    : undefined;
+  return assetLabel ?? labels.find((label) => resolveTacticCategory(label) === category);
 }
 
 function isHardDisclosure(scammerText: string, replyText: string): boolean {
@@ -779,7 +793,10 @@ function findMatchedTactics(scammerText: string, matchers: readonly TacticMatche
  * | 7 | 금액 "N원" 또는 계좌번호꼴 + 부탁(할게·해·드려·드릴게·드립니다·하면·좀) | payment_demand | 목록 첫 라벨 |
  * | 8 | 대사 전체가 `HANDOFF_DEMAND`(인출 · 전달 · 보관 · 코인 요구 어형 — T191 J-2 그대로 재사용) | payment_demand | 목록 첫 라벨 |
  * | 9 | §129.13 (c)(사용자 결정 2026-10-25 ㉠) 예금 · 적금 + 해지/찾아/인출 + 금 + 구입/사/바꿔(같은 문장 · 순서대로) | payment_demand | `금`이 든 라벨 우선 |
+ * | 10 | 2026-11-09 SL4(재시험 19 ④) 같은 문장에 링크 · 신청(화면 · 서 · 절차) 뒤 40자 안에 접속 · 진행 · 완료 · 마무리 · 제출 · 마치 · 끝내 · 작성, 그 뒤 12자 안에 요구 어미(주세요 · 주십시오 · 하셔야 · 하십시오 · 하세요 · 되어야 · 돼야) | link_or_install | **`신청`이 든 라벨만**(없으면 다음 행) |
+ * | 11 | 2026-11-09 SL6(재시험 19 ④) 같은 문장에 확인 전화 · 전화가 오면 · 물으면 · 물어보면 · 용도는 뒤 40자 안에 라고만 · 아니라고 · 라고 (답|말)하 | verification_block | **`확인 전화` · `코칭`이 든 라벨만**(없으면 다음 행) |
  * | — | 위 어느 행도 아님 · 맞은 행의 범주 라벨이 세션 목록에 없음 | — | 종전 폴백 `"약화된 사기 수법"` 그대로 |
+ * ⚠️ 10 · 11행은 `only`(라벨 글자 제한)로 그 라벨이 있는 변형(대출 3통화 fv-c5fj)에서만 열린다 — 다른 링크 · 설치 · 확인 차단 라벨을 끌어오지 않는다.
  *
  * - **시키는 어미** = `주세요·주십시오·주시겠·주시면·주셔야·주실 수·주시고·주면·주라·줘(줘서 제외)·줄 수·줄래·달라`
  *   (+ 6행만 `두셔야·두세요·두십시오·둬·놓으셔야`). ⛔ `주셔서·주신·준`(감사 · 확인 어형)은 열지 않는다 — "입금해 주신
@@ -836,7 +853,16 @@ type DemandRow = {
   category: TacticCategory;
   matches: (sentences: readonly string[], whole: string) => boolean;
   prefer?: RegExp;
+  /** 10 · 11행 — 이 글자가 든 라벨만 후보다(없으면 다음 행). */
+  only?: RegExp;
 };
+
+/** 10행 — 대출 신청 화면 · 신청서 마무리 재촉(SL4 · SL5). */
+const APPLY_FINISH_REQUEST =
+  /(?:링크|신청\s*(?:화면|서|절차)?)[^.?!\n]{0,40}?(?:접속|진행|완료|마무리|제출|마치|끝내|작성)[^.?!\n]{0,12}?(?:주(?:세요|십시오|시겠|시면|셔야)|하셔야|하십시오|하세요|되어야|돼야|되셔야)/;
+/** 11행 — 금융회사 확인 질문에 이렇게만 답하라는 코칭(SL6). */
+const CHECK_CALL_COACHING =
+  /(?:확인\s*전화|전화가?\s*(?:오면|가면)|물으면|물어보면|여쭤보면|용도는)[^.?!\n]{0,40}?(?:라고만|아니라고|라고\s*(?:답|말)(?:하|씀))/;
 
 /** 9행 — "예금"·"적금"·"현금" 안의 '금'은 금이 아니다(앞 글자 제외). */
 const GOLD_PURCHASE_REQUEST =
@@ -862,6 +888,9 @@ const DEMAND_FALLBACK_ROWS: readonly DemandRow[] = [
   { category: "payment_demand", matches: (_sentences, whole) => HANDOFF_DEMAND.test(whole.replace(ATM_WORDS, "")) },
   // 9 — §129.13 (c)(사용자 결정 2026-10-25 ㉠) 금 구매 인출: 같은 문장에 예금 · 적금 + 해지 · 찾아 · 인출 + 금 + 구입 · 사 · 바꿔(순서대로).
   { category: "payment_demand", matches: anySentence(GOLD_PURCHASE_REQUEST), prefer: /금\s*구매|금/ },
+  // 10 · 11 — 2026-11-09 재시험 19 ④(대출 3통화 — 신청 재촉 · 확인 전화 코칭 뒤 응함이 최종 폴백 '신원정보 직접 요구').
+  { category: "link_or_install", matches: anySentence(APPLY_FINISH_REQUEST), only: /신청/ },
+  { category: "verification_block", matches: anySentence(CHECK_CALL_COACHING), only: /확인\s*전화|코칭/ },
 ];
 
 /** 보정 후보에서 빼는 라벨 — 부인 대응 수법 · 분위기 암시(요구가 아니다). */
@@ -879,7 +908,9 @@ export function resolveDemandFallbackTactic(
   const labels = weakenedTactics.map(extractTacticLabel).filter((label) => !NON_DEMAND_LABEL.test(label));
   for (const row of DEMAND_FALLBACK_ROWS) {
     if (!row.matches(sentences, scammerText)) continue;
-    const candidates = labels.filter((label) => resolveTacticCategory(label) === row.category);
+    const candidates = labels.filter(
+      (label) => resolveTacticCategory(label) === row.category && (!row.only || row.only.test(label)),
+    );
     if (candidates.length === 0) continue;
     const preferred = row.prefer ? candidates.find((label) => row.prefer!.test(label)) : undefined;
     return preferred ?? candidates[0];
