@@ -206,3 +206,51 @@ test("J3 유지 — 같은 판 확인 전화 코칭 · 통화 3 대출금 이체
     "대출금 이체 요구",
   );
 });
+
+// ── 2026-11-09 Edge 라이브 재시험 22 L3(main `7ede70a9` · fv-c5fj) 새 관찰 ⑩ — 사기범 대사에 다른 범주 수법의 **예시 문구 앞머리**가 섞여 문구 키가 그쪽 라벨을 붙였다.
+// (a) 2:28 "본인 확인이 완료되었습니다. … 안전 계좌로 이관하셔야 합니다." → '신원정보 직접 요구'(키 "본인확인이" — 신원정보 예시 '본인 확인이 안 되면 …'의 앞머리).
+//     같은 대사의 '안전계좌 이체 요구' 키("지금계좌에")도 맞았지만 목록 순서상 신원정보가 앞이다. '이관하셔야'는 요구 어형 표 송금 행에 없었다(SL14).
+// (b) 5:05 "… 문자로 보낸 안내 화면에서 대출을 신청해 주십시오. …" → '이체 화면 유도'(키 "문자로보낸" — 이체 화면 예시 '문자로 보낸 안내의 링크 …'의 앞머리).
+//     이 대사에 이체 요구는 없고 요구 어형 표는 '대출 신청 링크 유도'를 고른다(SL13).
+const SAFE_ACCOUNT_AFTER_ID = "본인 확인이 완료되었습니다. 자산을 보호하기 위해서는, 지금 계좌에 있는 금액 중 일부를 안전 계좌로 이관하셔야 합니다.";
+const LOAN_APPLY_VIA_SMS_SCREEN =
+  "받으신 대출금으로 명의 도용 여부를 확인해야 합니다. 문자로 보낸 안내 화면에서 대출을 신청해 주십시오. 용도는 생활비로 선택하시면 됩니다.";
+const GO_AHEAD_COMMA = "네, 알겠습니다. 진행해 주세요.";
+
+test("[재현 ⑩ (a)] SL13 · SL14 — 본인 확인 완료 + 안전 계좌 이관 요구 뒤 응함 = '안전계좌 이체 요구'", () => {
+  const result = analyzeLoan([msg(0, "scammer", SAFE_ACCOUNT_AFTER_ID, 140, 0), msg(1, "user", GO_AHEAD_COMMA, 148, 0)]);
+  assert.deepEqual(result.deceivedMoments.map((m) => m.tactic), ["안전계좌 이체 요구"]);
+});
+
+test("[재현 ⑩ (b)] SL13 — 문자 안내 화면에서 대출 신청 요구 뒤 응함 = '대출 신청 링크 유도'(이체 화면 유도 아님)", () => {
+  const result = analyzeLoan([msg(0, "scammer", LOAN_APPLY_VIA_SMS_SCREEN, 238, 0), msg(1, "user", GO_AHEAD_COMMA, 305, 0)]);
+  assert.deepEqual(result.deceivedMoments.map((m) => m.tactic), ["대출 신청 링크 유도"]);
+});
+
+test("SL14 — '이관하셔야 · 이관해 주십시오'는 돈 · 계좌 문맥이 같은 문장에 있을 때만 송금 요구 행", () => {
+  const leg0 = multiCallLegTactics(findFlowVariant("fv-c5fj"))![0]!;
+  for (const line of ["지금 계좌에 있는 돈을 안전 계좌로 이관하셔야 합니다.", "잔액 980만 원을 국가 안전계좌로 이관해 주십시오."]) {
+    assert.equal(resolveDemandFallbackTactic(line, leg0), "안전계좌 이체 요구", line);
+  }
+  for (const line of ["사건이 상급 부서로 이관되었습니다.", "이관 절차가 곧 진행됩니다."]) {
+    assert.equal(resolveDemandFallbackTactic(line, leg0), undefined, line);
+  }
+});
+
+test("SL13b — 키 라벨 범주의 요구가 대사에 실제로 있으면 종전 키 라벨 그대로", () => {
+  // 신원정보 키 + 신원정보 요구(주민번호) — 종전 '신원정보 직접 요구'.
+  const id = analyzeLoan([
+    msg(0, "scammer", "본인 확인이 안 되면 공범으로 분류됩니다, 주민번호 뒤 7자리 불러주세요.", 100, 0),
+    msg(1, "user", GO_AHEAD_COMMA, 108, 0),
+  ]);
+  assert.deepEqual(id.deceivedMoments.map((m) => m.tactic), ["신원정보 직접 요구"]);
+  // 이체 화면 키 + 금액 · 이체 요구 — 종전 '이체 화면 유도'.
+  const transfer = analyzeLoan([
+    msg(0, "scammer", "문자로 보낸 안내의 링크를 눌러 보시면 안전계좌는 이미 들어가 있습니다, 980만 원만 넣고 이체해 주십시오.", 500, 0),
+    msg(1, "user", GO_AHEAD_COMMA, 508, 0),
+  ]);
+  assert.deepEqual(transfer.deceivedMoments.map((m) => m.tactic), ["이체 화면 유도"]);
+  // 키 범주 요구가 없어도 요구 어형 표가 비면 종전 키 라벨(새 라벨 0).
+  const statement = analyzeLoan([msg(0, "scammer", "본인 확인이 완료되었습니다.", 130, 0), msg(1, "user", GO_AHEAD_COMMA, 135, 0)]);
+  assert.deepEqual(statement.deceivedMoments.map((m) => m.tactic), ["신원정보 직접 요구"]);
+});
