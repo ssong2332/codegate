@@ -20,7 +20,9 @@ const SAFE_ACCOUNT_LINE = "조사가 끝날 때까지 자산을 안전하게 보
 test("[§142 N3 재현 · 수정] 마지막 통화 안전계좌 이체 응답 — 통화 범위 없음 = 설치 요구(결함) · 통화 범위 = 자산 보호 이체 요구", () => {
   const v = R2();
   const m = msgs([["scammer", SAFE_ACCOUNT_LINE, 2], ["user", "네, 보냈어요.", 2]]);
-  assert.deepEqual(analyzeConversation(m, 0, [...v.tactics]).deceivedMoments.map((d) => d.tactic), ["보안 점검 앱 설치 요구"]);
+  // 2026-11-09 판정표 SL13(`analyzeConversation.ts` — 키 범주 요구가 대사에 없으면 요구 어형 표 라벨) 뒤로는 통화 범위가 없어도 설치 요구가 아니다.
+  // 종전(이 결함 재현) 기대값 = "보안 점검 앱 설치 요구".
+  assert.deepEqual(analyzeConversation(m, 0, [...v.tactics]).deceivedMoments.map((d) => d.tactic), ["자산 보호 이체 요구"]);
   assert.deepEqual(analyzeConversation(m, 0, [...v.tactics], [], multiCallLegTactics(v)).deceivedMoments.map((d) => d.tactic), ["자산 보호 이체 요구"]);
 });
 
