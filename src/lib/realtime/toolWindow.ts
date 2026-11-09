@@ -165,9 +165,38 @@ export function scammerRefersToLink(scammerText: string): boolean {
   }
   return false;
 }
-/** 판정표 T1 · T2 — 링크 있는 문자가 아직 0통일 때만 주장으로 본다. */
+// ── 판정표 T 넓힘(2026-11-09 라이브 재시험 17 G1 · 사용자 결정 "고치기") — '링크' 낱말 없이 문자 속 화면을 가리키는 말 ──
+// 은행 사칭(직접 확인) 고급 넘김 전 첫 통화에서 사기범이 "보호계좌 안내 화면에서 절차를 마저 진행해 주셔야 …"라고 했는데 문자는 끝까지 0통이었다.
+// 판정표 T(위)는 레그(넘김 전 · 뒤)를 가리지 않고 턴 끝마다 돌지만 '링크' 낱말만 봤다 ⇒ 이 꼴은 주장으로 잡히지 않았다(재현 `smsScreenReference.test.ts`).
+// | # | If(사기범 턴 끝 전사 · 링크 있는 문자 0통일 때 — T2 · T3는 그대로) | Then |
+// |---|---|---|
+// | T4 | "안내 화면" · "보호계좌 화면" · "안전계좌 화면" · "링크 화면" + 같은 문장 12자 안 가리킴 동작(진행 · 들어가 · 접속 · 확인 · 눌러 · 따라 · 입력 · 마저 · 이동 · 옮기 · 이체 등) | "보냈다" 주장 |
+// | T5 | "문자 속/안(의) …" · "문자에 있는/나온/적힌/뜬/온 …" + 링크 · 화면 · 주소 · 버튼 · 페이지 + 같은 동작 | "보냈다" 주장 |
+// | T6 | "보내 드린 · 발송해 드린 · 발송된" + 화면 · 페이지(사기범이 참가자에게 보낸 것 — "보낸 화면"은 참가자 행동일 수 있어 뺀다) | "보냈다" 주장 |
+// | T7 | T4 ~ T6 꼴이어도 같은 문장 앞 8자 안에 앱 · 어플 · 통화 · 전화 · 폰 ("은행 앱 안내 화면" · "통화 안내 화면") | 주장 아님(서비스 안 내 은행 앱 · 통화 화면) |
+// | T8 | '화면'만 있음 — 통화 화면 · 은행 앱 화면 · 휴대폰 화면 · 이체 화면 · 확인 화면 | 주장 아님(T4 ~ T6 꼴이 아니다) |
+// ⚠️ 대상 목적(`smsClaimPurposes`)은 넓히지 않는다 — 이 꼴만 맞으면 빈 목록 = 서버 CL2(주장으로 본다). 링크 문자 0통일 때만 서므로 당겨질 문자는 아직 안 온 문자다.
+// ⚠️ 오탐 비용 = 게이트가 이미 열린 필수 문자가 몇 발화 일찍 오는 것(게이트 하한 전이면 waiting + 정정 1줄) — 없는 문자를 만들지 않는다.
+export const SMS_SCREEN_REFERENCE =
+  /(?:(?:안내|보호\s*계좌|안전\s*계좌|링크)\s*화면|문자\s*(?:속|안)\s*(?:의\s*)?(?:링크|화면|주소|버튼|페이지)|문자에\s*(?:있는|나온|나와\s*있는|적힌|뜬|온|들어\s*있는)\s*(?:링크|화면|주소|버튼|페이지))[^.?!\n]{0,12}?(?:진행|들어가|들어오|접속|확인|보시|보면|보세|눌러|누르|따라|입력|마저|마치|마쳐|완료|이동|열어|여시|옮기|옮겨|이체|송금|넣어|넣으)/;
+export const SMS_SENT_SCREEN = /(?:보내\s*드린|보내드린|발송해\s*드린|발송된)\s*(?:화면|페이지)/;
+const SCREEN_REFERENCE_EXCLUDED_BEFORE = /(?:앱|어플|통화|전화|폰)[^.?!\n]{0,8}$/;
+/** 판정표 T4 ~ T8 — 하지 말라는 꼴(T3) · 앱 · 통화 화면(T7)을 뺀 문자 속 화면 가리킴이 있는가. */
+export function scammerRefersToSmsScreen(scammerText: string): boolean {
+  for (const pattern of [SMS_SCREEN_REFERENCE, SMS_SENT_SCREEN]) {
+    for (const match of scammerText.matchAll(new RegExp(pattern.source, "g"))) {
+      const start = match.index ?? 0;
+      const before = scammerText.slice(Math.max(0, start - 8), start);
+      if (SCREEN_REFERENCE_EXCLUDED_BEFORE.test(before)) continue;
+      const after = scammerText.slice(start + match[0].length);
+      if (!LINK_REFERENCE_NEGATION.test(after)) return true;
+    }
+  }
+  return false;
+}
+/** 판정표 T1 · T2 · T4 ~ T8 — 링크 있는 문자가 아직 0통일 때만 링크 · 문자 속 화면 가리킴을 주장으로 본다(레그 무관 — 넘김 전 · 뒤 모두). */
 export function scammerRefersToUnsentLink(scammerText: string, linkSmsArrived: boolean): boolean {
-  return !linkSmsArrived && scammerRefersToLink(scammerText);
+  return !linkSmsArrived && (scammerRefersToLink(scammerText) || scammerRefersToSmsScreen(scammerText));
 }
 
 /** 대기 중인 주장의 대상 목록에 새 주장의 대상을 합친다(순서 = 표 순서 · 중복 0). */
