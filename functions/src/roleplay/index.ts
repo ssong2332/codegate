@@ -856,7 +856,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const loanReviewVariant = sessionCallLeg ? findFlowVariant(session.flowVariantId) : undefined;
     const legLoanReviewNotice =
       sessionCallLeg && loanReviewVariant && !rejoin && turnCount === legStartUserTurns(session.relay, sessionCallLeg.legIndex) + 1
-        ? buildLegLoanReviewContext(loanReviewVariant, sessionCallLeg.legIndex, session.loanReview?.outcome)
+        ? buildLegLoanReviewContext(
+            loanReviewVariant,
+            sessionCallLeg.legIndex,
+            session.loanReview?.outcome,
+            // Edge 재시험 19 ③ — 앞 통화 신분 이름 판정 입력(판정표 I · 원문은 싣지 않는다).
+            storedHistory.map((m) => ({ role: m.role, text: m.textMasked, legIndex: m.legIndex, notSpoken: m.notSpoken === true })),
+          )
         : undefined;
     const legRejoinNotice =
       (sessionCallLeg && rejoin && session.relay?.legIndex === sessionCallLeg.legIndex && turnCount === rejoin.atUserTurns + 1

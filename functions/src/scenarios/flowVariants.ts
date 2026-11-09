@@ -1138,7 +1138,7 @@ const INSTITUTION_LOAN_LEG_OFFICER: FlowVariantLeg = {
   ],
   tacticLabels: [],
 };
-// 통화 3 — 같은 검사가 다시 건다(마지막 · 대출금 이체 화면이 결정 화면 — 실행일 때만 문자 선언).
+// 통화 3 — 같은 사기범이 다시 건다(Edge 재시험 19 ③ — 통화 1에서 밝힌 소속 · 이름 그대로: `legPlan.ts` 판정표 I · 첫 단계 문면은 소속을 정하지 않는다)(마지막 · 대출금 이체 화면이 결정 화면 — 실행일 때만 문자 선언).
 const INSTITUTION_LOAN_LEG_RECALL: FlowVariantLeg = {
   entry: "incoming",
   callerLabel: INSTITUTION_LOAN_CALLER_NUMBER,
@@ -1147,7 +1147,7 @@ const INSTITUTION_LOAN_LEG_RECALL: FlowVariantLeg = {
   minUserTurns: 2,
   maxUserTurns: 12,
   stages: [
-    "앞서 통화한 같은 검사로서 다시 걸어, 금융회사 확인 전화는 받으셨는지 짧게 묻는다. 대출 확인 결과는 앱이 따로 알려 준 줄을 따른다.",
+    "앞서 통화한 같은 사람으로서(앞 통화에서 밝힌 소속 · 이름 그대로) 다시 걸어,금융회사 확인 전화는 받으셨는지 짧게 묻는다. 대출 확인 결과는 앱이 따로 알려 준 줄을 따른다.",
     withSmsFirst(
       "대출이 실행됐으면, 입증이 끝날 때까지 대출금을 보관해야 한다며 대출금 보관 계좌 안내 문자를 보내고, 그 문자 속 링크의 이체 화면에서 들어온 대출금을 옮기게 한다. 금액은 상대에게 입금된 금액을 물어 그 금액 그대로 말한다(지어내지 않는다).",
     ),

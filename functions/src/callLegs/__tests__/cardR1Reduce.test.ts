@@ -49,7 +49,12 @@ test("[R1 축소 2] 앞 통화 대화 인계 0 — 인계 함수 · 메시지 �
   const realtime = read("realtime/index.ts");
   const legBranch = realtime.slice(realtime.indexOf("if (callLeg && callLeg.legIndex > 0) {"), realtime.indexOf("} else if (isEscalatedVoiceCall("));
   assert.ok(legBranch.length > 0);
-  assert.ok(!legBranch.includes('collection("messages")'), "Live 다음 레그 — 메시지 읽기 0");
+  // Edge 재시험 19 ③(2026-11-09) — 같은 인물이 다시 건 레그(기관 고급 통화 3)는 앞 통화 신분 이름 판정(`legPriorIdentity` 고정 이름표)에만 메시지를 읽는다.
+  // 읽기는 그 판정 입력 1곳뿐이고 대화 원문은 맥락에 싣지 않는다(`loanLegIdentity.test.ts` 원문 0 단언). 그 밖의 메시지 읽기는 종전대로 0.
+  assert.equal(legBranch.split('collection("messages")').length - 1, 1, "Live 다음 레그 — 메시지 읽기는 신분 판정 1곳만");
+  const messagesRead = legBranch.slice(legBranch.indexOf('collection("messages")'));
+  assert.ok(/^collection\("messages"\)[\s\S]*?loanReviewLine = buildLegLoanReviewContext\(/.test(messagesRead), "읽은 메시지는 확인 결과 줄 판정 입력으로만");
+  assert.ok(legBranch.includes("if (legVariant && loanReviewLine) {"), "확인 결과 줄이 실리는 레그(판정표 K)만 읽는다");
   assert.ok(legBranch.includes("priorChatContext = undefined"));
   const fallback = read("roleplay/index.ts");
   assert.ok(!fallback.includes("buildPriorLegContext"), "폴백 인계 블록 0");
