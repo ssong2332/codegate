@@ -655,6 +655,12 @@ export type ReportDoc = {
    */
   participantHangup?: { legIndex: number; timeLabel?: string };
   /**
+   * Edge 재시험 19 ②(2026-11-09 — 리플레이가 대출 실행 확인 상담원(통화 2 · 사기범 아님) 대사를 통화 1 번호 + '(사칭)'으로 보였다) — 다통화 변형의 통화별
+   * 발신 표시 스냅샷(`report/replayCallLegs.ts`). 순서 = 레그 번호(메시지 `legIndex`). `genuine` = 사기범이 아닌 정당한 제3자 통화. 표시 전용 — 판정 입력 0.
+   * 부재 = 다통화 아님 · 옛 리포트(리플레이는 시나리오 번호 하나 — 종전).
+   */
+  callLegs?: { callerLabel: string; genuine?: true }[];
+  /**
    * 사용자 결정 2026-11-07("잘 대처함 칸 추가") — 앱 안 거래 화면의 확인 질문에 사실대로 답해 거래가 보류됐다(`report/screenHeld.ts` Q1 ~ Q5).
    * 잘 대처함 표시 전용 — `wasDeceived` · 속은 순간 · 방어 등급 입력 무변경. `timeLabel` = 가장 이른 보류 시각. 부재 = 해당 없음 · 옛 리포트.
    */

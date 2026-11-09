@@ -56,6 +56,7 @@ import { buildTacticPremiseText } from "./tacticPremise";
 import { isAmountComparison } from "../roleplay/screenAction";
 import { resolveParticipantHangup } from "./participantHangup";
 import { resolveScreenHeld } from "./screenHeld";
+import { replayCallLegs } from "./replayCallLegs";
 
 /**
  * 2026-11-07 Edge 시험 판 27 — 공식 번호 확인 기록.
@@ -402,6 +403,7 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     deceivedMoments: mock.deceivedMoments,
     baseMs: reportTimeBaseMs,
   });
+  const callLegs = replayCallLegs(multiCallVariant);
   const reportDoc: ReportDoc = {
     reportId: sessionId,
     sessionId,
@@ -426,6 +428,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     ...(officialCheck ? { officialCheck } : {}),
     ...(participantHangup ? { participantHangup } : {}),
     ...(screenHeld ? { screenHeld } : {}),
+    // Edge 재시험 19 ② — 다통화 변형의 통화별 발신 표시(리플레이 · 표시 전용 · 부재 = 다통화 아님).
+    ...(callLegs ? { callLegs } : {}),
     createdAt: Timestamp.now(),
     scenarioId: session.scenarioId,
     channel: session.channel ?? "voice",

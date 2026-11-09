@@ -25,6 +25,8 @@ export type ReplayMessageSource = {
   notSpoken?: true;
   /** §130(UX D-161 (10)) — 참가자가 사진을 보낸 턴(서버 문서 `photo: true` · 부재 = 글 턴). 되짚어보기는 사진 칸으로 그린다. */
   photo?: true;
+  /** Edge 재시험 19 ② — 다통화 변형의 통화 번호(서버 문서 `legIndex` · 부재 = 다통화 아님 · 옛 문서). 발신 표시만 고른다(`replayCaller.ts`). */
+  legIndex?: number;
 };
 
 export type ReplayDeceivedMomentSource = {
