@@ -10,7 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { lastAmountIn, latestDemandAmount, recordTransferAndCompare, transferTimeText } from "./bankApp.ts";
+import { lastAmountIn, latestDemandAmount, recordTransferAndCompare, smsDemandAmount, transferTimeText } from "./bankApp.ts";
 import { sendsAsContextInjection, stepSilenceNudge, INITIAL_SILENCE_NUDGE_STATE } from "../realtime/contextInjection.ts";
 
 const read = (path: string) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
@@ -131,7 +131,7 @@ test("[PR-A H 드리프트] 한글 수사 줄은 서버 linkMarker와 원문이 
   assert.equal(fn(client), fn(server));
 });
 
-test("[PR-A R] 통화 중 문자 이체 화면 — 요구액 = 통화에서 마지막으로 말한 금액(없으면 문자 금액) · 금액 값은 콜백 밖으로 0", () => {
+test("[PR-A R] 통화 중 문자 이체 화면 — 요구액 = 문자 금액(없으면 통화에서 마지막으로 말한 금액 — 2026-11-12 판정표 RA) · 금액 값은 콜백 밖으로 0", () => {
   // R1 · R2 · R3 — 화면 비교 표(B1)와 맞물린다: requestedAmount가 문자 amount보다 우선.
   const sms = { accountNumber: "210-3391-5540-08", amount: "9,800,000" };
   assert.equal(recordTransferAndCompare("pa1", { ...sms, requestedAmount: "5,000,000" }, "5,000,000"), "equal", "R1 말한 금액");
@@ -142,7 +142,8 @@ test("[PR-A R] 통화 중 문자 이체 화면 — 요구액 = 통화에서 마�
   assert.ok(page.includes("demandAmountNow={(landingId) =>"));
   assert.ok(page.includes('...messages.filter((m) => m.role === "scammer").map((m) => m.text),'));
   assert.ok(page.includes('...transcriptRef.current.filter((t) => t.role === "scammer").map((t) => t.text),'));
-  assert.ok(smsOverlay.includes("const spoken = demandAmountNow?.(sms.fakeLandingId);"));
+  // ⭐ 2026-11-12 판정표 RA — 문자에 금액이 있으면 말한 금액을 쓰지 않는다(아래 [RA] · 두 길 모두 같은 함수).
+  assert.equal(smsOverlay.split("const spoken = smsDemandAmount(sms, () => demandAmountNow?.(sms.fakeLandingId));").length - 1, 2);
   assert.ok(smsOverlay.includes("transfer && spoken ? { ...transfer, requestedAmount: spoken } : transfer;"));
   assert.ok(smsOverlay.includes("? { ...current, prefilledTransfer: withDemand(prefilledTransferOf(sms)) }"), "같은 문자 랜딩을 다시 열어도 요구액 갱신");
   assert.ok(smsOverlay.includes("...(spoken ? { requestedAmount: spoken } : {}),"), "은행 앱 '송금' 길");
@@ -200,4 +201,53 @@ test("[재시험 2 D 드리프트] 요구액 판정 줄은 서버 linkMarker(메
   assert.ok(fn(client).length > 300);
   assert.equal(fn(client), fn(server));
   assert.ok(server.includes("const own = lastDemandAmountIn(replyText);"), "M1도 같은 판정");
+});
+
+// ── ⭐ 2026-11-12(사용자 신고 — 요구받은 돈을 정확히 보냈는데 사기범이 안 들어왔다고 한다 · 은행 보안 확인 사칭) — 판정표 RA(`bankApp.ts` `smsDemandAmount`) ──
+
+/** `bank-security-verify-scam` 보호계좌 문자(`functions/src/scenarios/inCallSms.ts` `bank-protect-account`) — 금액 4,120,000원. */
+const PROTECT_SMS = {
+  transferAmount: "4,120,000",
+  body: ["[금융사고대응] 보호계좌 이체 안내", "예금주: 문성호", "OO은행 100-2043-7788-21", "금액: 4,120,000원", "아래에서 보호계좌로 옮기기를 진행해 주세요."].join("\n"),
+};
+/** 신고 리플레이의 사기범 대사 꼴 — 사건을 설명하며 지어낸 금액(문자 금액과 다름 · 요구가 아니다). */
+const NARRATIVE_LINES = [
+  "안녕하십니까, 새솔은행 금융사고대응팀입니다.",
+  "방금 고객님 계좌에서 890만 원 결제 시도가 확인되어 연락드렸습니다.",
+  "출금을 막으려면 보호계좌로 옮기셔야 합니다. 방금 문자로 보호계좌 안내를 보내 드렸습니다.",
+];
+
+test("[RA 재현] 문자 금액 4,120,000원을 그대로 보냈는데 '890만 원 결제 시도' 대사가 요구액이 되어 '적음'이었다", () => {
+  // 수정 전(PR-A R1): 통화에서 마지막으로 말한 금액이 문자 금액보다 우선 — 사건 금액 890만 원이 요구액으로 읽힌다.
+  const spoken = latestDemandAmount(NARRATIVE_LINES);
+  assert.equal(spoken, "8,900,000", "'결제'는 요구 말이라 사건 금액이 요구액으로 읽힌다(이 판정은 그대로 둔다)");
+  const before = recordTransferAndCompare("ra-before", { accountNumber: "100-2043-7788-21", amount: PROTECT_SMS.transferAmount, requestedAmount: spoken }, "4,120,000");
+  assert.equal(before, "less", "수정 전 — 서버가 '요구한 금액보다 적게 들어왔다'(L1)를 넣는다");
+  // 수정 뒤(RA1): 문자에 금액이 있으면 그 금액이 기준.
+  const requested = smsDemandAmount(PROTECT_SMS, () => latestDemandAmount(NARRATIVE_LINES));
+  assert.equal(requested, "4,120,000");
+  assert.equal(recordTransferAndCompare("ra-after", { accountNumber: "100-2043-7788-21", amount: PROTECT_SMS.transferAmount, requestedAmount: requested }, "4,120,000"), "equal");
+});
+
+test("[RA] 판정표 RA1 · RA2 — 문자 금액 우선 · 금액 없는 문자만 말한 금액 · 적게 보내면 여전히 '적음'", () => {
+  let asked = 0;
+  const spokenNow = (value: string | undefined) => () => {
+    asked += 1;
+    return value;
+  };
+  // RA1 — 구조화 필드 · 본문 '금액:' 줄(옛 문서) 모두. 말한 금액은 묻지도 않는다.
+  assert.equal(smsDemandAmount(PROTECT_SMS, spokenNow("8,900,000")), "4,120,000");
+  assert.equal(smsDemandAmount({ body: PROTECT_SMS.body }, spokenNow("8,900,000")), "4,120,000", "본문 금액 줄");
+  assert.equal(smsDemandAmount({ transferAmount: "9,800,000", body: "" }, spokenNow("3,000,000")), "9,800,000", "기관 고급 안전계좌");
+  assert.equal(asked, 0, "RA1 — 통화 대사 금액을 쓰지 않는다");
+  // RA2 — 금액 줄 없는 문자(대출금 보관 계좌 문자 — 화면 규칙이 말한 금액 → 입금된 대출금).
+  const loanSafeBody = ["[자산보호절차] 대출금 보관 계좌 안내", "예금주: 노은채", "OO은행 318-0472-6619-05", "입금된 대출금 전액을 아래에서 이체해 주세요."].join("\n");
+  assert.equal(smsDemandAmount({ body: loanSafeBody }, spokenNow("10,000,000")), "10,000,000");
+  assert.equal(smsDemandAmount({ body: loanSafeBody }, spokenNow(undefined)), undefined, "R3 — 둘 다 없음");
+  assert.equal(smsDemandAmount({ transferAmount: "", body: "" }, spokenNow("500,000")), "500,000", "빈 값은 금액 아님");
+  // 적게 보내면 여전히 적음(N1 유지) · 다 보내면 같음 · 더 보내면 많음.
+  const target = (key: string) => [key, { accountNumber: "210-3391-5540-08", amount: "9,800,000", requestedAmount: smsDemandAmount({ transferAmount: "9,800,000", body: "" }, () => "20,000,000") }] as const;
+  assert.equal(recordTransferAndCompare(...target("ra-less"), "3,000,000"), "less");
+  assert.equal(recordTransferAndCompare(...target("ra-eq"), "9,800,000"), "equal");
+  assert.equal(recordTransferAndCompare(...target("ra-more"), "10,000,000"), "more");
 });

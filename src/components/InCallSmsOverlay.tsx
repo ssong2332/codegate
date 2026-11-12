@@ -47,7 +47,7 @@ import {
 } from "@/lib/incallsms";
 import { runExitSequence } from "@/lib/incallsms/closeSequence";
 import { CALL_BAR_TOKENS, smsListTokensFor, smsThreadTokensFor } from "@/lib/phone/skinTokens";
-import { BANK_APP_COPY, amountFromSmsBody, holderFromSmsBody, type AmountComparison, type SpokenAccount, type TransferTarget } from "@/lib/bankapp/bankApp";
+import { BANK_APP_COPY, amountFromSmsBody, holderFromSmsBody, smsDemandAmount, type AmountComparison, type SpokenAccount, type TransferTarget } from "@/lib/bankapp/bankApp";
 import type { CardAccount } from "@/lib/bankapp/withdrawAccounts";
 import type { MessengerSkin } from "@/lib/messenger/detectSkin";
 
@@ -396,7 +396,8 @@ export default function InCallSmsOverlay({
     returnFocusSmsIdRef.current = sms.smsId;
     // D-94 — 같은 문자의 랜딩이 이미 있으면 그대로 다시 보인다(입력값 유지). 다르면 교체(새 마운트).
     // ⭐ PR-A — 요구액(판정표 R1)은 열 때마다 다시 잰다(사기범이 그사이 금액을 말했을 수 있다). 같은 문자의 랜딩은 그대로 두고 요구액만 바꾼다(입력값 유지 — D-94).
-    const spoken = demandAmountNow?.(sms.fakeLandingId);
+    // ⭐ 2026-11-12 판정표 RA(`bankApp.ts` `smsDemandAmount`) — 문자에 금액이 있으면 그 금액이 기준(통화 속 사건 금액이 요구액이 되지 않게).
+    const spoken = smsDemandAmount(sms, () => demandAmountNow?.(sms.fakeLandingId));
     const withDemand = (transfer: ReturnType<typeof prefilledTransferOf>): (NonNullable<typeof transfer> & { requestedAmount?: string }) | undefined =>
       transfer && spoken ? { ...transfer, requestedAmount: spoken } : transfer;
     setLanding((current) =>
@@ -812,13 +813,13 @@ export default function InCallSmsOverlay({
                                 // 구조화 필드가 없는 옛 계좌 문자는 문자에 보이는 예금주 · 금액 줄로 맞춘다(화면이 문자와 어긋나지 않게).
                                 const holder = sms.accountHolder ?? holderFromSmsBody(sms.body);
                                 const amount = sms.transferAmount ?? amountFromSmsBody(sms.body);
-                                const spoken = demandAmountNow?.(sms.fakeLandingId);
+                                const spoken = smsDemandAmount(sms, () => demandAmountNow?.(sms.fakeLandingId));
                                 onSendToAccount?.(sms.smsId, {
                                   bankName: sms.bankName!,
                                   accountNumber: sms.accountNumber!,
                                   ...(holder ? { holder } : {}),
                                   ...(amount ? { amount } : {}),
-                                  // PR-A 판정표 R1 — 통화에서 마지막으로 말한 금액이 비교 기준(금액 칸은 문자 금액 그대로).
+                                  // 판정표 RA — 문자 금액이 있으면 그 금액 · 없을 때만 통화에서 마지막으로 말한 금액(PR-A R1)이 비교 기준(금액 칸은 문자 금액 그대로).
                                   ...(spoken ? { requestedAmount: spoken } : {}),
                                 });
                               }}
