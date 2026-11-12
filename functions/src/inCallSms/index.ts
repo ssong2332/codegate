@@ -23,9 +23,11 @@ import {
   claimTargetsPending,
   buildSmsNudgeInstruction,
   correctModelSmsPurpose,
+  isSmsPurpose,
   planSmsBackstop,
   resolveDeclaredSms,
 } from "./smsGate";
+import type { SmsPurpose } from "../scenarios/flowVariants";
 import type { SmsGateStatus } from "./smsGate";
 import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms, readMockScreenRecords } from "./smsDelivery";
 import {
@@ -196,11 +198,17 @@ export const deliverInCallSms = onCall<
   let smsClaimed = trigger === "backstop" && request.data?.smsClaimed === true;
   // 판정표 CL(2026-11-08 · B1) — 주장이 이미 도착한 문자만 가리키면(CL3) 주장으로 보지 않는다. 로그에만 남긴다(목적 값 0).
   let smsClaimIgnored = false;
+  // 판정표 OC(2026-11-12) — 주장이 가리키는 목적(목적 enum 안 값만 · 주장이 아니면 없음). CL 판정 뒤에 정한다.
+  let claimedPurposes: SmsPurpose[] | undefined;
   if (trigger === "backstop") {
     const deliveredNow = await readDeliveredSms(sessionRef);
     if (smsClaimed && !claimTargetsPending(request.data?.smsClaimedPurposes, declared, deliveredNow)) {
       smsClaimed = false;
       smsClaimIgnored = true;
+    }
+    if (smsClaimed && Array.isArray(request.data?.smsClaimedPurposes)) {
+      const purposes = (request.data.smsClaimedPurposes as unknown[]).filter(isSmsPurpose);
+      if (purposes.length > 0) claimedPurposes = [...new Set(purposes)];
     }
     // 화면 행동만 인정 판정표 SB — 설치 화면 권한 허용 기록이 없으면 다음 단계 문자를 잠시 밀지 않는다(화면을 여는 문자가 도착한 세션만 mockScreens를 읽는다).
     const holdApplies = screenActionApplies(session.flowVariantId) && deliveredNow.some((d) => d.fakeLandingId !== undefined);
@@ -225,6 +233,7 @@ export const deliverInCallSms = onCall<
       userTurns,
       claimed: smsClaimed,
       explicitFloor: smsClaimed,
+      ...(claimedPurposes ? { claimedPurposes } : {}),
       ...(installPending !== undefined ? { installPendingSince: installPending } : {}),
     });
     // §132.9 — "보냈다" 주장이 하한 전에 나왔으면 정정 1줄을 함께 돌려준다(클라 1회 주입 · 하한은 그대로).
@@ -298,6 +307,8 @@ export const deliverInCallSms = onCall<
     explicit: trigger !== "backstop" || smsClaimed,
     // 판정표 F(A1) — 하한도 같은 두 경우(모델 도구 · 주장 백스톱)만 명시 하한. 자동 백스톱은 종전.
     explicitFloor: trigger !== "backstop" || smsClaimed,
+    // 판정표 OC — 주장 백스톱이 가리킨 목적(발송 통로도 같은 값으로 다시 판정한다).
+    ...(claimedPurposes ? { claimedPurposes } : {}),
     fictionalBankName,
     sessionId, // §114 — 세션별 인증번호(문서 본문 · Live 대조 1줄이 같은 값)
     // 2026-11-09 판정표 BL3 — 카드 잔액이 있으면 잔액형 문자 금액을 맞춘다(부재 = 종전).
