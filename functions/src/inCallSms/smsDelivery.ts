@@ -10,7 +10,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import type { InCallSmsItem } from "../scenarios/inCallSms";
 import { findInCallSmsItem } from "../scenarios/inCallSms";
 import { withSessionOtp } from "../scenarios/sessionOtp";
-import type { FlowVariantSms } from "../scenarios/flowVariants";
+import type { FlowVariantSms, SmsPurpose } from "../scenarios/flowVariants";
 import type { InCallSmsDoc, InCallSmsTriggerKind } from "../shared/types";
 import { buildInCallSmsDoc } from "./buildDoc";
 import { priorSenderLabelOf, sessionSenderLabel } from "./senderLabel";
@@ -39,6 +39,8 @@ export type SmsDeliveryInput = {
   explicit?: boolean;
   /** 판정표 F(2026-11-08 · A1 · `smsGate.ts`) — 실시간 명시 요청이면 3행 하한에 `explicitNotBeforeUserTurns`. 부재 = 종전(텍스트 폴백). */
   explicitFloor?: boolean;
+  /** 판정표 OC(2026-11-12 · `smsGate.ts`) — 주장 백스톱의 대상 목적(CL 판정 뒤). 부재 = 종전. */
+  claimedPurposes?: readonly SmsPurpose[];
   /** §81 — 세션 가상 은행명(`resolveFictionalBankName`). 본문 자리표시자 치환 · `bankName`/`accountNumber` 필드의 원천. */
   fictionalBankName?: string;
   /** §114 — 세션 id. 인증번호 문자의 번호를 세션별로 바꾼다(`withSessionOtp`). 부재면 카탈로그 번호(종전). */
@@ -70,6 +72,7 @@ export async function deliverSmsThroughGate(
       userTurns: input.userTurns,
       explicit: input.explicit,
       explicitFloor: input.explicitFloor,
+      ...(input.claimedPurposes ? { claimedPurposes: input.claimedPurposes } : {}),
     });
     if (gate.status !== "allowed") {
       return { status: gate.status, ...(gate.item ? { declared: gate.item } : {}) };

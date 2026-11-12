@@ -21,6 +21,7 @@ import { decideAndMarkRealtimeHangup, isVerifyInterceptSession } from "./commit"
 import { findFlowVariant } from "../scenarios/flowVariants";
 import { currentLegHoldsScreens, currentLegIndex, legHangupAdjustments } from "../callLegs/legPlan";
 import { LEG_DIAL_SMS_PENDING_GUIDANCE, isLegDialSmsPending } from "../callLegs/legHandoff";
+import { deliverLoanDisbursedSmsIfDue } from "../callLegs/loanReviewOrder";
 import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, isLegScreenHoldPending, readMockScreenCompletion } from "./goalAction";
 import { scammerHangupGuidance } from "./guidance";
 import { readScammerHangupRequest } from "./readRequest";
@@ -141,6 +142,9 @@ export const requestScammerHangup = onCall<
     goalActionDone,
     decisionScreenPending,
   });
+
+  // ⭐ 2026-11-12 판정표 LD3 — 대출 확인 전화(정당한 제3자 레그)가 끝났으면 그때 입금 안내 문자(실행 기록이 있을 때만 · 그 밖 레그 = 0).
+  if (legScope && decision.hangup) await deliverLoanDisbursedSmsIfDue(sessionRef, sessionId);
 
   // §115 — 후속 단계가 남아 막혔으면 되풀이 금지 문면(그 밖은 종전 문면).
   const followUpPending = followUpUserTurns !== undefined && !goalActionDone;

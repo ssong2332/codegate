@@ -9,7 +9,8 @@
 // | R3 | 현재 레그(`relay.legIndex` — 서버가 연 레그)가 정당한 제3자 레그가 아니다 | failed-precondition(사기범 레그에서 결과를 지어낼 수 없다) |
 //      ⚠️ 그 레그가 막 끝났어도(같은 도구 배치의 `end_call`이 먼저 승인 — 병렬 처리) 다음 레그가 열리기 전이면 받는다.
 // | R4 | 이미 결과가 있다 | 쓰기 0 · `recorded:false` + 먼저 남은 결과(첫 기록이 이긴다) |
-// | R5 | 그 밖 | `loanReview` 기록 · 결과 = 실행이면 입금 안내 문자 도착(`deliverServerNoticeSms`) |
+// | R4-b | ⭐ 2026-11-12(재시험 23 ⑬) 판정표 LR3 — 실행인데 이 통화에서 들은 답이 3개 미만(`loanReviewOrder.ts`) | 쓰기 0 · `recorded:false · pending:true` + 남은 질문을 물으라는 지시 |
+// | R5 | 그 밖 | `loanReview` 기록 · 입금 안내 문자는 **확인 전화가 끝난 뒤**(판정표 LD — 기록 시점에 이미 끝났으면 지금) |
 //
 // ⛔ 이 모듈이 하지 않는 것: 대출 금액 · 계좌 저장(서버는 모른다 — G138) · 레그 열기 · 세션 종료 · LLM 호출.
 import { onCall, HttpsError } from "firebase-functions/v2/https";
@@ -19,20 +20,21 @@ import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { isDocId } from "../shared/requestValidation";
 import { findFlowVariant, genuineLegOf } from "../scenarios/flowVariants";
-import { findInCallSmsItem } from "../scenarios/inCallSms";
-import { resolveFictionalBankName } from "../shared/fictionalBank";
-import { deliverServerNoticeSms } from "../inCallSms/smsDelivery";
 import type { SessionDoc } from "../shared/types";
 import { currentLegIndex } from "./legPlan";
+import { MAX_CLAIMED_TURNS } from "../inCallSms/smsGate";
+import { LOAN_REVIEW_NOT_YET_GUIDANCE, deliverLoanDisbursedSmsIfDue, planLoanReviewRecord } from "./loanReviewOrder";
 
 ensureFirebaseAdminApp();
 
 export type LoanReviewOutcome = "approved" | "held";
-export type RecordLoanReviewRequest = { sessionId: string; outcome: LoanReviewOutcome };
-export type RecordLoanReviewResponse = { recorded: boolean; outcome: LoanReviewOutcome; guidance: string };
+/** 2026-11-12 LR — `userTurns` = 클라 세션 누적 사용자 발화 수(문자 콜러블과 같은 값 · 부재 = 옛 화면 = 종전). */
+export type RecordLoanReviewRequest = { sessionId: string; outcome: LoanReviewOutcome; userTurns?: number };
+/** `pending` = 판정표 LR3(아직 답을 다 듣지 않아 기록하지 않았다 · `outcome`은 요청값). */
+export type RecordLoanReviewResponse = { recorded: boolean; outcome: LoanReviewOutcome; guidance: string; pending?: true };
 
-/** 실행일 때 도착시키는 가상 캐피탈 입금 안내 문자(`scenarios/inCallSms.ts`). 그 시나리오 카탈로그에 없으면 보내지 않는다. */
-export const LOAN_DISBURSED_SMS_ID = "institution-loan-disbursed";
+/** 실행일 때 도착시키는 가상 캐피탈 입금 안내 문자(`scenarios/inCallSms.ts` · 정본 `loanReviewOrder.ts`). */
+export { LOAN_DISBURSED_SMS_ID } from "./loanReviewOrder";
 /** 모델에게 돌려줄 1줄 — 기록 뒤 정한 결과를 그대로 안내한다(먼저 남은 결과가 다르면 그 결과로). */
 export function loanReviewGuidance(outcome: LoanReviewOutcome): string {
   return outcome === "approved"
@@ -45,7 +47,11 @@ export function readRecordLoanReviewRequest(data: unknown): RecordLoanReviewRequ
   const raw = (data ?? {}) as Record<string, unknown>;
   if (!isDocId(raw.sessionId)) throw new HttpsError("invalid-argument", "sessionId가 올바르지 않습니다.");
   if (raw.outcome !== "approved" && raw.outcome !== "held") throw new HttpsError("invalid-argument", "outcome이 올바르지 않습니다.");
-  return { sessionId: raw.sessionId, outcome: raw.outcome };
+  if (raw.userTurns === undefined) return { sessionId: raw.sessionId, outcome: raw.outcome };
+  if (typeof raw.userTurns !== "number" || !Number.isInteger(raw.userTurns) || raw.userTurns < 0 || raw.userTurns > MAX_CLAIMED_TURNS) {
+    throw new HttpsError("invalid-argument", "userTurns가 올바르지 않습니다.");
+  }
+  return { sessionId: raw.sessionId, outcome: raw.outcome, userTurns: raw.userTurns };
 }
 
 /** 판정표 R3 — 서버가 연 현재 레그가 정당한 제3자 레그인가(순수). 첫 레그는 정당한 제3자일 수 없다(세션 시작 = 사기범 통화). */
@@ -58,7 +64,7 @@ export function canRecordLoanReview(session: Pick<SessionDoc, "flowVariantId" | 
 
 export const recordLoanReview = onCall<RecordLoanReviewRequest, Promise<RecordLoanReviewResponse>>(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
-  const { sessionId, outcome } = readRecordLoanReviewRequest(request.data);
+  const { sessionId, outcome, userTurns } = readRecordLoanReviewRequest(request.data);
   const db = getFirestore();
   const sessionRef = db.collection("sessions").doc(sessionId);
   const first = await sessionRef.get();
@@ -75,30 +81,20 @@ export const recordLoanReview = onCall<RecordLoanReviewRequest, Promise<RecordLo
     }
     if (!canRecordLoanReview(session)) throw new HttpsError("failed-precondition", "지금은 결과를 기록할 수 없습니다.");
     if (session.loanReview) return { recorded: false, outcome: session.loanReview.outcome, session };
+    // R4-b · 판정표 LR3 — 실행 전 확인 질문의 답을 다 듣지 않았으면 기록하지 않는다.
+    const variant = findFlowVariant(session.flowVariantId);
+    const legIndex = variant ? currentLegIndex(variant, session.relay) : 0;
+    if (planLoanReviewRecord({ outcome, userTurns, relay: session.relay, legIndex }) === "pending") {
+      return { recorded: false, outcome, session, pending: true as const };
+    }
     tx.update(sessionRef, { loanReview: { outcome, at: Timestamp.now() } });
     return { recorded: true, outcome, session };
   });
 
-  if (result.recorded && result.outcome === "approved") {
-    const item = findInCallSmsItem(result.session.scenarioId, LOAN_DISBURSED_SMS_ID);
-    if (item) {
-      try {
-        const userTurns = (await sessionRef.collection("messages").where("role", "==", "user").count().get()).data().count;
-        await deliverServerNoticeSms(
-          sessionRef,
-          item,
-          Timestamp.now(),
-          result.session.scenarioId,
-          userTurns,
-          resolveFictionalBankName({ sessionId, fictionalBankName: result.session.fictionalBankName }),
-        );
-      } catch (error) {
-        // 이미 있으면(create 충돌) · 쓰기 실패 = 결과 기록은 유지(문자 1통이 빠질 뿐 — 통화 3 판정은 `loanReview`만 본다).
-        logger.warn("대출 입금 안내 문자 도착 실패", { sessionId, message: error instanceof Error ? error.message : "unknown" });
-      }
-    }
-  }
+  // 판정표 LD — 입금 안내 문자는 확인 전화가 끝난 뒤(LD3 · LD4). 기록 시점에 이미 끝났으면(같은 도구 배치의 `end_call`이 먼저 승인) 지금 보낸다.
+  if (result.recorded && result.outcome === "approved") await deliverLoanDisbursedSmsIfDue(sessionRef, sessionId);
   // G170 — 값 · 단계만(대사 0).
-  logger.info("대출 실행 확인 결과 기록", { sessionId, outcome: result.outcome, recorded: result.recorded });
+  logger.info("대출 실행 확인 결과 기록", { sessionId, outcome: result.outcome, recorded: result.recorded, ...("pending" in result ? { pending: true } : {}) });
+  if ("pending" in result) return { recorded: false, outcome: result.outcome, guidance: LOAN_REVIEW_NOT_YET_GUIDANCE, pending: true };
   return { recorded: result.recorded, outcome: result.outcome, guidance: loanReviewGuidance(result.outcome) };
 });
