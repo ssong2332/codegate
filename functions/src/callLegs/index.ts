@@ -20,6 +20,7 @@ import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { findFlowVariant } from "../scenarios/flowVariants";
 import type { SessionDoc } from "../shared/types";
 import { planLegHangup, planLegStart } from "./legPlan";
+import { deliverLoanDisbursedSmsIfDue } from "./loanReviewOrder";
 import type { LegStartAction } from "./legPlan";
 import { installLandingIds, nextLegLandingIds, readStartCallLegRequest, type StartCallLegRequest, type StartCallLegResponse } from "./request";
 
@@ -55,6 +56,8 @@ export const startCallLeg = onCall<StartCallLegRequest, Promise<StartCallLegResp
       return result;
     });
     logger.info("레그 참가자 끊기", { sessionId, status: hung.status, legIndex: hung.status === "ended" ? hung.legIndex : undefined });
+    // ⭐ 2026-11-12 판정표 LD3 — 참가자가 대출 확인 전화를 끊어도 실행 기록이 있으면 그 뒤에 입금 안내 문자.
+    if (hung.status === "ended") await deliverLoanDisbursedSmsIfDue(sessionRef, sessionId);
     return hung.status === "ended" ? { status: "ended", legIndex: hung.legIndex } : { status: "not_ready", reason: hung.reason };
   }
   // 트랜잭션 밖 읽기(설치 응낙 · 사용자 발화 수) — 같은 세션의 다른 쓰기와 경합해도 판정은 아래 트랜잭션의 relay로만 확정한다.
@@ -97,6 +100,8 @@ export const startCallLeg = onCall<StartCallLegRequest, Promise<StartCallLegResp
     return result;
   });
 
+  // ⭐ 2026-11-12 판정표 LD4 — 다음 통화가 연결됐는데 실행 기록 뒤 입금 안내 문자가 아직 없으면(안전망) 지금.
+  if (plan.status === "connected") await deliverLoanDisbursedSmsIfDue(sessionRef, sessionId);
   // G170 — 번호 · 단계 · 상태만(대사 0).
   logger.info("레그 시작 판정", { sessionId, action, status: plan.status, rejoin: plan.status === "connected" ? plan.rejoin : undefined });
   switch (plan.status) {

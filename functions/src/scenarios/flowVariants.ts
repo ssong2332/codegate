@@ -89,6 +89,11 @@ export type FlowVariantSms = {
    */
   explicitAfterScreenOf?: string;
   /**
+   * ⭐ 2026-11-12(라이브 재시험 23 관찰 ⑫ · `smsGate.ts` 판정표 OC) — 사기범이 **이 문자를 가리켜** "보냈다 · 불러 달라"고 이미 말한 주장 백스톱에만 쓰는 하한.
+   * 모델 도구 호출(말하기 전 판단)은 `explicitNotBeforeUserTurns` · 자동 백스톱 · 폴백은 `notBeforeUserTurns` 그대로다. 부재 = 종전. 첫 문자 하한(2) 아래로는 내려가지 않는다.
+   */
+  claimNotBeforeUserTurns?: number;
+  /**
    * §124(DECISIONS #239 · 사용자 실기 신고 (9) *"여전히 문자가 좀 늦게 오는 경우가 존재해"* · PR #390 실측) — 모델이 도구를 부르지 않을 때
    * 백스톱 간격(게이트가 열린 뒤 넛지까지 · 넛지에서 강제 발송까지의 사용자 발화 수). 부재 = `BACKSTOP_USER_TURNS`(2 — 열림 + 4에 강제).
    * ⚠️ 판단값. 하한(`notBeforeUserTurns` · 문자 간격)은 그대로다 — 앞당기는 것은 "열린 뒤 기다리는 시간"뿐이다.
@@ -482,7 +487,15 @@ const FAST_BACKSTOP = { backstopUserTurns: 1 } as const;
 // ⭐ 2026-11-08(라이브 재시험 8 · 사용자 결정 A1 — `smsGate.ts` 판정표 F) — 하한 5는 위 §127 이유(자동 백스톱이 인증번호 단계보다 먼저 강제)로
 // 올린 값인데 모델 도구 호출까지 막았다. 흐름이 인증번호 단계에 먼저 이르면(§132.19 기록 — 발화 4에 자산 답 뒤 인증번호 단계) 도구가 하한 전이라
 // 거절되고, 사기범은 이미 "문자로 간 인증번호"를 말해 문자가 1분 넘게 늦었다. 명시 요청(도구 · "보냈다" 주장)만 §115 값 3으로 연다. 자동 백스톱은 5 그대로.
-const INSTITUTION_OTP_V2: FlowVariantSms = { ...INSTITUTION_ADVANCED_SMS[0], notBeforeUserTurns: 5, explicitNotBeforeUserTurns: 3, ...FAST_BACKSTOP };
+// ⭐ 2026-11-12(라이브 재시험 23 관찰 ⑫ · 판정표 OC) — 참가자가 두 번 답한 사이 흐름이 인증번호 단계에 이르러 사기범이 "문자로 발송해 드린 인증 번호"를 불러 달라고
+// 했는데 명시 하한 3 전이라 문자가 약 35초 늦었다(M2 현금 루트도 같은 꼴). 그 문자를 가리킨 주장만 첫 문자 하한 2로 연다. 도구 3 · 자동 5는 그대로.
+const INSTITUTION_OTP_V2: FlowVariantSms = {
+  ...INSTITUTION_ADVANCED_SMS[0],
+  notBeforeUserTurns: 5,
+  explicitNotBeforeUserTurns: 3,
+  claimNotBeforeUserTurns: 2,
+  ...FAST_BACKSTOP,
+};
 // PR-A(2026-11-07) — 종전 `INSTITUTION_ADVANCED_SMS_V2`(fv-c5fj 전용)는 아래 `INSTITUTION_ADVANCED_SMS_V3`(금액 줄 있는 고급 전용 안전계좌 문자)로 바뀌었다.
 const INSTITUTION_OTP_ONLY_SMS: FlowVariantSms[] = [INSTITUTION_OTP_V2];
 // ⭐ PR-A(2026-11-07 사용자 신고 *"이체 금액을 적게 보내도 그냥 넘어가는"* · docs/research/institution-advanced-loan-design-2026-11-07.md §1.2 · 사용자 결정 D-L6) —

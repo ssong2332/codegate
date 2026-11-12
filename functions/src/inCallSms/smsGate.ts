@@ -59,6 +59,19 @@
 // | CL4 | 그 밖(아직 안 간 목적을 하나라도 가리킨다) | 주장으로 본다(종전) |
 // 근거: 인증번호 문자가 도착한 뒤 사기범이 "보내 드린 인증번호를 불러 달라"고 하면 그 말이 주장으로 잡혀, 서버가 남은 첫 필수 문자(안전계좌)를 몇 초 만에
 // 보냈다 — 참가자가 인증번호를 불러 주기 전에 계좌 문자가 왔다(재시험 9 · `smsTimingOrder.test` 재현). 폴백 경로는 이미 `claimMatchesPurpose`로 막는다.
+// | CL5 | ⭐ 2026-11-12(재시험 23 ⑫) 주장 · 대상이 1개 이상이고 모두 **현재 선언(레그) 밖** 목적이다 | 주장으로 보지 않는다(인증번호 요구가 다른 목적의 문자를 당기지 않게 — 폴백 `claimMatchesPurpose`와 같은 뜻) |
+//
+// ── 판정표 OC(2026-11-12 라이브 재시험 23 관찰 ⑫) — 그 문자를 가리키는 "보냈다 · 불러 달라" 주장의 하한(`claimNotBeforeUserTurns`) ──
+// | # | If | Then(3행 하한) |
+// |---|---|---|
+// | OC1 | 선언에 `claimNotBeforeUserTurns` 없음 | 판정표 F · FE 그대로 |
+// | OC2 | 있음 ∧ 주장 백스톱(`explicitFloor`) ∧ 주장 대상 목적(`claimedPurposes`)에 그 문자의 목적이 있다 | `claimNotBeforeUserTurns`(첫 문자 하한과 max) |
+// | OC3 | 있음 ∧ 주장인데 대상 목록이 없거나 그 목적이 없다 | 판정표 F(종전) |
+// | OC4 | 있음 ∧ 모델 도구 호출(주장 아님 — `claimedPurposes` 없음) | 판정표 F(종전 — §115 도구가 말하기 전에 단계를 압축하던 것을 막는 하한) |
+// | OC5 | 있음 ∧ 자동 백스톱 · 텍스트 폴백(`explicitFloor` 아님) | 종전(F3) |
+// 근거: 기관 사칭 고급 `fv-c5fj` — 참가자가 두 번 답한 사이 흐름이 인증번호 단계에 이르러 사기범이 "문자로 발송해 드린 인증 번호를 불러 주시겠습니까?"라고 했는데
+// 명시 하한 3 전이라 주장 백스톱이 `wait` + 정정을 돌려줬다 — 사기범은 "금방 도착할 테니"라고 했고 문자는 참가자가 한 번 더 말한 뒤(약 35초) 왔다.
+// 말은 이미 나갔으므로 막아도 압축은 그대로이고 말과 문자만 어긋난다(`otpClaimTiming.test.ts` 재현 · `docs/research/otp-sms-lender-call-2026-11-12.md`).
 import type { AmountComparison } from "../roleplay/screenAction";
 import { currentLegIndex, legStartUserTurns, type RelayState } from "../callLegs/legPlan";
 import type { FlowVariantSms, SmsPurpose } from "../scenarios/flowVariants";
@@ -125,6 +138,8 @@ export type SmsGateInput = {
   explicit?: boolean;
   /** 판정표 F(2026-11-08 · A1) — 3행 하한에 `explicitNotBeforeUserTurns`를 쓴다(실시간 모델 도구 · 주장 백스톱만). 부재 · false = 종전. */
   explicitFloor?: boolean;
+  /** 판정표 OC(2026-11-12) — 주장 백스톱의 대상 목적(CL 판정을 지난 값). 부재 = 주장 아님 · 판정 불가(종전). */
+  claimedPurposes?: readonly SmsPurpose[];
 };
 
 /** §126 — 판정 4행의 간격. */
@@ -144,6 +159,11 @@ export function priorScreenSubmitted(item: FlowVariantSms, delivered: readonly D
   return delivered.some((d) => d.smsId === item.explicitAfterScreenOf && d.landingSubmitted === true);
 }
 
+/** 판정표 OC2 — 이 주장이 그 문자를 가리키고 선언에 주장 하한이 있는가. */
+function usesClaimFloor(item: FlowVariantSms, explicitFloor?: boolean, claimedPurposes?: readonly SmsPurpose[]): boolean {
+  return explicitFloor === true && item.claimNotBeforeUserTurns !== undefined && (claimedPurposes ?? []).includes(item.purpose);
+}
+
 /** 판정표 F · FE — 이 명시 요청에 명시 하한을 쓰는가. */
 function usesExplicitFloor(item: FlowVariantSms, delivered: readonly DeliveredSmsRecord[], explicitFloor?: boolean): boolean {
   if (explicitFloor !== true) return false; // F3 · FE4
@@ -152,7 +172,14 @@ function usesExplicitFloor(item: FlowVariantSms, delivered: readonly DeliveredSm
 }
 
 /** 이 항목의 게이트 3 하한(판정표 F · FE — 명시 요청이면 `explicitNotBeforeUserTurns`). */
-function earliestUserTurns(item: FlowVariantSms, delivered: readonly DeliveredSmsRecord[], explicitFloor?: boolean): number {
+function earliestUserTurns(
+  item: FlowVariantSms,
+  delivered: readonly DeliveredSmsRecord[],
+  explicitFloor?: boolean,
+  claimedPurposes?: readonly SmsPurpose[],
+): number {
+  // 판정표 OC2 — 그 문자를 가리킨 주장이면 주장 하한(OC1 · OC3 ~ OC5 = 아래 종전 판정).
+  if (usesClaimFloor(item, explicitFloor, claimedPurposes)) return Math.max(item.claimNotBeforeUserTurns ?? item.notBeforeUserTurns, FIRST_SMS_MIN_USER_TURNS);
   const floor = usesExplicitFloor(item, delivered, explicitFloor) ? (item.explicitNotBeforeUserTurns ?? item.notBeforeUserTurns) : item.notBeforeUserTurns;
   return Math.max(floor, FIRST_SMS_MIN_USER_TURNS);
 }
@@ -171,7 +198,7 @@ export function resolveSmsGate(input: SmsGateInput): SmsGateResult {
   if (input.delivered.some((d) => d.smsId === item.smsId)) return { status: "already_delivered", item };
   // ⭐ D-c(P2 실 키 실측 2026-11-01 — 카드 `fv-w3dq` 이관 문자가 설치 문자보다 먼저 · 환급 `fv-aqx2` 수수료 문자가 신청 링크보다 먼저) — 선언 순서 = 단계 순서다.
   if (earlierRequiredPending(item, input.declared, input.delivered)) return { status: "too_early", item };
-  if (input.userTurns < earliestUserTurns(item, input.delivered, input.explicitFloor)) return { status: "too_early", item };
+  if (input.userTurns < earliestUserTurns(item, input.delivered, input.explicitFloor, input.claimedPurposes)) return { status: "too_early", item };
   const last = lastArrivalUserTurns(input.delivered);
   if (last !== undefined && !skipsSpacing(item, input.delivered, input.explicitFloor) && input.userTurns - last < smsSpacingFor(input.explicit)) {
     return { status: "too_soon", item };
@@ -205,10 +232,12 @@ export function gateOpensAtUserTurns(
   explicit?: boolean,
   /** 판정표 F — 부재 · false = 종전 하한. */
   explicitFloor?: boolean,
+  /** 판정표 OC — 주장 대상 목적. 부재 = 종전. */
+  claimedPurposes?: readonly SmsPurpose[],
 ): number {
   const last = lastArrivalUserTurns(delivered);
   const afterLast = last === undefined || skipsSpacing(item, delivered, explicitFloor) ? 0 : last + smsSpacingFor(explicit);
-  return Math.max(earliestUserTurns(item, delivered, explicitFloor), afterLast);
+  return Math.max(earliestUserTurns(item, delivered, explicitFloor, claimedPurposes), afterLast);
 }
 
 /**
@@ -224,6 +253,8 @@ export function claimTargetsPending(
   if (!Array.isArray(claimedPurposes)) return true; // CL2
   const purposes = claimedPurposes.filter(isSmsPurpose);
   if (purposes.length === 0) return true; // CL2
+  // CL5 — 대상이 모두 현재 선언 밖 목적이면(인증번호 문자가 없는 루트 · 레그의 인증번호 요구) 주장 아님.
+  if (!purposes.some((purpose) => declared.some((item) => item.purpose === purpose))) return false;
   const deliveredPurposes = new Set(
     declared.filter((item) => delivered.some((d) => d.smsId === item.smsId)).map((item) => item.purpose),
   );
@@ -256,7 +287,7 @@ export function planSmsBackstop(
   const openAt = gateOpensAtUserTurns(target, input.delivered);
   // §126 — 주장이 있으면 명시 요청 간격(1)으로 연다(하한 `notBeforeUserTurns` · 첫 문자 하한은 그대로).
   if (input.claimed === true) {
-    if (input.userTurns >= gateOpensAtUserTurns(target, input.delivered, true, input.explicitFloor)) return { action: "deliver", item: target };
+    if (input.userTurns >= gateOpensAtUserTurns(target, input.delivered, true, input.explicitFloor, input.claimedPurposes)) return { action: "deliver", item: target };
   }
   // §124 — 변형이 문자마다 간격을 줄 수 있다(부재 = 종전 2).
   const step = target.backstopUserTurns ?? BACKSTOP_USER_TURNS;

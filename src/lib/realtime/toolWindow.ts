@@ -99,8 +99,19 @@ export const SMS_SENT_CLAIM =
  * (인증번호 · 계좌)로만 둔다 — 대상 없는 "문자로 온 안내"는 이미 받은 문자를 가리킨 말일 때 다음 문자를 당길 수 있어(판정표 CL2) 넣지 않는다.
  */
 export const SMS_ARRIVED_REFERENCE = /문자\s*(?:로|에)\s*(?:간|온|도착한|들어간|들어온|받으신)\s*(?:의\s*)?(?:계좌|인증\s*(?:번호|코드))/;
+/**
+ * ⭐ 2026-11-12(라이브 재시험 23 관찰 ⑫ · 화면 판정 OD) — 인증번호를 불러 · 알려 · 말해 · 읽어 달라는 요구. 텍스트 폴백은 이미 이 꼴을 주장으로 본다
+ * (§132.17 O1 — `functions/src/roleplay/smsClaim.ts` `SMS_OTP_DEMAND`와 **글자까지 같아야 한다** · `otpDemandClaim.test.ts`가 대조).
+ * | # | If(사기범 전사) | Then |
+ * |---|---|---|
+ * | OD1 | 이 꼴이 있다 | "보냈다" 주장으로 본다 · 대상 = 인증번호(`smsClaimPurposes`) |
+ * | OD2 | 인증번호 문자가 이미 도착 | 서버 판정표 CL3이 주장으로 보지 않는다(다음 문자를 당기지 않는다) |
+ * | OD3 | 인증번호 문자가 없는 루트 · 레그 | 서버 판정표 CL5가 주장으로 보지 않는다 |
+ */
+export const SMS_OTP_DEMAND = /인증\s*(?:번호|코드)[^.?!\n]{0,20}?(?:불러|알려|말씀해|말해|읽어)/;
+
 export function scammerClaimsSmsSent(scammerText: string): boolean {
-  return SMS_SENT_CLAIM.test(scammerText) || SMS_ARRIVED_REFERENCE.test(scammerText);
+  return SMS_SENT_CLAIM.test(scammerText) || SMS_ARRIVED_REFERENCE.test(scammerText) || SMS_OTP_DEMAND.test(scammerText);
 }
 
 // ── 판정표 CL(2026-11-08 라이브 재시험 9 · 사용자 결정 B1) — "보냈다" 주장이 가리키는 문자 목적(표기 판정) ──
@@ -125,7 +136,7 @@ const SENTENCE_END = /[.?!。\n]/;
 export function smsClaimPurposes(scammerText: string): SmsClaimPurpose[] {
   const found = new Set<SmsClaimPurpose>();
   // 판정표 T — 링크 가리킴 둘레의 말("보호계좌로 옮기는 링크")도 대상으로 센다.
-  for (const pattern of [SMS_SENT_CLAIM, SMS_ARRIVED_REFERENCE, SMS_LINK_REFERENCE]) {
+  for (const pattern of [SMS_SENT_CLAIM, SMS_ARRIVED_REFERENCE, SMS_LINK_REFERENCE, SMS_OTP_DEMAND]) {
     const global = new RegExp(pattern.source, "g");
     for (const match of scammerText.matchAll(global)) {
       const start = match.index ?? 0;

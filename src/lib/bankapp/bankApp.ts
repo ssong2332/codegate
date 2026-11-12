@@ -413,6 +413,22 @@ export function amountFromSmsBody(body: string): string | undefined {
   return /^금액:\s*([\d,]+)원\s*$/m.exec(body)?.[1];
 }
 
+// ⭐ 2026-11-12(사용자 신고 — *"요구받은 돈을 정확히 보냈는데 사기범이 안 들어왔다고 한다"* · 은행 보안 확인 사칭 · 문자 금액 4,120,000원을 그대로 보냄) —
+// 종전 PR-A 판정표 R1은 문자에 금액이 있어도 통화에서 사기범이 마지막으로 말한 금액을 요구액으로 썼다. 사기범이 사건을 설명하며 지어낸 금액
+// (*"890만 원 결제 시도"* — '결제' · '이체'는 요구 말이라 `latestDemandAmount`가 요구액으로 읽는다)이 요구액이 되어, 문자 금액을 그대로 보내도
+// 비교 결과가 '적음'이 되고 서버가 사기범에게 "요구한 금액보다 적게 들어왔다 · 마저 보내라"(L1)를 넣었다.
+// 판정표 RA(통화 중 문자가 연 이체 화면 · 은행 앱 '송금'의 비교 기준 요구액 — 위에서 첫 매치):
+// | # | If | Then |
+// |---|---|---|
+// | RA1 | 문자에 금액이 있다(`transferAmount` ∨ 본문 '금액:' 줄) | 문자 금액(화면에 미리 채운 값과 같다) — 통화 대사 금액은 쓰지 않는다 |
+// | RA2 | 문자에 금액이 없다(대출금 보관 계좌 문자 등) | 종전 R1 — `spokenNow()`(사기범이 마지막으로 말한 요구액 · 대출금 보관 이체는 그 화면 규칙) → 없으면 없음(R3) |
+/** 이 문자가 연 이체의 비교 기준 요구액(판정표 RA). `spokenNow`는 RA2일 때만 부른다. */
+export function smsDemandAmount(sms: { transferAmount?: string; body: string }, spokenNow: () => string | undefined): string | undefined {
+  const smsAmount = sms.transferAmount ?? amountFromSmsBody(sms.body);
+  if (smsAmount && /\d/.test(smsAmount)) return smsAmount; // RA1
+  return spokenNow(); // RA2
+}
+
 /**
  * 화면 단계(간소화안). 받는 분 확인 → 금액(출금 계좌 선택) → 인증(보낼 내용 요약 → 생체 인증 시트) → 완료.
  * | # | If (지금 · 행동) | Then |

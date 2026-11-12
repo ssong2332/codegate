@@ -783,8 +783,10 @@ export default function GeminiVoiceSession({
         };
         if (outcome === undefined) return reportFailure;
         try {
-          const result = await recordLoanReview({ sessionId, outcome });
-          return { id: call.id, name: call.name ?? "unknown", response: { status: result.recorded ? "recorded" : "already_recorded", guidance: result.guidance } };
+          // ⭐ 2026-11-12 판정표 LR — 이 통화에서 들은 답 수는 서버가 세션 누적 발화 수(응답 중인 발화 포함)로 센다.
+          const result = await recordLoanReview({ sessionId, outcome, userTurns: claimedUserTurns() });
+          const status = result.pending ? "not_yet" : result.recorded ? "recorded" : "already_recorded";
+          return { id: call.id, name: call.name ?? "unknown", response: { status, guidance: result.guidance } };
         } catch {
           return reportFailure;
         }

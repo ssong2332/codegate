@@ -492,8 +492,10 @@ export type StartCallLegResponse =
 
 // --- recordLoanReview (⭐ PR-B · functions/src/callLegs/loanReview.ts와 1:1) ---
 export type LoanReviewOutcome = "approved" | "held";
-export type RecordLoanReviewRequest = { sessionId: string; outcome: LoanReviewOutcome };
-export type RecordLoanReviewResponse = { recorded: boolean; outcome: LoanReviewOutcome; guidance: string };
+/** ⭐ 2026-11-12 판정표 LR — `userTurns` = 세션 누적 사용자 발화 수(문자 콜러블과 같은 값 · 응답 중인 발화 포함). */
+export type RecordLoanReviewRequest = { sessionId: string; outcome: LoanReviewOutcome; userTurns?: number };
+/** `pending` = 판정표 LR3(확인 질문의 답을 다 듣지 않아 기록하지 않았다 — `guidance`가 남은 질문을 묻게 한다). */
+export type RecordLoanReviewResponse = { recorded: boolean; outcome: LoanReviewOutcome; guidance: string; pending?: true };
 
 // --- updateMessengerSkin (T29 · UX-022 · AC-031/P-16) ---
 // 메신저 채팅(UX-022)의 UA 자동 감지·수동 전환 결과를 세션 문서에 지속한다(리포트·새로고침·

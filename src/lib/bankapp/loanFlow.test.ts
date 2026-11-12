@@ -76,7 +76,8 @@ test("[C4] 화면이 아는 id = 서버 카탈로그(드리프트 0)", () => {
   assert.ok(sms.includes(`fakeLandingId: "${LOAN_SAFE_TRANSFER_LANDING_ID}"`), "보관 계좌 문자 → 이체 화면");
   const screens = read("functions/src/scenarios/mockScreens.ts");
   assert.ok(screens.includes(`landingId: "${LOAN_APPLY_LANDING_ID}"`) && screens.includes(`landingId: "${LOAN_SAFE_TRANSFER_LANDING_ID}"`));
-  assert.match(read("functions/src/callLegs/loanReview.ts"), new RegExp(`LOAN_DISBURSED_SMS_ID = "${LOAN_DISBURSED_SMS_ID}"`));
+  // 2026-11-12 판정표 LD — 정본이 `loanReviewOrder.ts`로 옮겨 갔다(`loanReview.ts`는 다시 내보낸다).
+  assert.match(read("functions/src/callLegs/loanReviewOrder.ts"), new RegExp(`LOAN_DISBURSED_SMS_ID = "${LOAN_DISBURSED_SMS_ID}"`));
   assert.match(read("functions/src/inCallSms/confirmResult.ts"), new RegExp(`LOAN_APPLY_LANDING_ID = "${LOAN_APPLY_LANDING_ID}"`));
   // 클라 이체 화면 목록(서버 BANK_TRANSFER_LANDINGS와 같은 목록)에 대출금 보관 화면이 있다.
   const landing = read("src/components/MessengerFakeLanding.tsx");
