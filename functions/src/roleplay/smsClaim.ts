@@ -32,7 +32,9 @@ export const SMS_CONTENT_REFERENCE =
 // | O3 | 인증번호 문자가 이미 도착 · 변형이 인증번호 문자를 선언하지 않음 | 가드 0(종전) |
 // ⛔ 게이트 규칙(`smsGate.ts` 하한 · 간격)은 바꾸지 않는다 — 열린 게이트를 이 응답에서 쓰게 할 뿐이다.
 /** 인증번호를 불러 달라는 요구(인증번호 뒤 같은 문장 20자 안). */
-export const SMS_OTP_DEMAND = /인증\s*(?:번호|코드)[^.?!\n]{0,20}?(?:불러|알려|말씀해|말해|읽어)/;
+// O1′(2026-11-17 재시험 ⑫ 재발 · 화면 판정 OD4와 같다) — 인증번호를 말한 문장 바로 다음 문장의 "받으신 · 받은 (인증)번호를 불러 · 알려"도 요구다.
+// 예고만("인증번호 문자 보내 드릴게요")은 그대로 주장 아님(위 첫 표 3행).
+export const SMS_OTP_DEMAND = /인증\s*(?:번호|코드)(?:[^.?!\n]{0,20}?|[^.?!\n]{0,30}[.?!]\s*받(?:으신|은)\s*(?:인증\s*)?번호[^.?!\n]{0,10}?)(?:불러|알려|말씀해|말해|읽어)/;
 
 export function replyClaimsSmsSent(reply: string): boolean {
   return SMS_SENT_CLAIM.test(reply) || SMS_CONTENT_REFERENCE.test(reply) || SMS_OTP_DEMAND.test(reply);

@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { claimTargetsPending, planSmsBackstop, resolveDeclaredSms, resolveSmsGate } from "../smsGate";
-import { SMS_OTP_DEMAND } from "../../roleplay/smsClaim";
+import { SMS_OTP_DEMAND, claimMatchesPurpose, otpDemandGuardFor, replyClaimsSmsSent } from "../../roleplay/smsClaim";
 
 const SCENARIO = "institutional-impersonation";
 const OTP_ROUTES = ["fv-c5fj", "fv-q7cn", "fv-g2ld"] as const;
@@ -95,4 +95,27 @@ test("[배선] 콜러블이 CL 뒤의 주장 대상 목적을 백스톱 계획 �
   const client = readFileSync(path.resolve(SRC, "../../src/lib/realtime/toolWindow.ts"), "utf8");
   const line = client.split(/\r?\n/).find((l) => l.startsWith("export const SMS_OTP_DEMAND = "));
   assert.equal(line?.trim(), `export const SMS_OTP_DEMAND = /${SMS_OTP_DEMAND.source}/;`);
+});
+
+// ⭐ 2026-11-17 라이브 재시험(`fv-c5fj`) ⑫ 재발 — 화면 판정 OD4와 같은 글자(폴백 O1′). 두 문장으로 나뉜 요구도 폴백 주장 · O2 가드 대상이다.
+const LIVE_1117 =
+  "네, 말씀해 주셔서 감사합니다. 절차상 본인 확인을 위해 문자로 인증번호를 보내드리겠습니다. 받으신 번호를 불러주십시오. 그럼 혹시 다른 금융 거래는 없으신가요?";
+
+test("[11-17 ⑫ 재발 재현] 폴백 = 인증번호 주장 · 게이트 전 O2 가드가 막고 · 인증번호 도착 뒤(CL3) · 인증번호 없는 루트(CL5)는 주장 아님", () => {
+  assert.equal(SMS_OTP_DEMAND.test(LIVE_1117), true);
+  assert.equal(replyClaimsSmsSent(LIVE_1117), true);
+  assert.equal(claimMatchesPurpose(LIVE_1117, "identity"), true);
+  assert.equal(claimMatchesPurpose(LIVE_1117, "transfer"), false);
+  const declared = declaredOf("fv-c5fj");
+  const guard = otpDemandGuardFor({ declared, delivered: [], userTurns: 0 });
+  assert.equal(guard?.test(LIVE_1117), true);
+  // 주장 백스톱(화면이 identity를 싣는다) — 주장 하한 2에서 그 턴에 보낸다.
+  const input = { declared, delivered: [], userTurns: 2, claimed: true, explicitFloor: true, claimedPurposes: ["identity" as const] };
+  const plan = planSmsBackstop(input);
+  assert.equal(plan.action === "deliver" && plan.item.smsId, "institution-otp");
+  assert.equal(claimTargetsPending(["identity"], declared, [{ smsId: "institution-otp", userTurnsAtArrival: 2 }]), false);
+  const noOtp = resolveDeclaredSms("asset-protection-notice-call", "fv-k9ra", { relay: undefined }).declared;
+  assert.equal(claimTargetsPending(["identity"], noOtp, []), false);
+  // 예고만 · 다른 번호 = 종전.
+  for (const t of ["인증번호 문자 보내 드릴게요.", "인증번호 확인됐습니다. 받으신 계좌번호 알려 주세요."]) assert.equal(replyClaimsSmsSent(t), false, t);
 });
