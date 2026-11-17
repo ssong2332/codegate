@@ -60,3 +60,5 @@ export { onSessionEnded } from "./guardrails";
 // Scheduled function(클라 직접 호출 아님, 이 코드베이스 첫 onSchedule) — 챌린지 복제 음성 기간제
 // 자동 삭제(T36, Architecture.md §14.3, ADR-0005 "폐기 기계 재사용").
 export { purgeExpiredChallenges } from "./challenge";
+// 2026-11-17 감사 '꼭 고칠 것 5' — 버려진 active 세션을 세션 시간 한도 + 유예 뒤 ended로 바꾼다(정리는 onSessionEnded · `session/staleSweep.ts` 판정표).
+export { endStaleSessions } from "./session/staleSweepSchedule";
