@@ -134,6 +134,8 @@ export type SessionDoc = {
   /** 2026-11-07 — 통화 종료 버튼으로 끝낸 세션(서버 `endSession`이 `session/endReason.ts` H1일 때만 씀). 부재 = 그 밖 · 옛 세션. 리포트 "먼저 전화를 끊음" 단일 통화 근거. */
   participantHangupButton?: true;
   voiceId?: string; // 폐기 시 클리어(AC-021)
+  /** 감사 C6 — onSessionEnded가 폐기를 선점한 시각(트리거 재전달 시 두 번째 실행은 폐기 0 · guardrails/purge.ts 판정표 PC). */
+  purgeClaimedAt?: FirebaseFirestore.Timestamp;
   voiceProvider?: VoiceProviderName; // T19 추가 — voiceId를 만든 VoiceProvider 식별(옵셔널)
   cloneStatus: CloneStatus;
   identitySelfConfirmed: boolean;

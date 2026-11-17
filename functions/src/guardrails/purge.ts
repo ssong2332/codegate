@@ -6,6 +6,7 @@
 // Storage/VoiceProvider 구현을 주입하고, (b) 유닛 테스트에서는 가짜(fake) 구현을 주입해 target별
 // success/partial/failed 집계 로직(ADR-0003 "부분 실패 처리")을 에뮬레이터 없이 검증한다
 // (analyzeConversation.ts가 세운 "순수 로직과 부수효과 분리" 관례와 동일 원칙, T9 참고).
+import type { Firestore, Timestamp } from "firebase-admin/firestore";
 import type { DeletionResult, DeletionTarget } from "../shared/types";
 
 /**
@@ -90,4 +91,31 @@ export async function purgeSessionArtifacts(
   }
 
   return { targets, overallResult: computeOverallResult(targets) };
+}
+
+// 저장소 감사 C6(2026-11-17) — onSessionEnded는 Firestore 트리거라 최소 1회 전달이다. 같은 종료 이벤트가
+// 두 번 오면 예전에는 폐기를 통째로 다시 돌렸다: 이벤트 스냅숏의 voiceId로 이미 지운 외부 음성을 또 지우고
+// (실 공급자면 없는 voice라 실패) deletionLogs를 한 장 더(그것도 failed로) 썼다.
+//
+// 판정표 PC — 트랜잭션 안에서 세션 문서의 purgeClaimedAt을 보고:
+// | 행  | 세션 문서                 | 동작 |
+// | PC1 | 있음 · purgeClaimedAt 없음 | purgeClaimedAt 선점 쓰기 → 폐기 진행(deletionLogs 1 · deleteVoice 1) |
+// | PC2 | 있음 · purgeClaimedAt 있음 | 쓰기 0 → 폐기 건너뜀(재전달 · 두 번째 실행) |
+// | PC3 | 없음                       | 쓰기 0 → 폐기 건너뜀 |
+// 선점 뒤 폐기가 예외로 끝나도 재시도하지 않는다 — 예전에도 트리거는 예외를 흡수만 했다(재시도 없음과 같다).
+export type PurgeClaim = "claimed" | "already_claimed" | "missing";
+
+export async function claimSessionPurge(
+  db: Firestore,
+  sessionId: string,
+  claimedAt: Timestamp,
+): Promise<PurgeClaim> {
+  const ref = db.collection("sessions").doc(sessionId);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return "missing";
+    if ((snap.data() as { purgeClaimedAt?: unknown }).purgeClaimedAt !== undefined) return "already_claimed";
+    tx.update(ref, { purgeClaimedAt: claimedAt });
+    return "claimed";
+  });
 }
