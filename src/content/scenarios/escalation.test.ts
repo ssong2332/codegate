@@ -13,12 +13,14 @@ import {
   resolveScenarioEscalation as resolveClient,
   resolveSessionEscalation as resolveClientSession,
   resolveTransitionNow as transitionClient,
+  MAX_VOICE_ESCALATIONS as maxVoiceClient,
   type EscalationMetaView,
 } from "./escalation.ts";
 import {
   resolveScenarioEscalation as resolveServer,
   resolveSessionEscalation as resolveServerSession,
   resolveTransitionNow as transitionServer,
+  MAX_VOICE_ESCALATIONS as maxVoiceServer,
 } from "../../../functions/src/scenarios/escalation.ts";
 import { PUBLIC_SCENARIOS } from "../../../functions/src/scenarios/publicMeta.ts";
 
@@ -149,4 +151,17 @@ test("[A2 ㉢] resolveTransitionNow — 서버 · 클라 같은 결과(목소리
   const room = fs.readFileSync(path.join(REPO_ROOT, "src/components/MessengerChatRoom.tsx"), "utf8").replace(/\r\n/g, "\n");
   assert.ok(room.includes("resolveTransitionNow(") && room.includes("voiceSelectionSource: data.voiceSelectionSource,"));
   assert.ok(room.includes("const canVoiceTalk = sessionEscalates && !chatEnded && !inCall && scenario?.escalationCloneOnly !== true;"));
+});
+
+// ── 저장소 감사(2026-11-17) 판정표 C4 — 통화로 3번 넘어갔으면 서버 · 클라 모두 전이 없음(대화방 버튼도 닫힌다) ──
+test("[C4] resolveTransitionNow — 메신저 → 통화 3번 뒤 서버 · 클라 같은 결과(전이 없음) · 상한 값 같음", async () => {
+  assert.equal(maxVoiceClient, 3);
+  assert.equal(maxVoiceClient, maxVoiceServer);
+  const clientCatalog = await loadClientCatalog();
+  const loop = (n: number) => Array.from({ length: n }, () => [{ from: "messenger", to: "voice" }, { from: "voice", to: "messenger" }]).flat();
+  for (const n of [2, 3]) {
+    const c = { scenarioId: "messenger-subsidy-smishing-sms", difficultyLevel: "beginner", channelHistory: loop(n) };
+    assert.deepEqual(transitionClient(c, clientCatalog), transitionServer(c, PUBLIC_SCENARIOS), `${n}번`);
+    assert.equal(transitionClient(c, clientCatalog) === undefined, n >= 3, `${n}번`);
+  }
 });
