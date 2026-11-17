@@ -7,5 +7,10 @@ import type { SubmitRealtimeTranscriptRequest } from "../api/types";
  */
 export function withTranscriptBatchId(request: SubmitRealtimeTranscriptRequest): SubmitRealtimeTranscriptRequest {
   if (request.batchId) return request;
-  return { ...request, batchId: crypto.randomUUID().replace(/-/g, "") };
+  return { ...request, batchId: newTranscriptBatchId() };
+}
+
+/** 새 batch ID 하나(재시도 큐가 batch를 만들 때 미리 정한다 — `transcriptSubmitQueue.ts`). */
+export function newTranscriptBatchId(): string {
+  return crypto.randomUUID().replace(/-/g, "");
 }

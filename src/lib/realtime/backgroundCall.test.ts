@@ -159,7 +159,8 @@ test("[§99] 통화 화면 — 세션 key = connectionSeq · 재연결 콜백 ·
   assert.match(play, /resumeTurn=\{(?:legOpeningTurn !== undefined \? legOpeningTurn : )?openingTurnFor\(\{\s*connectionSeq: realtime\.connectionSeq,\s*resumeTurn,/);
   assert.match(play, /createScreenWakeLock\(/);
   assert.match(play, /lock\.stop\(\)/);
-  assert.match(play, /serializeTranscriptBackup\(sessionId, transcriptRef\.current\)/);
+  // 2026-11-17 감사 1 — 백업 = 다시 보낼 batch + 아직 큐에 안 넣은 턴(`transcriptSubmitQueue.ts`).
+  assert.match(play, /serializeTranscriptBackup\(sessionId, \[\.\.\.transcriptQueueRef\.current\.flatMap\(\(batch\) => batch\.turns\), \.\.\.transcriptRef\.current\]\)/);
   assert.match(play, /window\.sessionStorage\.removeItem\(TRANSCRIPT_BACKUP_KEY\)/);
   assert.match(play, /parseTranscriptBackup\(window\.sessionStorage\.getItem\(TRANSCRIPT_BACKUP_KEY\), sessionId\)/);
   assert.match(play, /<ScreenOffNotice/);

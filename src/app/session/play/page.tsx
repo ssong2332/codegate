@@ -108,6 +108,8 @@ import {
   shouldShowReturnNotice,
   serializeTranscriptBackup,
 } from "@/lib/realtime/backgroundCall";
+import { drainTranscriptQueue, enqueueTranscriptTurns, type QueuedBatch } from "@/lib/realtime/transcriptSubmitQueue";
+import { newTranscriptBatchId } from "@/lib/realtime/transcriptBatchId";
 import { callAutoEndLimitMs } from "@/lib/realtime/liveResume";
 import { callCallerFrom, openingTurnFor, type CallCaller } from "@/lib/realtime/escalatedOpening";
 import { createScreenWakeLock, type WakeLockStatus } from "@/lib/realtime/screenWakeLock";
@@ -793,6 +795,10 @@ export default function SessionCallPage() {
   // 실시간 음성 통화의 전사 턴을 모아 종료 직전에 제출한다(finding #1). 리렌더와 무관하게 누적
   // 되어야 하므로 ref에 쌓는다.
   const transcriptRef = useRef<TranscriptTurn[]>([]);
+  // 2026-11-17 감사 1 — 제출했지만 아직 성공하지 못한 전사 batch(`transcriptSubmitQueue.ts` 표 Q · 같은 batchId로 다시 보낸다).
+  const transcriptQueueRef = useRef<QueuedBatch<TranscriptTurn>[]>([]);
+  // 아직 서버에 없는 턴 — 다시 보낼 batch + 아직 큐에 안 넣은 턴(말한 순서).
+  const unsubmittedTurns = () => [...transcriptQueueRef.current.flatMap((batch) => batch.turns), ...transcriptRef.current];
   // §140 판정표 4 — 조용한 재연결 뒤 대화 맥락으로 다시 넣을 전사(지금까지 전부 · 세션 컴포넌트가 읽기만 한다).
   const readTranscriptForResume = useCallback(() => transcriptRef.current, []);
   // §57.2 (6) 처방 D1 — 참가자가 "받기"를 누른 시각(클라 타임스탬프, `handleAnswer`에서 1회
@@ -849,7 +855,10 @@ export default function SessionCallPage() {
     // 통화 복원(새로고침) 때 되살린다(아래 로드 effect). 쓰기 실패는 무시한다(비차단).
     if (sessionId) {
       try {
-        window.sessionStorage.setItem(TRANSCRIPT_BACKUP_KEY, serializeTranscriptBackup(sessionId, transcriptRef.current));
+        window.sessionStorage.setItem(
+          TRANSCRIPT_BACKUP_KEY,
+          serializeTranscriptBackup(sessionId, [...transcriptQueueRef.current.flatMap((batch) => batch.turns), ...transcriptRef.current]),
+        );
       } catch {
         // 저장소를 쓸 수 없으면 종전대로 메모리에만 남는다.
       }
@@ -903,32 +912,40 @@ export default function SessionCallPage() {
   }, [realtime.status, callMode]);
   const currentCallDiag = (): CallDiagSummary => buildCallDiagSummary(readAudioDiag(), callDiagContextRef.current);
   const flushTranscript = useCallback(async (diag?: CallDiagSummary): Promise<number> => {
-    const turns = transcriptRef.current;
-    if (!sessionId || turns.length === 0) return 0;
+    if (!sessionId) return 0;
+    // 2026-11-17 감사 1 — 새 턴을 큐에 넣고 큐 전체를 앞에서부터 보낸다. 실패한 batch는 큐에 남아 다음 제출(최종 endSession 전 포함)에 같은 batchId로 다시 실린다.
+    transcriptQueueRef.current = enqueueTranscriptTurns(transcriptQueueRef.current, transcriptRef.current, newTranscriptBatchId);
     transcriptRef.current = [];
-    try {
-      // §55 D3 — 3개 호출부 전부 **같은 값**을 싣는다(호출부별 분기 0건). 값은 위 래치 ref에서만
-      // 온다(이 클로저에서 `callMode`·`realtime`을 읽으면 스테일이다).
-      // §57.2 (6) 처방 D1 — `answeredAtMsRef`가 null이면(위 handleTranscriptTurn과 동일 사유로
-      // "받기"를 누르지 않은 경로) 필드 자체를 생략한다 — 부재 = 서버 현행 합성 로직 그대로.
+    const queue = transcriptQueueRef.current;
+    if (queue.length === 0) return 0;
+    const last = queue[queue.length - 1];
+    // §55 D3 — 3개 호출부 전부 **같은 값**을 싣는다(호출부별 분기 0건). 값은 위 래치 ref에서만
+    // 온다(이 클로저에서 `callMode`·`realtime`을 읽으면 스테일이다).
+    // §57.2 (6) 처방 D1 — `answeredAtMsRef`가 null이면(위 handleTranscriptTurn과 동일 사유로
+    // "받기"를 누르지 않은 경로) 필드 자체를 생략한다 — 부재 = 서버 현행 합성 로직 그대로.
+    // 실패는 던지지 않는다 — 다음 단계(endSession→리포트)는 그대로 진행한다.
+    const { written, settled } = await drainTranscriptQueue(queue, async (batch) => {
       const result = await submitRealtimeTranscript({
         sessionId,
-        turns,
+        turns: batch.turns,
+        batchId: batch.batchId,
         openingNotSpoken: openingNotSpokenRef.current,
         answeredAtMs: answeredAtMsRef.current ?? undefined,
-        ...(diag ? { diag } : {}),
+        // 통화 진단은 이번 제출의 마지막 batch에만(같은 요약을 batch마다 남기지 않게).
+        ...(diag && batch === last ? { diag } : {}),
       });
-      // §99 — 제출에 **성공한** 전사만 백업에서 지운다(실패하면 남겨 둔다 — 복원 때 두 번 제출하지 않게, 성공 뒤에만).
-      try {
-        window.sessionStorage.removeItem(TRANSCRIPT_BACKUP_KEY);
-      } catch {
-        // 무시(비차단).
-      }
       return result.written;
+    });
+    transcriptQueueRef.current = transcriptQueueRef.current.filter((batch) => !settled.includes(batch.batchId));
+    // §99 — 백업에는 아직 서버에 없는 턴만 남긴다(성공한 batch만 지운다 — 복원 때 두 번 제출하지 않게).
+    try {
+      const remaining = [...transcriptQueueRef.current.flatMap((batch) => batch.turns), ...transcriptRef.current];
+      if (remaining.length === 0) window.sessionStorage.removeItem(TRANSCRIPT_BACKUP_KEY);
+      else window.sessionStorage.setItem(TRANSCRIPT_BACKUP_KEY, serializeTranscriptBackup(sessionId, remaining));
     } catch {
-      // 무시 — 다음 단계(endSession→리포트)는 그대로 진행한다.
-      return 0;
+      // 무시(비차단).
     }
+    return written;
   }, [sessionId]);
 
   useEffect(() => {
@@ -2053,7 +2070,7 @@ export default function SessionCallPage() {
       try {
         await flushTranscript(legDiag);
       } catch {
-        // 제출 실패는 끊기를 막지 않는다(종료 때 다시 제출된다).
+        // 제출 실패는 끊기를 막지 않는다(실패한 batch는 큐에 남아 다음 제출 · 종료 때 다시 제출된다 — `transcriptSubmitQueue.ts`).
       }
       try {
         return await startCallLeg({ sessionId, action: "hangup" });
@@ -2756,7 +2773,7 @@ export default function SessionCallPage() {
     const sid = sessionId ?? "";
     const mine = resolveMyAccount({
       card: loadCardAccount(sid),
-      spoken: spokenAccountFrom([...messages, ...transcriptRef.current], realBankMentionsIn),
+      spoken: spokenAccountFrom([...messages, ...unsubmittedTurns()], realBankMentionsIn),
       fixedBankName: myBankNameFor(sid, target.bankName),
       fixedBalance: fictionalBalanceFor(sid),
     });
@@ -4536,7 +4553,7 @@ export default function SessionCallPage() {
           }
           // ⭐ 2026-11-08(라이브 재시험 7 · 사용자 결정 "말한 값에 맞추기") — 출금 예약 · 금 거래소 화면의 출금 계좌 은행 · 잔액 = 참가자가 말한 값(판정표 S · S12 ·
           // 참가자 대사만 값으로 · 사기범 대사는 잔액 질문 판정에만). 값은 화면 안에서만 쓰인다(G138 — 기록 경로 0).
-          spokenAccountNow={() => spokenAccountFrom([...messages, ...transcriptRef.current], realBankMentionsIn)}
+          spokenAccountNow={() => spokenAccountFrom([...messages, ...unsubmittedTurns()], realBankMentionsIn)}
           // ⭐ 2026-11-08(실기기 신고 · 판정표 A1 · A5) — 시작 전 카드에 넣은 거래 은행 · 잔액(이 탭 저장소 · 이 세션 값만 · 서버 0). 말한 값보다 먼저.
           cardAccountNow={() => loadCardAccount(sessionId ?? "")}
         />

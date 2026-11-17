@@ -351,7 +351,7 @@ test("[RB7] 배선 — 카드 칸 = 실제 → 가상 묶음 · 카드 값 그 �
   assert.equal(loadCardAccount("s-2", store), undefined, "다음 훈련(다른 세션) = 값 없음");
 
   const page = readRel("src/app/session/play/page.tsx");
-  assert.equal((page.match(/spokenAccountFrom\(\[\.\.\.messages, \.\.\.transcriptRef\.current\], realBankMentionsIn\)/g) ?? []).length, 2, "두 여는 길 모두 S2′");
+  assert.equal((page.match(/spokenAccountFrom\(\[\.\.\.messages, \.\.\.unsubmittedTurns\(\)\], realBankMentionsIn\)/g) ?? []).length, 2, "두 여는 길 모두 S2′");
   for (const path of ["src/lib/api/types.ts", "src/lib/realtime/contextInjection.ts"]) {
     assert.equal(/realBankName|cardAccount/i.test(readRel(path)), false, `${path}: 실제 은행 값 0`);
   }

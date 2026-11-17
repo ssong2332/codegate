@@ -202,7 +202,7 @@ test("[MA5] 렌더 — 출금 계좌가 나오는 화면 전부 카드 값 → �
 test("[MA6] 배선 — 페이지 · 문자 오버레이 · 내 은행 송금 · 난이도 화면 · 서버로 가지 않는다", () => {
   const page = read("../../app/session/play/page.tsx");
   assert.ok(page.includes('cardAccountNow={() => loadCardAccount(sessionId ?? "")}'), "통화 화면 → 문자 오버레이");
-  assert.ok(page.includes("card: loadCardAccount(sid),") && page.includes("spoken: spokenAccountFrom([...messages, ...transcriptRef.current], realBankMentionsIn),"), "내 은행 송금 화면도 같은 판정");
+  assert.ok(page.includes("card: loadCardAccount(sid),") && page.includes("spoken: spokenAccountFrom([...messages, ...unsubmittedTurns()], realBankMentionsIn),") /* 2026-11-17 감사 1 — 미제출 턴 = 재시도 큐 + 아직 안 보낸 턴 */, "내 은행 송금 화면도 같은 판정");
   assert.ok(page.includes("singleAccount={bankTransfer.mine.single}"), "내 은행 송금 화면 C1");
   const overlay = read("../../components/InCallSmsOverlay.tsx");
   assert.ok(overlay.includes("cardAccountNow={cardAccountNow}"));
