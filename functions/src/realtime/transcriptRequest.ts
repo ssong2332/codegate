@@ -106,6 +106,34 @@ export function prepareTranscriptTurns(turns: readonly ReadTranscriptTurn[]): Pr
   return out;
 }
 
+/**
+ * 2026-11-17 감사 4 — 세션 하나에 쌓을 수 있는 통화 전사 총량. 저장된 기록 전체가 뒤 LLM 호출(`sendMessage` · 화면 행동 후속)에 실리므로
+ * 호출당 상한(200턴)만으로는 반복 호출로 비용이 끝없이 커진다.
+ * 근거: 세션 최대 60분(`MAX_SESSION_MS`) · 통화는 반이중이라 한 시각에 한 사람만 말한다.
+ * - 글자: 한국어 발화 약 7음절/초 × 3,600초 = 25,200자(한 시간 내내 쉬지 않고 말해도) → 상한 60,000자(약 2.4배 여유).
+ * - 턴: 턴 경계 = 발화 + 침묵 1초(`asrInputDrop` 실측) → 짧은 대답만 오가도 3초에 1턴 → 3,600 / 3 = 1,200턴.
+ *   정상 통화는 20분 통화 1건 수십 ~ 200턴 · 다통화 3 ~ 5통화도 합쳐 수백 턴이다.
+ * 판정표 C(이번 제출 전 저장된 voice 채널 문서(channel 부재 포함) + 이번 제출의 저장할 줄):
+ * | If | Then |
+ * |---|---|
+ * | C1 합계 턴 > 1,200 또는 합계 글자 > 60,000 | 제출 전체 거절(resource-exhausted · 저장 0) |
+ * | C2 그 밖 | 종전대로 저장 |
+ */
+export const SESSION_VOICE_MAX_TURNS = 1200;
+export const SESSION_VOICE_MAX_CHARS = 60_000;
+
+export function exceedsSessionTranscriptCap(
+  stored: readonly { channel?: string; textMasked?: string }[],
+  added: readonly PreparedTranscriptTurn[],
+): boolean {
+  const voice = stored.filter((doc) => (doc.channel ?? "voice") === "voice"); // 메시지 channel 부재 = voice(종전 문서)
+  const turns = voice.length + added.length;
+  const chars =
+    voice.reduce((sum, doc) => sum + (typeof doc.textMasked === "string" ? doc.textMasked.length : 0), 0) +
+    added.reduce((sum, turn) => sum + turn.textMasked.length, 0);
+  return turns > SESSION_VOICE_MAX_TURNS || chars > SESSION_VOICE_MAX_CHARS;
+}
+
 /** 중복 표시 문서 키(`sessions/{sid}/transcriptBatches/{key}`). */
 export function transcriptBatchKey(batchId: string | undefined, prepared: readonly PreparedTranscriptTurn[]): string {
   if (batchId) return `b_${batchId}`;

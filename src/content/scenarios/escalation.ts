@@ -47,6 +47,9 @@ export function resolveSessionEscalation(
   return resolveScenarioEscalation(meta, session.difficultyLevel);
 }
 
+/** 판정표 C4 — 한 세션에서 메신저 → 통화로 넘어갈 수 있는 최대 횟수(시험의 정상 최대 2번 + 여유 1번). */
+export const MAX_VOICE_ESCALATIONS = 3;
+
 /**
  * ⭐ A2 ㉢(실기기 신고 2026-11-01 · 사용자 결정) — **지금 통화로 넘어가도 되는가**(실제 전환 지점 전용 — 요청 전이 · 자동 전이 · 대사 예고 전환 · 대화방 버튼).
  * 위 세션 술어(배정 풀 · 설치 화면 도달 · 단계 파생 · 화자 성별이 쓰는 (시나리오 × 난이도) 값)는 그대로 두고, `escalationCloneOnly` 시나리오만 아래 표로 거른다.
@@ -54,6 +57,7 @@ export function resolveSessionEscalation(
  * |---|---|---|
  * | C1 | `escalationCloneOnly` ∧ 목소리 결정이 녹음 · 재사용(목소리 복제)이 아니다 | 전이 없음 |
  * | C2 | `escalationCloneOnly` ∧ 이미 한 번 메신저 → 통화로 넘어갔다 | 전이 없음(짧은 통화는 한 번) |
+ * | C4 | 메신저 → 통화로 이미 `MAX_VOICE_ESCALATIONS`번 넘어갔다(모든 시나리오) | 전이 없음(저장소 감사 2026-11-17 · 사용자 결정 "최대 3번" — 전환 반복으로 유료 호출 · Live 토큰 무제한 차단) |
  * | C3 | 그 밖 | 세션 술어 그대로 |
  */
 export function resolveTransitionNow(
@@ -64,8 +68,11 @@ export function resolveTransitionNow(
   catalog: Readonly<Record<string, EscalationMetaView>>,
 ): EscalationConfig | undefined {
   const config = resolveSessionEscalation(session, catalog);
-  if (!config || !catalog[session.scenarioId]?.escalationCloneOnly) return config; // C3
+  if (!config) return undefined;
+  const voiceEscalations = (session.channelHistory ?? []).filter((entry) => entry.from === "messenger" && entry.to === "voice").length;
+  if (voiceEscalations >= MAX_VOICE_ESCALATIONS) return undefined; // C4
+  if (!catalog[session.scenarioId]?.escalationCloneOnly) return config; // C3
   if (session.voiceSelectionSource !== "recorded" && session.voiceSelectionSource !== "reused") return undefined; // C1
-  if ((session.channelHistory ?? []).some((entry) => entry.from === "messenger" && entry.to === "voice")) return undefined; // C2
+  if (voiceEscalations > 0) return undefined; // C2
   return config;
 }

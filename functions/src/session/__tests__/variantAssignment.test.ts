@@ -165,13 +165,14 @@ test("[T191 S5 챌린지 수신자] 회전 문서 없이 challengeId 해시로 �
   assert.equal(spread.size, 2, "해시가 한쪽으로만 쏠리지 않는다(8건 표본)");
 });
 
-test("[T191 S5 인덱스 0 · 설계 금지 X6] 배정 모듈에 쿼리 0 · firestore.indexes.json 인덱스 수 3 불변 · 회전 문서는 클라 명시 거부", () => {
+test("[T191 S5 인덱스 0 · 설계 금지 X6] 배정 모듈에 쿼리 0 · firestore.indexes.json 인덱스 수 4 불변 · 회전 문서는 클라 명시 거부", () => {
   const code = fs
     .readFileSync(path.join(FUNCTIONS_SRC, "session/variantAssignment.ts"), "utf-8")
     .replace(/\/\/[^\n]*/g, "");
   assert.equal(/\.where\(|\.orderBy\(|\.limit\(/.test(code), false);
   const indexes = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "firestore.indexes.json"), "utf-8"));
-  assert.equal(indexes.indexes.length, 3, "복합 인덱스 수가 바뀌었다 — 인덱스 배포 누락 장애(§66) 위험");
+  // 2026-11-17 3 → 4 — 버려진 세션 정리 `sessions(status, createdAt)`(`session/staleSweepSchedule.ts` · 색인 배포 먼저).
+  assert.equal(indexes.indexes.length, 4, "복합 인덱스 수가 바뀌었다 — 인덱스 배포 누락 장애(§66) 위험");
   const rules = fs.readFileSync(path.join(REPO_ROOT, "firestore.rules"), "utf-8");
   assert.match(rules, /match \/variantRotation\/\{rotationKey\} \{\s*allow read, write: if false;\s*\}/);
   // 세션 문서와 회전 문서가 **한 트랜잭션**으로 커밋된다(M3 — 동시 생성 경합 대비).

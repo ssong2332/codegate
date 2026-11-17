@@ -115,7 +115,8 @@ test("[SA6] 배선 — 참가자 · 사기범 대사 순서대로 · 화면 안�
   const page = readFileSync(new URL("../../app/session/play/page.tsx", import.meta.url), "utf8");
   assert.ok(
     // ⭐ 2026-11-09 S2′ — 실제 은행 알아보기 함수(`realBankMentionsIn`)를 함께 넘긴다.
-    page.includes("spokenAccountNow={() => spokenAccountFrom([...messages, ...transcriptRef.current], realBankMentionsIn)}"),
+    // 2026-11-17 감사 1 — 미제출 턴 = 재시도 큐 + 아직 안 보낸 턴(제출된 턴은 `messages` 구독에 있다).
+    page.includes("spokenAccountNow={() => spokenAccountFrom([...messages, ...unsubmittedTurns()], realBankMentionsIn)}"),
     "페이지 — 올린 대사 + 실시간 전사(역할 포함)로 여는 순간 값을 만든다",
   );
   const overlay = readFileSync(new URL("../../components/InCallSmsOverlay.tsx", import.meta.url), "utf8");

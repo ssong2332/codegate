@@ -57,6 +57,7 @@ import { isAmountComparison } from "../roleplay/screenAction";
 import { resolveParticipantHangup } from "./participantHangup";
 import { resolveScreenHeld } from "./screenHeld";
 import { replayCallLegs } from "./replayCallLegs";
+import { decideReportRegeneration } from "./reportRegeneration";
 
 /**
  * 2026-11-07 Edge 시험 판 27 — 공식 번호 확인 기록.
@@ -99,7 +100,18 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   const reportRef = db.collection("reports").doc(sessionId);
   const existingReport = await reportRef.get();
   if (existingReport.exists) {
-    return { reportId: sessionId };
+    // 2026-11-17 감사 2 — 리포트 뒤에 늦게 쓰인 통화 전사가 있으면 다시 계산한다(`reportRegeneration.ts` 표 R · 그 밖 = 종전 멱등 반환).
+    const storedCount: unknown = existingReport.get("sourceMessageCount");
+    const decision =
+      typeof storedCount === "number"
+        ? decideReportRegeneration({
+            storedCount,
+            currentCount: (await sessionRef.collection("messages").count().get()).data().count,
+            rewindStarted: (await reportRef.collection("limits").doc("rewind").get()).exists,
+          })
+        : "keep";
+    if (decision === "keep") return { reportId: sessionId };
+    logger.info("[감사 2] 늦게 쓰인 전사로 리포트 다시 계산", { sessionId, storedCount });
   }
 
   // ① messages 입력(원문·실제 운영정보 배제, AC-005/013) — role별로 저장 전 처리가 다르다:
@@ -430,7 +442,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     ...(screenHeld ? { screenHeld } : {}),
     // Edge 재시험 19 ② — 다통화 변형의 통화별 발신 표시(리플레이 · 표시 전용 · 부재 = 다통화 아님).
     ...(callLegs ? { callLegs } : {}),
-    createdAt: Timestamp.now(),
+    // 다시 계산(감사 2 표 R4)해도 처음 생성 시각을 지킨다(목록 순서 · 표기 무변경).
+    createdAt: existingReport.exists ? (existingReport.get("createdAt") as Timestamp) : Timestamp.now(),
     scenarioId: session.scenarioId,
     channel: session.channel ?? "voice",
     // ⚠️ AC-069 2차 방어(§15.4.3) — 2인 챌린지 체험 세션 리포트에 소속 표식을 남긴다. 사용자1의
@@ -459,6 +472,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     ...(analysis.riskSignals.length > 0 ? { riskSignals: analysis.riskSignals } : {}),
     // §104(UX D-145) — 참가자 발화 수(표시 전용 · 판정 무관). 위 ① 스냅샷에서 센다(추가 read 0).
     userTurnCount: messages.filter((message) => message.role === "user").length,
+    // 감사 2 — 이 계산이 읽은 messages 수(표 R).
+    sourceMessageCount: messagesSnap.size,
   };
   await reportRef.set(reportDoc);
 

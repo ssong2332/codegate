@@ -15,7 +15,7 @@ import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope, denyAnonymous } from "../shared/anonymousGate";
 import { findOpeningToMarkNotSpoken } from "./openingMark";
 import { resolveTurnCreatedAtMs } from "./transcriptTiming";
-import { prepareTranscriptTurns, readTranscriptRequest, transcriptBatchKey } from "./transcriptRequest";
+import { exceedsSessionTranscriptCap, prepareTranscriptTurns, readTranscriptRequest, transcriptBatchKey } from "./transcriptRequest";
 import type { MessageDoc, SessionDoc } from "../shared/types";
 import { messageLegIndex } from "../callLegs/legPlan";
 import { logCallDiag, readCallDiag } from "./callDiag";
@@ -99,6 +99,10 @@ export const submitRealtimeTranscript = onCall<
     // ⛔ **G350** — 이어 붙일 인덱스는 `historySnap.size`(문서 수) 그대로다. 아래 `notSpoken`
     // 마크는 이 값에 **절대 반영하지 않는다**(반영하면 실시간 앵커 `+1`이 무너진다, G348).
     let nextIndex = historySnap.size;
+    // 2026-11-17 감사 4 — 세션 전사 총량 상한(`transcriptRequest.ts` 표 C · 이미 읽은 기록으로 센다 — 추가 read 0).
+    if (exceedsSessionTranscriptCap(historySnap.docs.map((doc) => doc.data() as MessageDoc), prepared)) {
+      throw new HttpsError("resource-exhausted", "이 세션에 저장할 수 있는 통화 기록을 넘었습니다.");
+    }
 
     // §55 D3 — 클라가 "오프닝이 낭독되지 않았다"고 알려준 세션에서만, 이미 읽어 둔 `historySnap`
     // 안의 오프닝 문서에 마크를 붙인다(**추가 read 0회**, 같은 트랜잭션, 멱등).

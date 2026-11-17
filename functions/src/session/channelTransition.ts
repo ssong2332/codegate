@@ -22,7 +22,9 @@
 // 재-에스컬레이션되는 핑퐁을 피할 수 있다(functions/src/roleplay/index.ts 참고).
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
-import type { ChannelTransitionTrigger, MessengerChannel } from "../shared/types";
+import type { ChannelTransitionTrigger, MessengerChannel, SessionDoc } from "../shared/types";
+import { isSessionLimitReached } from "../roleplay/sessionLimits";
+import { MAX_SESSION_MS } from "../shared/constants";
 
 // 허용 방향 화이트리스트 — analyzeConversation.ts/purge.ts류와 동일한 관례로 순수 판정 함수를
 // 분리해 firebase-admin 초기화 없이 단위 테스트할 수 있게 한다(channelTransition.test.ts 참고).
@@ -83,5 +85,21 @@ export async function transitionChannel(
       channel: to,
       channelHistory: FieldValue.arrayUnion(entry),
     });
+  });
+}
+
+/**
+ * 저장소 감사(2026-11-17) — 전환 콜러블(`requestEscalation` · `requestReverseEscalation`)도 sendMessage와 같은 세션 한도(턴 · 시간)를 본다.
+ * 기점 = 받은 시각(부재면 생성 시각) — sendMessage · 통화 중 카톡 예산 · 실시간 발급 예산과 같다.
+ */
+export function transitionSessionLimitReached(
+  session: Pick<SessionDoc, "turnCount" | "maxUserTurns" | "answeredAt" | "createdAt" | "maxSessionMs">,
+  nowMs: number,
+): boolean {
+  return isSessionLimitReached({
+    turnCount: session.turnCount,
+    maxUserTurns: session.maxUserTurns,
+    elapsedMs: nowMs - (session.answeredAt ?? session.createdAt).toMillis(),
+    maxSessionMs: session.maxSessionMs ?? MAX_SESSION_MS,
   });
 }

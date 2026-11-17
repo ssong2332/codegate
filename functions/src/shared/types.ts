@@ -708,6 +708,8 @@ export type ReportDoc = {
   // §104(옵셔널 · 무백필 · UX D-145) — 참가자 발화 수(messages 중 role "user" 문서 수 — 위 ① 스냅샷에서 센다 · 추가 read 0).
   // 표시 전용: "속지 않음" 상태 줄이 대화 0턴(바로 끊음)과 그 밖을 가른다. ⛔ 판정 입력이 아니다. 부재 = 이 필드 이전 리포트(종전 문면 규칙).
   userTurnCount?: number;
+  // 2026-11-17 감사 2 — 이 리포트를 만들 때 읽은 messages 수(`report/reportRegeneration.ts` 표 R · 부재 = 이 필드 전 리포트 = 다시 만들지 않는다).
+  sourceMessageCount?: number;
 };
 
 // --- reports/{reportId}/rewindAttempts/{attemptId} (T70, UX-028/UF-009, §15.2.2, AC-062/063) ---
