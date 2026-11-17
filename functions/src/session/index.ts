@@ -25,7 +25,7 @@ import { endFailedCreateSessionAttempt, releaseCreateSessionSlot, reserveCreateS
 import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID, LLM_TEXT_SECRETS, isDevRouteOverrideEnabled } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
-import { transitionChannel } from "./channelTransition";
+import { transitionChannel, transitionSessionLimitReached } from "./channelTransition";
 import { recordVoiceTalkUnanswered } from "./voiceTalkUnanswered";
 import { applyCallReturnSessionUpdate, decideCallReturn, recordCallReturnLine } from "./callReturn";
 import { readEndSessionReason, resolveRecordedEndReason, shouldMarkParticipantHangupButton } from "./endReason";
@@ -600,6 +600,10 @@ export const requestEscalation = onCall<
   if (session.channel !== "messenger") {
     throw new HttpsError("failed-precondition", "메신저 채널 세션에서만 요청할 수 있습니다.");
   }
+  // 저장소 감사(2026-11-17) — 세션 한도(턴 · 60분)를 넘은 세션은 전환하지 않는다(전환 반복으로 유료 호출 · Live 토큰을 늘리는 경로 차단).
+  if (transitionSessionLimitReached(session, Date.now())) {
+    throw new HttpsError("failed-precondition", "훈련 시간이 끝난 세션입니다.");
+  }
   // A2 ㉢(2026-11-01) — 목소리 복제 짧은 통화 시나리오(자녀 사칭)는 참가자가 건 보이스톡을 받지 않는다(폰 고장 핑계와 일관 · 그 세션이 통화로 이어지는지와 무관).
   const voiceTalkNeverAnswered = PUBLIC_SCENARIOS[session.scenarioId]?.escalationCloneOnly === true;
   // T194-a(§84.4.1 S-2) — 세션 술어(sendMessage 자동 전이 · 클라 버튼 · 시작 고지 열과 같은 술어).
@@ -672,6 +676,10 @@ export const requestReverseEscalation = onCall<
   }
   if (PUBLIC_SCENARIOS[session.scenarioId]?.channel !== "messenger") {
     throw new HttpsError("failed-precondition", "이 시나리오는 메시지 전환을 지원하지 않습니다.");
+  }
+  // 저장소 감사(2026-11-17) — 세션 한도(턴 · 60분)를 넘은 세션은 전환하지 않는다(전환 반복으로 유료 호출 · Live 토큰을 늘리는 경로 차단).
+  if (transitionSessionLimitReached(session, Date.now())) {
+    throw new HttpsError("failed-precondition", "훈련 시간이 끝난 세션입니다.");
   }
 
   // reviewer 리뷰 Major #2 수정 — 이 시점의 누적 turnCount를 기준점으로 함께 기록해, sendMessage의
