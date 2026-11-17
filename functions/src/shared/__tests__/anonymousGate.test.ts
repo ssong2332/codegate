@@ -158,6 +158,8 @@ const ANONYMOUS_POLICY: Record<string, AnonymousPolicy> = {
   setChallengeResultSharing: "entry",
   onSessionEnded: "not_callable",
   purgeExpiredChallenges: "not_callable",
+  // 2026-11-17 감사 '꼭 고칠 것 5' — 버려진 active 세션 정리(onSchedule · 클라 호출 불가).
+  endStaleSessions: "not_callable",
 };
 
 type ClassificationGaps = { unclassified: string[]; stale: string[] };
@@ -206,10 +208,10 @@ const EXPORTED_NAMES: readonly string[] = Object.keys(callables);
 
 test("[T176 T-2] index.ts export 집합과 §68.3 정책표가 양방향으로 일치한다(G421)", () => {
   assertNoClassificationGaps(EXPORTED_NAMES, ANONYMOUS_POLICY);
-  assert.equal(EXPORTED_NAMES.length, 30, "§68.1 1 — 서버 진입점은 30개(콜러블 28 + 트리거 1 + 스케줄 1 — T192 C1 +1 · §128(7) +1 · §142 +1 · PR-B recordLoanReview +1)");
+  assert.equal(EXPORTED_NAMES.length, 31, "§68.1 1 — 서버 진입점은 31개(콜러블 28 + 트리거 1 + 스케줄 2 — T192 C1 +1 · §128(7) +1 · §142 +1 · PR-B recordLoanReview +1 · 2026-11-17 endStaleSessions +1)");
 });
 
-test("[T176 T-2] 정책표 클래스별 개수 = §68.3(D 6 · S 17 · R 1 · E 2 · N 2 · X 2 — 변경 대상 24 · T192 C1 S +1 · §128(7) S +1 · §142 S +1 · PR-B S +1)", () => {
+test("[T176 T-2] 정책표 클래스별 개수 = §68.3(D 6 · S 17 · R 1 · E 2 · N 2 · X 3 — 변경 대상 24 · T192 C1 S +1 · §128(7) S +1 · §142 S +1 · PR-B S +1 · 2026-11-17 X +1)", () => {
   const count = (policy: AnonymousPolicy) =>
     Object.values(ANONYMOUS_POLICY).filter((p) => p === policy).length;
   assert.equal(count("deny"), 6);
@@ -217,7 +219,7 @@ test("[T176 T-2] 정책표 클래스별 개수 = §68.3(D 6 · S 17 · R 1 · E 
   assert.equal(count("report"), 1);
   assert.equal(count("entry"), 2);
   assert.equal(count("no_auth"), 2);
-  assert.equal(count("not_callable"), 2);
+  assert.equal(count("not_callable"), 3); // 2026-11-17 endStaleSessions +1
   assert.equal(count("deny") + count("session") + count("report"), 24);
 });
 
