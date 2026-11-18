@@ -8,6 +8,31 @@
   - **차선책:** ElevenLabs 등 관리형 서비스로 넘어갑니다. 넘어가는 기준은 §5 판정표가 정합니다.
 - ⚠️ 이전 사용자 결정(2026-10-20)은 *"ElevenLabs는 실서비스에 쓰지 않는다(측정용만)"* 였습니다. 이번 결정이 ElevenLabs를 차선책으로 올렸으므로, 실서비스 전환 시점에 이 결정을 다시 확인해야 합니다(§5 F8).
 
+## ⭐ 0원 제약 (사용자 결정 2026-11-19 — 이 절이 아래 모든 절보다 우선)
+원문: *"추천으로 형태로 진행하는데, 과금 요소는 사전에 차단하는 걸로 가고 내가 지출해야 하는 금액은 0원으로 가야 돼"*.
+
+### 과금 요소 차단표
+| # | 요소 | 과금 여부 | 처리 |
+|---|---|---|---|
+| Z1 | Cloud Run **GPU**(L4) | GPU 무료 구간 없음([문서](https://docs.cloud.google.com/run/docs/configuring/services/gpu)) | ⛔ **차단.** 단계 2(GPU 실시간)와 실측 M1 · M2는 보류 |
+| Z2 | GCE GPU VM(P3) | 과금 | ⛔ 차단 |
+| Z3 | Cloud Run **CPU** | 무료 구간(월 180,000 vCPU-초 · 360,000 GiB-초 · 요청 200만) 안이면 0원. 넘으면 과금. 무료 구간이 모든 리전에 적용되는지는 출처가 서로 다름([가격](https://cloud.google.com/run/pricing) · [해설](https://cloudchipr.com/blog/cloud-run-pricing)) | ⚠️ **조건부.** 무료 구간 리전 · 이미지 크기(Z4)를 확인하기 전에는 배포 금지 |
+| Z4 | Artifact Registry(컨테이너 이미지 저장) | 0.5GB까지 무료, 넘으면 GB당 월 $0.10(출처 간 일치, 공식 페이지 미확인) | ⚠️ torch가 든 CPU 이미지는 0.5GB를 넘을 가능성이 크다(추정). 넘으면 **0원 위반** → M0b로 크기를 확인 |
+| Z5 | ElevenLabs | 무료 플랜 월 1만 크레딧. 무료 플랜에 즉석 복제가 포함되는지는 출처가 충돌한다(공식 페이지는 포함 · 제3자는 불포함). 무료 플랜은 상업 이용이 불가하다는 데 출처가 일치([공식](https://start.elevenlabs.io/voice-cloning/v5) · [제3자](https://gptprompts.ai/elevenlabs-free)) | ⛔ 실서비스 차단. 측정도 **결제 수단 미등록 무료 계정**일 때만 |
+| Z6 | Chirp 3 즉석 커스텀 음성 | 유료이고 허용 목록 사용자만 쓸 수 있다 | ⛔ 차단 |
+| Z7 | Gemini Live 실 키 측정(M2 · M3) | 기존 키가 무료 등급인지 미확인 | ⛔ 이번 실측에서 제외 |
+| Z8 | Hugging Face 무료 CPU Space | 0원 | ⛔ 참가자 녹음이 외부(HF)로 나간다. 폐기 · 개인정보 범위 밖이라 차단 |
+| Z9 | 사용자 PC(VoiceStudio) + 무료 터널 | 0원(전기 제외) | ✅ 허용. 단 §2 P2의 위험이 그대로 남는다 |
+
+⚠️ **GCP 예산 알림은 과금을 멈추지 않습니다.** 알림만 보낼 뿐입니다. 자동으로 멈추려면 프로젝트 결제를 끊어야 하는데, 그러면 이 앱의 Functions · Hosting까지 함께 멈춥니다. 그래서 0원은 다음 세 가지로만 지킵니다. (1) 과금 자원을 **만들지 않는다**(Z1 · Z2 · Z6). (2) 코드에 유료 공급자 경로를 **두지 않는다**(엔진 주소가 없으면 지금 동작 = Live 기본 음성). (3) Z3을 쓸 때는 `--max-instances 1` · `--min-instances 0` · GPU 플래그 없음 · 앱 쪽 일일 생성 상한으로 무료 구간 안에 묶는다.
+
+### 0원 안에서 진행할 형태
+| 단계 | 0원 판정 | 형태 |
+|---|---|---|
+| 단계 1 (짧은 통화 대사 사전 생성) | ✅ 가능 | 엔진 = **사용자 PC의 VoiceStudio/OmniVoice(CPU)**. 배포 웹 → Functions → 무료 터널 → PC 순서로 연결하고, 생성 결과는 세션 Storage에 저장한다. **PC가 꺼져 있거나 90초 안에 생성되지 않으면 → 지금처럼 Live 기본 음성 짧은 통화로 폴백한다(0원).** Z3(Cloud Run CPU)은 M0b 결과가 무료 구간 안이라고 확인된 뒤에만 대체 배치로 쓴다 |
+| 단계 2 (모든 통화 실시간) | ⛔ 보류 | CPU로는 실시간이 어렵다(추정 · M0으로 확인). GPU는 Z1로 차단 |
+| 차선책(관리형) | ⛔ 보류 | Z5 · Z6. 0원 안에서의 차선책은 **"복제 없이 Live 기본 음성 유지"(지금 동작)** |
+
 ## 0. 지금 상태 (코드 근거)
 | 항목 | 현재 | 근거 |
 |---|---|---|
@@ -101,11 +126,13 @@
 | # | 측정 | 위치 | 세션 · 호출 | 비용 | 기록 · 판정 |
 |---|---|---|---|---|---|
 | **M0** | 로컬 VoiceStudio 한국어 생성 속도. 문장마다 벽시계 시간 ÷ 오디오 길이 = RTF. 32단계와 16단계 각각, 첫 호출(모델 적재)은 따로 기록 | 사용자 PC(CPU) · **외부 전송 0** | 문장 8 × 단계 2 = 16회 | 0 | RTF · 적재 시간 · 청취 메모 → F1 · F4(초벌) |
-| M1 | 같은 문장 세트를 Cloud Run GPU L4에서 생성(16 · 32단계). 콜드 1회 + 따뜻한 상태 반복 | Cloud Run Job | Job 실행 2회 | GPU 15분 이내 ≈ $0.2 + 이미지 빌드 · 저장 | RTF · 콜드 시간 → F2 · F6 |
-| M2 | 전 구간: Live 출력 전사를 문장으로 끊어 L4 서비스에 넘기고 첫 음성 지연을 잰다(기존 `live-mic-probe` 클립 재사용) | Cloud Run 서비스 + Live 실 키 | Live 3세션 · 각 10턴 | GPU 1시간 이내 ≈ $0.7 + Live 3세션 | p50 · p90 → F3 |
-| M3 | 생성 음성의 글자 오류율: 생성 wav를 Live 입력 전사로 다시 인식 | Live 실 키 | 1세션(클립 8개) | Live 1세션 | 글자 오류율 → F4 |
-| — | **합계** | | | **$5 이하** + Live 4세션 | 사용자 청취 점수 확정 |
-| (차선) | F2 ~ F7에 걸렸을 때만: ElevenLabs IVC 기준선(복제 1 · 합성 8 · 삭제 1 · 삭제 뒤 조회 404 확인) | 외부 | 600자 이내 | 기존 크레딧 안 | 같은 판정표로 비교 |
+| **M0b** | Cloud Run CPU 대체 배치(Z3 · Z4) 판단용: 로컬 Docker로 CPU 전용 이미지를 빌드해 **크기만** 잰다(푸시 0). M0의 문장당 CPU 초를 바탕으로 세션당 vCPU-초 · GiB-초를 계산한다 | 사용자 PC · 외부 전송 0 | 빌드 1회 | 0 | 이미지 ≤ 0.5GB이고 월 예상 사용량이 무료 구간의 50% 이하일 때만 Z3 허용 |
+| **M0c** | 무료 터널 왕복 지연: **음성이 아닌 더미 텍스트**로 배포 Functions → 터널 → PC 상태 확인 요청 20회 | 무료 터널 | 요청 20회 | 0 | p50 · p90 왕복. 참가자 데이터는 보내지 않는다 |
+| — | **합계** | | | **0원** | 사용자 청취 점수 확정 |
+| ~~M1~~ | ~~Cloud Run GPU L4 생성~~ | | | ⛔ Z1 차단 | 0원 제약이 풀릴 때까지 보류 |
+| ~~M2~~ | ~~Live 전 구간 첫 음성~~ | | | ⛔ Z1 · Z7 차단 | 보류 |
+| ~~M3~~ | ~~Live로 글자 오류율~~ | | | ⛔ Z7 차단 | 대신 M0 청취 점수로 F4를 판정한다. 로컬 무료 인식기를 쓸 수 있으면 그것으로 대체한다(미확인) |
+| ~~(차선)~~ | ~~ElevenLabs 기준선~~ | | | ⛔ Z5 | 결제 수단이 없는 무료 계정이 있을 때만, 사용자 승인 뒤 |
 
 **명령 초안 (프로브 스크립트는 아직 없음 — 구현 승인 뒤 작성):**
 ```powershell
@@ -114,7 +141,10 @@
 #   방법 2: omnivoice CLI 직접
 omnivoice-infer --help   # 먼저 옵션 이름 확인(문서상 CLI 존재 · 옵션은 미확인)
 node scripts/omnivoice-rtf-probe.mjs --engine local --ref <스크래치>/ref.wav --lines <스크래치>/lines-ko.json --steps 16,32 --out <스크래치>/m0
-# M1 (GPU 과금 — 승인 필요)
+# M0b (0원 · 푸시 금지)
+docker build -t omnivoice-cpu-probe <Dockerfile 폴더>; docker image inspect omnivoice-cpu-probe --format "{{.Size}}"
+# ⛔ 아래 M1 ~ M3은 0원 제약(Z1 · Z7)으로 실행 금지 — 기록용으로만 남김
+# M1 (GPU 과금)
 gcloud run jobs deploy omnivoice-probe --image <이미지> --gpu 1 --gpu-type nvidia-l4 --region <L4 지원 리전> --task-timeout 15m --max-retries 0 --no-gpu-zonal-redundancy
 gcloud run jobs execute omnivoice-probe --wait
 gcloud run jobs delete omnivoice-probe --quiet
@@ -152,8 +182,8 @@ node scripts/live-clone-voice-probe.mjs --secret "C:/Projects/codegate/functions
 |---|---|---|
 | D1 | §5 문턱 값(F2 ~ F6) 확정 | 사용자 |
 | D2 | CC-BY-NC가 이 서비스에 맞는지(F7) | 사용자 · 법무 |
-| D3 | M0(로컬, 과금 0) 실행 승인과 VoiceStudio 재기동 | 사용자 |
-| D4 | M1 ~ M3 실행 승인($5 이하 + Live 4세션) | 사용자 |
+| D3 | M0 · M0b · M0c(모두 0원) 실행 승인과 VoiceStudio 재기동 | 사용자 |
+| D4 | ~~M1 ~ M3 실행 승인~~ → 0원 제약(Z1 · Z7)으로 보류 | — |
 | D5 | 단계 1에서 참가자 말을 전사할지(Live를 듣기만 하는 용도로 열면 비용이 남는다) | 사용자 |
 
 ## 10. 확인 안 한 것
