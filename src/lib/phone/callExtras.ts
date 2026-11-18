@@ -63,3 +63,22 @@ export function captionLine(scammerCaption: string | null): string | null {
   const text = scammerCaption?.trim();
   return text ? text : null;
 }
+
+// 2026-11-18 재시험 25 — 통화 2 · 3을 받은 직후 자막 칸에 앞 통화 사기범의 마지막 대사가 남았다(판정표 CC).
+// | 행 | 레그 연결 | 자막 |
+// |---|---|---|
+// | CC1 | 새 통화(받기 · 다시 걸려 온 전화 · 건 전화 — 같은 인물 재연결 포함) | 비운다 — 앞 통화는 끊겼다 |
+// | CC2 | 넘김(`via: "transfer"` — 같은 통화 안 화자 교대) | 유지 — 같은 통화의 직전 대사 |
+// | CC3 | 같은 통화 Live 재연결(§140 이어받기 — `connectLeg`를 거치지 않는다) | 유지 — 무변경 |
+/** 레그 연결 때 앞 통화 자막을 비우는가(판정표 CC). */
+export function legConnectClearsCaption(via: "transfer" | undefined): boolean {
+  return via !== "transfer";
+}
+
+/** 지금 통화의 마지막 사기범 대사(폴백 경로) — `fromIndex` 앞(앞 통화) 메시지는 보지 않는다. */
+export function latestScammerLineFrom(messages: readonly { role: string; text: string }[], fromIndex: number): string | null {
+  for (let i = messages.length - 1; i >= Math.max(0, fromIndex); i--) {
+    if (messages[i].role === "scammer") return messages[i].text;
+  }
+  return null;
+}

@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CALL_EXTRA_COPY, captionLine, recordingElapsedSec } from "./callExtras.ts";
+import { CALL_EXTRA_COPY, captionLine, latestScammerLineFrom, legConnectClearsCaption, recordingElapsedSec } from "./callExtras.ts";
 
 const play = readFileSync("src/app/session/play/page.tsx", "utf8");
 const controls = readFileSync("src/components/OneUiCallControls.tsx", "utf8");
@@ -51,4 +51,25 @@ test("[통화 부가 기능] 개인정보 · 녹음 파일 · 외부 전송 0 �
 test("[통화 부가 기능] 문구에 세션 표식 낱말 0(G437 · 세션 중 문면)", () => {
   const all = Object.values(CALL_EXTRA_COPY).join(" ");
   for (const word of ["모의", "훈련용", "가상", "재현"]) assert.ok(!all.includes(word), word);
+});
+
+// 2026-11-18 재시험 25 — 통화 2 · 3 응답 직후 앞 통화 사기범의 마지막 대사가 자막 칸에 남음(판정표 CC).
+test("[재시험 25 CC] 새 통화 연결 = 앞 통화 자막 비움 · 넘김 = 유지 · 폴백 자막은 지금 통화 메시지만", () => {
+  // CC1 · CC2
+  assert.equal(legConnectClearsCaption(undefined), true);
+  assert.equal(legConnectClearsCaption("transfer"), false);
+  // 폴백 경로 — 앞 통화(인덱스 2 앞) 대사는 보지 않는다.
+  const msgs = [
+    { role: "scammer", text: "통화 1 첫 대사" },
+    { role: "scammer", text: "통화 1 마지막 대사" },
+    { role: "user", text: "네" },
+  ];
+  assert.equal(latestScammerLineFrom(msgs, 0), "통화 1 마지막 대사");
+  assert.equal(latestScammerLineFrom(msgs, 2), null);
+  assert.equal(latestScammerLineFrom([...msgs, { role: "scammer", text: "통화 2 첫 대사" }], 2), "통화 2 첫 대사");
+  // 배선 — connectLeg 안에서 판정으로 실시간 자막을 비우고 폴백 시작 위치를 옮긴다.
+  const code = strip(play);
+  const leg = code.slice(code.indexOf("const connectLeg = ("), code.indexOf("const openNextLeg = "));
+  assert.match(leg, /if \(legConnectClearsCaption\(via\)\) \{\s*setLiveScammerCaption\(null\);\s*setLegCaptionFrom\(messages\.length\);\s*\}/);
+  assert.match(code, /const latestScammerLine = latestScammerLineFrom\(messages, legCaptionFrom\);/);
 });
