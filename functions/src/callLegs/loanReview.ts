@@ -38,7 +38,7 @@ export { LOAN_DISBURSED_SMS_ID } from "./loanReviewOrder";
 /** 모델에게 돌려줄 1줄 — 기록 뒤 정한 결과를 그대로 안내한다(먼저 남은 결과가 다르면 그 결과로). */
 export function loanReviewGuidance(outcome: LoanReviewOutcome): string {
   return outcome === "approved"
-    ? "(결과가 실행으로 기록됐다. 확인됐다며 오늘 중 대출금이 입금된다고 안내하고 인사한 뒤 통화를 끝내라.)"
+    ? "(결과가 실행으로 기록됐다. 확인됐다며 신청하신 계좌로 대출금이 입금 처리되었다고 안내하고 인사한 뒤 통화를 끝내라.)"
     : "(결과가 보류로 기록됐다. 보이스피싱이 의심돼 대출 실행을 보류한다고 안내하고, 수사기관은 대출을 권하지 않으니 통화하던 사람과 연락을 끊고 경찰에 확인하라고 알린 뒤 인사하고 통화를 끝내라.)";
 }
 

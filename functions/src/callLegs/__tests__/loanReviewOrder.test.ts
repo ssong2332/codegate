@@ -66,10 +66,21 @@ test("[판정표 LD] 입금 안내 문자 시점 — 확인 전화가 끝난 뒤
   assert.equal(due({ legIndex: 2, legStartUserTurns: [0, 10, 14], connected: true }, approved), true, "LD4 다음 통화");
   // 다른 변형 · 다통화 아님 = 0.
   assert.equal(order.loanDisbursedSmsDue({ flowVariantId: "fv-q7cn", scenarioId: SCENARIO, relay: { ...RELAY_LEG1, legEnded: 1 } as never, loanReview: approved }), false);
-  // 문자 본문은 "입금되었습니다" — 안내("오늘 중 입금됩니다") 뒤에 와야 어긋나지 않는다.
+  // 문자 본문은 "입금되었습니다" — 안내도 같은 완료형("입금 처리되었습니다" · 재시험 25 ⑬ 시제).
   const sms = findInCallSmsItem(SCENARIO, order.LOAN_DISBURSED_SMS_ID);
   assert.ok(sms, "입금 안내 문자 카탈로그");
-  assert.match(loanReviewGuidance("approved"), /입금된다고 안내/);
+  assert.match(loanReviewGuidance("approved"), /입금 처리되었다고 안내/);
+});
+
+test("[재시험 25 ⑬ 시제] 실행 안내 대사는 입금 문자('입금되었습니다')와 같은 완료형 — 미래형 '입금됩니다 · 입금된다'는 0", () => {
+  // 재현: 입금 문자(과거형)가 온 뒤 약 5초 뒤 상담원이 "오늘 중 신청하신 계좌로 대출금이 입금됩니다"(미래형)라고 하고 끝냈다.
+  const sms = findInCallSmsItem(SCENARIO, order.LOAN_DISBURSED_SMS_ID)!;
+  assert.match(sms.body, /입금되었습니다/);
+  const judgeStage = (findFlowVariant(VARIANT)!.legs[1].stages ?? []).find((stage) => /실행으로 부르고/.test(stage))!;
+  for (const line of [loanReviewGuidance("approved"), judgeStage]) {
+    assert.doesNotMatch(line, /입금됩니다|입금된다|입금될/, line);
+    assert.match(line, /입금 처리되었/, line);
+  }
 });
 
 test("[배선] 기록 요청은 문자를 직접 보내지 않고 · 끝나는 세 곳(상담원 끊기 승인 · 참가자 끊기 · 다음 통화 연결)이 LD 헬퍼를 부른다", () => {
