@@ -107,8 +107,10 @@ export const SMS_ARRIVED_REFERENCE = /문자\s*(?:로|에)\s*(?:간|온|도착�
  * | OD1 | 이 꼴이 있다 | "보냈다" 주장으로 본다 · 대상 = 인증번호(`smsClaimPurposes`) |
  * | OD2 | 인증번호 문자가 이미 도착 | 서버 판정표 CL3이 주장으로 보지 않는다(다음 문자를 당기지 않는다) |
  * | OD3 | 인증번호 문자가 없는 루트 · 레그 | 서버 판정표 CL5가 주장으로 보지 않는다 |
+ * | OD4 | ⭐ 2026-11-17(재시험 ⑫ 재발) 인증번호를 말한 문장 **바로 다음 문장**이 "받으신 · 받은 (인증)번호"를 불러 · 알려 달라 | OD1과 같다(두 문장으로 나뉜 요구 — "인증번호를 보내드리겠습니다. 받으신 번호를 불러주십시오") |
+ * | OD5 | 예고만("인증번호 문자 곧 보내 드릴게요") · 다른 번호("받으신 계좌번호") · 두 문장 넘어 떨어진 요구 | 주장 아님(종전) |
  */
-export const SMS_OTP_DEMAND = /인증\s*(?:번호|코드)[^.?!\n]{0,20}?(?:불러|알려|말씀해|말해|읽어)/;
+export const SMS_OTP_DEMAND = /인증\s*(?:번호|코드)(?:[^.?!\n]{0,20}?|[^.?!\n]{0,30}[.?!]\s*받(?:으신|은)\s*(?:인증\s*)?번호[^.?!\n]{0,10}?)(?:불러|알려|말씀해|말해|읽어)/;
 
 export function scammerClaimsSmsSent(scammerText: string): boolean {
   return SMS_SENT_CLAIM.test(scammerText) || SMS_ARRIVED_REFERENCE.test(scammerText) || SMS_OTP_DEMAND.test(scammerText);
