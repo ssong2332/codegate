@@ -534,6 +534,38 @@ function isOtpCodeAnswer(reply: AnalysisMessage): boolean {
   return OTP_CODE_IN_ANSWER.test(reply.textMasked) || extractSpokenCodes(reply.textMasked).length > 0;
 }
 
+/** 판정표 ID(2026-11-18 재시험 25) — 속은 순간 라벨이 신원 수법인가('신원정보 직접 요구' · '본인확인 정보 직접 요구'). */
+const IDENTITY_LABEL = /신원\s*정보|본인\s*확인\s*정보/;
+/** 판정표 ID2 — 이름 진술("홍길동이고요" · "제 이름은 …"). 금액 · 은행 구절은 지운 뒤 본다("천만 원 정도예요"의 '정도예요'가 이름으로 잡히지 않게). */
+const NAME_IN_ANSWER = /(?:이름|성함)\s*(?:은|는|이)?\s*[가-힣]{2,4}|(?:^|[\s.,!?])(?:저는\s*)?[가-힣]{2,4}\s*(?:입니다|이고요?|이에요|예요|이요)(?=$|[\s.,!?])/;
+const AMOUNT_OR_BANK_PHRASE =
+  /(?:\d[\d,]*|[일이삼사오육칠팔구십백천]+)\s*(?:억|천만|백만|만|천)?\s*원\s*(?:정도|쯤|가량)?|[가-힣]{0,6}\s*은행|농협|우체국|새마을\s*금고|신협|수협/g;
+const BIRTH_IN_WORDS = /년\s*생|생년월일|[일이삼사오육칠팔구십\d]+\s*월\s*[일이삼사오육칠팔구십\d]+\s*일/;
+/** 판정표 ID2 — 답에 신원 값이 있는가. 사진 턴(신분증)은 있다고 본다. */
+function hasIdentityValue(reply: AnalysisMessage): boolean {
+  if (reply.photo === true) return true;
+  const text = reply.textMasked;
+  return (
+    HARD_DISCLOSURE_TOKEN.test(text) ||
+    /\[(?:주민번호|전화|이메일|주소)\]/.test(text) ||
+    BIRTH_DATE.test(text) ||
+    DATE_IN_ANSWER.test(text) ||
+    BIRTH_IN_WORDS.test(text) ||
+    OTP_CODE_IN_ANSWER.test(text) ||
+    NAME_IN_ANSWER.test(text.replace(AMOUNT_OR_BANK_PHRASE, " "))
+  );
+}
+/** 판정표 ID3 — 신원 라벨을 뺀 후보: 목록의 자산 · 잔액 · 거래 은행 라벨(개인정보 범주 — SL1과 같은 표) → 답 내용 범주(L2). */
+function relabelWithoutIdentity(scammerText: string, reply: AnalysisMessage, scopeTactics: readonly string[]): string | undefined {
+  const others = scopeTactics.filter((t) => !IDENTITY_LABEL.test(extractTacticLabel(t)));
+  return (
+    others
+      .map(extractTacticLabel)
+      .find((label) => ASSET_INFO_LABEL.test(label) && resolveTacticCategory(label) === "personal_info_demand") ??
+    resolveAnswerCategoryTactic(scammerText, reply, others)
+  );
+}
+
 /** L2 — 답의 내용 범주. 사진 턴은 판정하지 않는다(§131). */
 function answerContentCategory(scammerText: string, reply: AnalysisMessage): TacticCategory | undefined {
   if (reply.photo === true) return undefined;
@@ -1216,7 +1248,23 @@ export function analyzeConversation(
       : undefined;
     if (otpLabelWithoutCode && !reLabel) continue; // O3
     if (reLabel) tacticLabelsUsed.add(reLabel);
-    const tactic = reLabel ?? chosenTactic;
+    const otpCheckedTactic = reLabel ?? chosenTactic;
+    // ⭐ 2026-11-18 라이브 재시험 25(기관 사칭 고급 fv-c5fj — 성함 · 생년월일 요구 뒤 "주거래 은행에 천이백만 원 정도 있어요."에 '신원정보 직접 요구'에
+    // 응함) — 판정표 O와 같은 방향. 판정표 ID:
+    // | # | If(위에서 고른 라벨 · 답) | Then |
+    // |---|---|---|
+    // | ID1 | 라벨이 신원 라벨(`IDENTITY_LABEL`)이 아니다 | 그대로(종전) |
+    // | ID2 | 신원 라벨 ∧ 답에 신원 값(`hasIdentityValue` — 이름 진술 · 생년월일 · 6자리 날짜 · 가림 표지 · 4자리 이상 숫자 · 사진)이 있다 | 그대로(종전) |
+    // | ID3 | 신원 라벨 ∧ 신원 값 없음 ∧ 답에 잔액 공개 · 은행 이름 | 신원 라벨을 뺀 후보로 다시 고른다: 목록의 자산 · 잔액 · 거래 은행 라벨(SL1과 같은 표) → 답 내용 범주(L2) |
+    // | ID4 | ID3에서 후보가 없다 · 또는 신원 값도 잔액 · 은행도 없다 | 그대로(종전 — 속은 순간을 지우지 않는다) |
+    const identityRelabel =
+      IDENTITY_LABEL.test(otpCheckedTactic) &&
+      !hasIdentityValue(userReply) &&
+      (BALANCE_DISCLOSURE.test(userReply.textMasked) || BANK_NAME.test(userReply.textMasked))
+        ? relabelWithoutIdentity(labelSource.textMasked, userReply, scopeTactics)
+        : undefined;
+    if (identityRelabel) tacticLabelsUsed.add(identityRelabel);
+    const tactic = identityRelabel ?? otpCheckedTactic;
     // AC-026 예시("15초 시점에 속았습니다")를 그대로 따르기 위해 turnIndex가 아니라 실제 경과
     // 시간(초)을 라벨로 쓴다 — MessageDoc.createdAt이 이미 존재하므로 정확한 초 단위 계산이
     // 가능하다(구현 판단, Mock 단계라 정밀 음성 타이밍 데이터는 없지만 메시지 write 시각은 실측값).
