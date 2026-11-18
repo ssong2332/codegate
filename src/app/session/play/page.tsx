@@ -140,7 +140,7 @@ import PhoneIcon from "@/components/PhoneIcon";
 import OneUiCallControls from "@/components/OneUiCallControls";
 import IosCallControls from "@/components/IosCallControls";
 import { oneUi9CallerSubtitle } from "@/lib/phone/oneUi9Call";
-import { CALL_EXTRA_COPY, CALL_EXTRA_TOAST_MS, captionLine, recordingElapsedSec, type CallExtraPanel } from "@/lib/phone/callExtras";
+import { CALL_EXTRA_COPY, CALL_EXTRA_TOAST_MS, captionLine, latestScammerLineFrom, legConnectClearsCaption, recordingElapsedSec, type CallExtraPanel } from "@/lib/phone/callExtras";
 import EndTrainingButton from "@/components/EndTrainingButton";
 import {
   announceTurnsOnInstructionDispatch,
@@ -502,6 +502,8 @@ export default function SessionCallPage() {
   // 한 번 받아 둔다(신규 데이터 경로·서버 변경 0건). ⛔ 갱신 단위는 **턴**이다(G78 — 청크마다
   // setState하면 통화당 수백 번 리렌더가 되고 그것이 OQ-U27 (c)가 우려한 프레임 부담이다).
   const [liveScammerCaption, setLiveScammerCaption] = useState<string | null>(null);
+  // 2026-11-18 재시험 25(`callExtras` 판정표 CC) — 지금 통화가 시작된 메시지 위치(폴백 경로 자막이 앞 통화 대사를 보지 않게).
+  const [legCaptionFrom, setLegCaptionFrom] = useState(0);
   // 실시간 세션에 넣을 오케스트레이션 지시(카운터 패턴 — textMessage와 동일).
   // ⚠️ T83(§16.6 G31) — 문자 announce와 확인 지시가 **같은 슬롯**을 쓰므로 큐를 거쳐 한 턴에
   // 하나씩만 주입한다(아래 enqueueTurnInstruction 참고). 예전엔 이 상태를 문자 전용으로 직접
@@ -1884,6 +1886,11 @@ export default function SessionCallPage() {
       callStartMsRef.current = callLogNowMs();
       setCallDisplaySec(0);
     }
+    // 2026-11-18 재시험 25(판정표 CC) — 새 통화 = 앞 통화 사기범 자막을 비운다(넘김은 같은 통화 — 유지).
+    if (legConnectClearsCaption(via)) {
+      setLiveScammerCaption(null);
+      setLegCaptionFrom(messages.length);
+    }
     callbackAfterHangupRef.current = true;
     setLegCallerLabel(callerLabelForLeg);
     setLegScreen({ kind: "none" });
@@ -3200,8 +3207,7 @@ export default function SessionCallPage() {
   // T72(§15.6 G6) — 자격증명을 아직 못 받았으면(수신 대기 중) 기본은 true다. 실제로 난이도를
   // 반영하지 못하는 경로(ElevenLabs)만 서버가 false로 명시해 내려준다.
   const difficultyApplied = realtime.credentials?.difficultyApplied !== false;
-  const latestScammerLine =
-    [...messages].reverse().find((m) => m.role === "scammer")?.text ?? null;
+  const latestScammerLine = latestScammerLineFrom(messages, legCaptionFrom);
   // T103 — 통화 필 자막의 단일 소스: 실시간 턴 자막 우선, 없으면 폴백 경로의 마지막 사기범 대사.
   const pillCaption = liveScammerCaption ?? latestScammerLine;
   const isRinging = phase === "incoming";
