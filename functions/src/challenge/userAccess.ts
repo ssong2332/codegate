@@ -33,6 +33,7 @@ import { getVoiceProvider } from "../voice/provider";
 import { hashToken, isWellFormedShareToken } from "./token";
 import { markChallengeConsumed, resolveChallengeByTokenHash } from "./index";
 import { decideConsentGate } from "./consentGate";
+import { reportChallengeInTransaction } from "./reportGate";
 import type { ChallengeDoc, ChallengeResultSummary, MessageDoc, ReportDoc, SessionDoc } from "../shared/types";
 import type {
   ConsentChallengeRequest,
@@ -380,7 +381,11 @@ export const reportChallenge = onCall<ReportChallengeRequest, Promise<ReportChal
     if (note && note.trim()) {
       update.reportNote = maskPII(note.trim());
     }
-    await db.collection("challenges").doc(resolved.challengeId).update(update);
+    // 감사 C5 — 상태를 트랜잭션 안에서 보고 쓴다(판정표 RP · reportGate.ts). 삭제된 챌린지는 되살리지 않는다.
+    const decision = await reportChallengeInTransaction(db, resolved.challengeId, update);
+    if (decision === "gone") {
+      throw new HttpsError("not-found", "유효하지 않은 링크입니다.");
+    }
 
     return { status: "reported" };
   },

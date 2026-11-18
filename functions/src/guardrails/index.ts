@@ -66,7 +66,7 @@ import {
   completeChallengeOnExperienceEnd,
 } from "../shared/challengeCompletion";
 import type { DeletionLogDoc, SessionDoc } from "../shared/types";
-import { purgeSessionArtifacts, type PurgeDeps } from "./purge";
+import { claimSessionPurge, purgeSessionArtifacts, type PurgeDeps } from "./purge";
 
 ensureFirebaseAdminApp();
 
@@ -132,12 +132,18 @@ export const onSessionEnded = onDocumentUpdated("sessions/{sessionId}", async (e
   }
   const sessionId = event.params.sessionId;
   try {
-    const log = await purgeSession(sessionId, after.uid, after.voiceId);
-    logger.info("onSessionEnded: 생성물 폐기 처리 완료", {
-      sessionId,
-      overallResult: log.overallResult,
-      targetCount: log.targets.length,
-    });
+    // 감사 C6 — 재전달된 같은 이벤트는 폐기를 다시 돌리지 않는다(판정표 PC · purge.ts).
+    const claim = await claimSessionPurge(getFirestore(), sessionId, Timestamp.now());
+    if (claim === "claimed") {
+      const log = await purgeSession(sessionId, after.uid, after.voiceId);
+      logger.info("onSessionEnded: 생성물 폐기 처리 완료", {
+        sessionId,
+        overallResult: log.overallResult,
+        targetCount: log.targets.length,
+      });
+    } else {
+      logger.info("onSessionEnded: 폐기 건너뜀(이미 처리 · 문서 없음)", { sessionId, claim });
+    }
   } catch (err) {
     // purgeSession 내부의 개별 target 실패는 이미 deletionLogs에 partial/failed로 기록된다
     // (ADR-0003) — 이 catch는 그 기록 자체가 실패하는 것과 같은 진짜 예외 상황(Firestore 장애 등)

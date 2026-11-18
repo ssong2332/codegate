@@ -41,3 +41,34 @@ test("[배선] 화면 꼴이 폴백(§132.17 `SMS_OTP_DEMAND`)과 글자까지 �
   const voice = readFileSync(new URL("./GeminiVoiceSession.tsx", import.meta.url), "utf8");
   assert.match(voice, /scammerClaimsSmsSent\(stripLeakedThought\(scammerBuffer\)\)/);
 });
+
+// ⭐ 2026-11-17 라이브 재시험(기관 사칭 고급 `fv-c5fj`) — ⑫ 재발. 4:11 대사가 인증번호 예고와 요구를 두 문장으로 나눴다 → 주장으로 안 잡혀 문자가 5:31(약 80초 뒤)에 왔다.
+const LIVE_1117 =
+  "네, 말씀해 주셔서 감사합니다. 절차상 본인 확인을 위해 문자로 인증번호를 보내드리겠습니다. 받으신 번호를 불러주십시오. 그럼 혹시 다른 금융 거래는 없으신가요?";
+
+test("[11-17 ⑫ 재발 재현] 두 문장으로 나뉜 인증번호 요구 = 주장 · 대상 identity", () => {
+  assert.equal(scammerClaimsSmsSent(LIVE_1117), true);
+  assert.deepEqual(smsClaimPurposes(LIVE_1117), ["identity"]);
+});
+
+test("[판정 OD4] 인증번호를 말한 문장 바로 다음 문장의 '받으신 · 받은 (인증)번호' 요구 = 주장", () => {
+  for (const said of [
+    "인증번호 문자 곧 보내 드릴게요. 받으신 번호 알려 주세요.",
+    "지금 인증 코드가 발송됩니다! 받은 번호 말씀해 주시면 됩니다.",
+    "본인 확인용 인증번호를 발송해 드리겠습니다. 받으신 인증번호 여섯 자리를 읽어 주십시오.",
+  ]) {
+    assert.equal(scammerClaimsSmsSent(said), true, said);
+    assert.deepEqual(smsClaimPurposes(said), ["identity"], said);
+  }
+});
+
+test("[판정 OD5] 예고만 · 다른 번호 · 두 문장 넘어 떨어진 요구 = 종전(주장 아님)", () => {
+  for (const said of [
+    "인증번호 문자 곧 보내 드릴게요.",
+    "문자로 인증번호를 보내드리겠습니다. 잠시만 기다려 주세요.",
+    "인증번호 확인됐습니다. 받으신 계좌번호 알려 주세요.",
+    "인증번호를 보내드리겠습니다. 잠시만요. 받으신 번호를 불러주십시오.",
+  ]) {
+    assert.equal(scammerClaimsSmsSent(said), false, said);
+  }
+});
