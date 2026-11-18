@@ -14,6 +14,9 @@
 //     --out <폴더> --tag <이름> [--scenario card-company-impersonation] [--variant fv-k3dn] [--leg 0] [--gain-db 0] [--overlap-ms 0]
 //   --gain-db   참가자 음성 크기(dB · 음수 = 작게)
 //   --overlap-ms 사기범 재생이 끝나기 이 시간 전에 말하기 시작(겹쳐 말하기 — 게이트가 앞부분을 버린다)
+//   --leg none  레그 없이(callLeg 미지정) 토큰 발급
+//   --otp-code N  2026-11-19 인증번호 판정 측정 — 첫 사기범 턴 뒤 앱과 같은 인증번호 문자 도착 지시(`buildInCallSmsResponse` = Live 대조 1줄 포함 ·
+//                 번호만 N으로)를 맥락 주입(turnComplete:false)으로 넣는다. 마지막 클립에 대한 사기범 답을 일치 · 불일치로 분류해 summary.otpVerdict에 남긴다.
 
 import { createRequire } from "node:module";
 import { readFileSync, readdirSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
@@ -53,6 +56,16 @@ function readWavPcm(file) {
   throw new Error(`data 청크 없음: ${file}`);
 }
 
+// --otp-code 판정 — 불일치 표현이 있으면 불일치(우선) · 확인 표현이면 일치 · 둘 다 없으면 판정 불가(사람이 reply 원문을 본다).
+function classifyOtpReply(text) {
+  if (/다르|안\s?맞|맞지\s?않|일치하지|올바르지|틀리|틀렸|하나만|잘못/.test(text)) return "mismatch";
+  if (/확인(?:되|됐|했|이\s?되|\s?완료)|일치합|맞습니다|맞네요/.test(text)) return "match";
+  return "unclear";
+}
+if (classifyOtpReply("번호가 다르네요, 다시 확인해 주세요") !== "mismatch" || classifyOtpReply("네, 확인되었습니다.") !== "match" || classifyOtpReply("잠시만요") !== "unclear") {
+  throw new Error("classifyOtpReply 자가 점검 실패");
+}
+
 // 클라와 같은 값(`GeminiVoiceSession.tsx` OPENING_TRIGGER_TURN · `agentSpeechGate.ts`).
 const OPENING_TRIGGER_TURN =
   "(전화가 방금 연결됐다. 지금 막 전화를 받은 상대에게 캐릭터로서 자연스럽게 첫 마디를 건네라. 첫 마디는 짧게 — 신분(사칭 기관·관계)과 전화를 건 이유를 짧은 한두 문장(5초 안팎)으로만 밝히고, 멈춰서 상대의 대답을 기다려라. 다짜고짜 요구나 압박부터 하지 말고, 자세한 설명은 상대가 반응한 뒤 다음 턴에 이어가라.)";
@@ -80,7 +93,9 @@ const gain = Math.pow(10, Number(argVal("--gain-db", "0")) / 20);
 const overlapMs = Number(argVal("--overlap-ms", "0"));
 const scenarioId = argVal("--scenario", "card-company-impersonation");
 const variant = argVal("--variant", "fv-k3dn");
-const legIndex = argVal("--leg", "0");
+const legArg = argVal("--leg", "0");
+const legIndex = legArg === "none" ? "" : legArg;
+const otpCode = argVal("--otp-code", "");
 
 const t0 = Date.now();
 const now = () => Date.now() - t0;
@@ -149,6 +164,7 @@ const scheduleGateClose = () => {
 const agentStartTimes = [];
 let speechEndAt = null;
 let scammerText = "";
+let lastTurnText = "";
 let inputText = "";
 let scammerTurns = 0;
 let waiters = [];
@@ -216,6 +232,7 @@ const session = await ai.live.connect({
       if (sc.turnComplete) {
         scammerTurns += 1;
         ev({ ev: "turnComplete", n: scammerTurns, text: scammerText.trim() });
+        lastTurnText = scammerText.trim();
         scammerText = "";
         turnInProgress = false;
         scheduleGateClose();
@@ -272,7 +289,20 @@ const micTimer = setInterval(() => {
 session.sendClientContent({ turns: [{ role: "user", parts: [{ text: OPENING_TRIGGER_TURN }] }], turnComplete: true });
 ev({ ev: "openingSent" });
 const results = [];
-if (await waitFor((k) => k === "turn" || k === "close", 20000)) {
+const opened = await waitFor((k) => k === "turn" || k === "close", 20000);
+if (opened && otpCode) {
+  // 앱 경로: 문자 도착 → `enqueueTurnInstruction(announceInstruction, "sms")` = 맥락 주입(turnComplete:false · contextInjection.ts smsAnnounce).
+  const { findInCallSmsItem } = require(path.join(repoRoot, "functions", "lib", "scenarios", "inCallSms.js"));
+  const { buildInCallSmsResponse } = require(path.join(repoRoot, "functions", "lib", "inCallSms", "buildDoc.js"));
+  const item = findInCallSmsItem(scenarioId, scenarioId === "card-company-impersonation" ? "card-otp" : "institution-otp");
+  if (!item?.otpCode || item.otpCode.length !== otpCode.length) throw new Error("인증번호 문자 항목 없음 또는 자릿수 다름 — 멈춘다");
+  const { announceInstruction } = buildInCallSmsResponse({ ...item, otpCode }, { placed: false });
+  if (!announceInstruction?.includes(otpCode.split("").join(" "))) throw new Error("대조 1줄 없음 — 멈춘다");
+  while (!closed && agentSpeaking) await sleep(20);
+  session.sendClientContent({ turns: [{ role: "user", parts: [{ text: announceInstruction }] }], turnComplete: false });
+  ev({ ev: "otpSmsInjected", otpCode });
+}
+if (opened) {
   for (let i = 0; i < clipFiles.length && !closed && !stop429; i++) {
     // 사기범 재생이 끝날 때(겹쳐 말하기면 그보다 overlap 전)까지 기다린다.
     while (!closed && now() < nextPlayAt - overlapMs) await sleep(20);
@@ -294,6 +324,7 @@ if (await waitFor((k) => k === "turn" || k === "close", 20000)) {
       phrase: phrases[i],
       inputTranscript: inputText.trim(),
       replied,
+      reply: replied ? lastTurnText : "",
       speechFramesSent: stats.speechSent - before.speechSent,
       speechFramesDropped: stats.speechDropped - before.speechDropped,
       // 관찰 e — 클립 끝 → 사기범 첫 오디오(ms). 음수 = 클립이 끝나기 전에 사기범이 말하기 시작(뒷부분이 게이트에 막힌다). null = 응답 없음 · 클립 미완.
@@ -328,6 +359,7 @@ const summary = {
   utterances: results.length,
   recognized: results.filter((r) => r.inputTranscript.length > 0).length,
   replied: results.filter((r) => r.replied).length,
+  ...(otpCode ? { otpCode, otpVerdict: classifyOtpReply(results.at(-1)?.reply ?? "") } : {}),
   results,
 };
 writeFileSync(path.join(out, `${tag}.json`), JSON.stringify({ summary, events }, null, 1));

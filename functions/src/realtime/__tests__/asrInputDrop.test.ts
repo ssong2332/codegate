@@ -122,3 +122,14 @@ test("[E3-d] Live 대조 1줄 — 말끝 '이(요)'는 숫자 2가 아니라는 
   assert.match(line, /한 자리가 더 들리고 그 마지막이 2\(이\)면 그 마지막 자리를 빼고 비교한다/);
   assert.equal(line.split("7 8 5 1 3 6").length, 2, "정답 등장 1회(§101)");
 });
+
+// 2026-11-19 실 키 판정 실측(문서 6절) — 정답 "칠팔오일삼육이요"를 모델이 0/3 불일치로 판정(전사 7851362). 쉼 있는 낭독은 통과.
+test("[E3-e] Live 대조 1줄 — 붙여 읽기 + '이요' 예시를 실제 번호로(정답+2 = 일치) · 남은 자리가 다르면 불일치 · 띄어 쓴 정답 1회", () => {
+  const line = buildOtpLiveCompareLine("785136");
+  assert.ok(line.includes("785136" + "2처럼 한 자리 더 들린다(맞게 부른 것이므로 일치다)"), "실측 전사 그대로의 예시");
+  assert.ok(line.includes("남은 6자리 중 하나라도 다르면 불일치"), "오답(7851352)은 받아 주지 않는다");
+  assert.equal(line.split("7 8 5 1 3 6").length, 2, "띄어 쓴 정답 등장 1회(§101 유지)");
+  assert.ok(!line.includes("7851352"), "오답 꼴은 예시에 없다");
+  // 다른 번호도 그 번호로 예시가 만들어진다(고정 문자열이 아님).
+  assert.ok(buildOtpLiveCompareLine("447777").includes("4477772처럼") && buildOtpLiveCompareLine("447777").includes("남은 6자리"));
+});
