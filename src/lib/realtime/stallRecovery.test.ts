@@ -17,6 +17,9 @@ import {
   EXHAUSTED_DECLARATION,
   REPEAT_MIN_CHARS,
   REPEAT_SIMILARITY_THRESHOLD,
+  TRANSFER_DEMAND_FORM,
+  TRANSFER_DEMAND_NOUN,
+  bigramSimilarity,
   decideLiveRepeatBreak,
   formatLiveRepeatBreakLog,
   formatStallNudgeLog,
@@ -569,4 +572,28 @@ test("[§104 실측 ①] Live — 인적사항 항목은 요구 형태가 있는
     }),
     null,
   );
+});
+
+// ── 2026-11-22 자녀 납치 고급 실측(fv-k268) — 말만 바꾼 송금 재촉 6~8턴 · 6행(유사도) 0회 ⇒ 5-b행 `transfer` ──────────────
+const KIDNAP_ADVANCED_SUSPICIOUS = [
+  "다른 데 연락하면 후회할 수도 있어요. 방금 문자로 계좌 보냈으니까 지금 바로 링크 눌러서 이체하세요.",
+  "믿고 안 믿고는 본인 자유지만, 시간 없어요. 지금 바로 링크 눌러서 진행하세요.",
+  "설치할 필요 없습니다. 문자로 보낸 링크 누르고 바로 이체 화면에서 진행하세요.",
+  "아직 입금 확인되지 않았습니다. 문자 속 링크 화면에서 지금 바로 다시 진행하세요. 시간 없어요.",
+];
+
+test("[5-b 재현] 실측 대본 — 송금 재촉이 두 턴 이어지면 transfer(6행 similar는 0회였다)", () => {
+  const marks = repeatBreakMarks(KIDNAP_ADVANCED_SUSPICIOUS);
+  assert.deepEqual(marks, [null, "transfer", "transfer", "transfer"]);
+  for (let i = 1; i < KIDNAP_ADVANCED_SUSPICIOUS.length; i += 1) {
+    assert.ok(bigramSimilarity(KIDNAP_ADVANCED_SUSPICIOUS[i - 1], KIDNAP_ADVANCED_SUSPICIOUS[i]) < REPEAT_SIMILARITY_THRESHOLD, `6행으로는 못 잡음 ${i}`);
+  }
+  assert.equal(formatLiveRepeatBreakLog("transfer"), 'cause:"repeat" kind:"transfer"');
+});
+
+test("[5-b 짝] 클라 5-b행 = 서버 2-c행(정규식 · 문면 글자 단위)", () => {
+  const server = readFileSync("functions/src/roleplay/repeatBreak.ts", "utf8");
+  assert.ok(server.includes(`export const TRANSFER_DEMAND_NOUN = ${TRANSFER_DEMAND_NOUN.toString()};`));
+  assert.ok(server.includes(`export const TRANSFER_DEMAND_FORM = ${TRANSFER_DEMAND_FORM.toString()};`));
+  assert.ok(server.includes(JSON.stringify(LIVE_REPEAT_BREAK_TEXT.transfer)), "transfer 문면");
 });
