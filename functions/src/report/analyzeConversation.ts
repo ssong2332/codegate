@@ -658,7 +658,8 @@ const BANK_NAME = /[가-힣]{1,6}은행|농협|우체국|새마을\s*금고|신�
 // | W1 | 바로 앞 사기범 대사가 인증번호를 묻지 않았다(`OTP_ASKED` — `roleplay/otpCheck.ts`의 물음 · 되물음 어형과 같은 표) | 대조 안 함 |
 // | W2 | 답에서 뽑은 숫자열(`extractSpokenCodes` — 리포트 (D3) · (D4)와 같은 규칙) 중 정답과 자릿수가 같은 것이 없다 | 대조 안 함(전화 · 금액 등) |
 // | W3 | 같은 자릿수 후보 중 하나라도 정답과 같다 | 대조 결과 "정답" — 종전처럼 속음 |
-// | W4 | 같은 자릿수 후보가 있고 모두 정답과 다르다 | **오답** — 숫자 응답만으로는 속음이 아니다(H1 · H2 실제 제공은 그대로 속음) · 위험 신호 `fake_info` |
+// | W3b | 2026-11-22 재시험 27 ⑮(정답 739316 · "칠삼구삼일육이요" → 전사 "739326" · "7393262") — 후보와 정답이 **한 자리만** 다르고 그 짝이 1 ↔ 2(일 ↔ 이 — 음성 인식이 헷갈리는 짝) | W3과 같다 — 정답으로 본다(가짜 정보 아님) |
+// | W4 | 같은 자릿수 후보가 있고 모두 W3 · W3b가 아니다(두 자리 이상 차이 · 1 ↔ 2 밖 차이 — 예 785135 vs 785136) | **오답** — 숫자 응답만으로는 속음이 아니다(H1 · H2 실제 제공은 그대로 속음) · 위험 신호 `fake_info` |
 const OTP_ASKED =
   /인증\s*(?:번호|코드)|번호가[^.?!]{0,24}(?:안\s*맞|맞지\s*않|일치하지\s*않|틀|다르|다릅)|문자[^.?!]{0,20}다시[^.?!]{0,20}불러/;
 
@@ -668,7 +669,14 @@ function isWrongOtpReply(scammerText: string, replyText: string, otpCodes: reado
   // 2026-11-08(관찰 e) — 말끝 "이"가 숫자 2로 붙은 L+1자리도 끝 2를 빼고 후보로 본다(`otpCandidatesForLength` C2 — 서버 대조와 같은 규칙).
   const spoken = extractSpokenCodes(replyText);
   const candidates = [...lengths].flatMap((length) => otpCandidatesForLength(spoken, length));
-  return candidates.length > 0 && !candidates.some((code) => otpCodes.includes(code));
+  return candidates.length > 0 && !candidates.some((code) => otpCodes.some((answer) => isOtpMatchOrAsrSlip(code, answer)));
+}
+
+// W3 · W3b — 같은 번호이거나, 한 자리만 다르고 그 짝이 1 ↔ 2.
+function isOtpMatchOrAsrSlip(code: string, answer: string): boolean {
+  if (code.length !== answer.length) return false;
+  const diffs = [...code].flatMap((digit, i) => (digit === answer[i] ? [] : [digit + answer[i]]));
+  return diffs.length === 0 || (diffs.length === 1 && (diffs[0] === "12" || diffs[0] === "21"));
 }
 
 function resolveRiskSignalKind(scammerText: string, replyText: string, otpCodes: readonly string[] = []): RiskSignalKind | undefined {
