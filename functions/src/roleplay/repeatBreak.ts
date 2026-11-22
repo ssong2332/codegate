@@ -11,6 +11,7 @@
 // | 1-b | 이번 참가자 발화가 자금 소진 선언("돈 없어" · "다 털렸어" · "전부 보냈어" — §104 사용자 실기 대본) | `exhausted`(사기범 대답 수와 무관) |
 // | 1 | 사기범 대답이 둘 미만 | 없음 |
 // | 2 | A와 B가 **같은 인적사항 항목**(성함 · 생년월일 · 주민번호 · 주소)을 요구하는 형태로 꺼냈다 | `identity` |
+// | 2-c | A와 B가 **둘 다 송금 요구**를 재촉했다 — 같은 문장에 송금 낱말(`TRANSFER_DEMAND_NOUN`)과 재촉 형태(`TRANSFER_DEMAND_FORM`)가 함께 있다(2026-11-22 자녀 납치 고급 실측 — "링크 화면에서 이체 완료하세요"를 말만 바꿔 6~8턴 · 3행 유사도로는 0회) | `transfer` |
 // | 3 | A와 B의 글자 2-gram 유사도 ≥ `REPEAT_SIMILARITY_THRESHOLD`(둘 다 공백 · 문장부호를 뺀 길이 ≥ `REPEAT_MIN_CHARS`) | `similar` |
 // | 4 | 그 외 | 없음 |
 // - 2행이 "같은 항목"만 보는 이유: 순순히 따르는 참가자에게 성함 → 주민번호처럼 **다른** 항목을 이어 묻는 것은 정상 진행이다.
@@ -19,7 +20,7 @@
 //   두 파일의 정규식 · 임계값은 루트 테스트(`stallRecovery.test.ts` [§104 짝])가 글자 단위로 대조한다.
 // ⛔ 잎 모듈(import 0) · 문면에 숫자 · 횟수 · 따옴표 대사 예시 · 끊기 어휘 0(F11/G130 — `repeatBreak.test.ts`가 고정).
 
-export type RepeatBreakKind = "exhausted" | "identity" | "similar";
+export type RepeatBreakKind = "exhausted" | "identity" | "transfer" | "similar";
 
 /** 3행 임계값 — 전수 검수 판정표 §1.1 ② 자동 후보 탐지 기준과 같은 값. */
 export const REPEAT_SIMILARITY_THRESHOLD = 0.6;
@@ -50,6 +51,16 @@ export function requestedIdentityItems(text: string): Set<string> {
     for (const key of Object.keys(IDENTITY_ITEM_PATTERNS)) if (IDENTITY_ITEM_PATTERNS[key]!.test(sentence)) out.add(key);
   }
   return out;
+}
+
+/** 2-c행 — 송금 낱말. */
+export const TRANSFER_DEMAND_NOUN = /이체|송금|입금|계좌|링크|돈|만\s*원/;
+/** 2-c행 — 재촉 형태(이체하세요 · 송금해요 · 보내세요 · 넣어요 · 끝내세요 …). "보냈으니까" 같은 진술은 아니다. */
+export const TRANSFER_DEMAND_FORM = /(?:이체|송금|입금|완료|진행|전송|처리)\s*(?:하세요|해요|하십시오|해\s*주세요|하라)|보내(?:세요|요)|넣(?:어요|으세요)|끝내(?:세요|요)/;
+
+/** 2-c행 — 그 대답의 어느 한 문장이 송금 낱말과 재촉 형태를 함께 담는가. */
+export function isTransferDemand(text: string): boolean {
+  return text.split(/(?<=[.?!])\s+|\n+/).some((sentence) => TRANSFER_DEMAND_NOUN.test(sentence) && TRANSFER_DEMAND_FORM.test(sentence));
 }
 
 function normalizeForSimilarity(text: string): string {
@@ -84,6 +95,7 @@ export function decideRepeatBreak(scammerTexts: readonly string[], currentUserTe
   for (const item of requestedIdentityItems(b)) {
     if (itemsA.has(item)) return "identity"; // 2행
   }
+  if (isTransferDemand(a) && isTransferDemand(b)) return "transfer"; // 2-c행
   if (bigramSimilarity(a, b) >= REPEAT_SIMILARITY_THRESHOLD) return "similar"; // 3행
   return null; // 4행
 }
@@ -91,6 +103,9 @@ export function decideRepeatBreak(scammerTexts: readonly string[], currentUserTe
 /** 2행 지시(서버 소유). */
 export const REPEAT_BREAK_IDENTITY_INSTRUCTION =
   "(너는 직전 대답과 그 앞 대답에서 같은 인적사항을 달라고 했다. 상대가 그 정보를 아직 주지 않았으면 이번 대답에서는 그 정보를 다시 달라고 하지 말고, 다른 수법이나 다른 요구로 넘어가라 — 불이익 암시, 확인 절차 차단, 비밀 유지 요구처럼 아직 쓰지 않은 카드를 골라라.)";
+/** 2-c행 지시(서버 소유 · 클라 `LIVE_REPEAT_BREAK_TEXT.transfer`와 같은 글자). */
+export const REPEAT_BREAK_TRANSFER_INSTRUCTION =
+  "(너는 직전 대답과 그 앞 대답에서 같은 송금 요구를 재촉했다. 이번 대답에서는 그 재촉을 되풀이하지 말고 먼저 상대의 마지막 말에 맞게 답하라. 상대가 이미 보냈다고 하면 어디서 어떻게 보냈는지 짧게 묻고 답을 기다리고, 그렇지 않으면 아직 쓰지 않은 다른 수법이나 다른 이유로 상황을 앞으로 움직여라. 더 요구할 것이 정말 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
 /** 3행 지시(서버 소유). */
 export const REPEAT_BREAK_SIMILAR_INSTRUCTION =
   "(너는 직전 대답과 그 앞 대답에서 거의 같은 말을 했다. 이번 대답에서는 그 말을 되풀이하지 말고, 다른 수법이나 다른 요구, 다른 이유를 꺼내 상황을 앞으로 움직여라. 더 요구할 것이 정말 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
@@ -102,6 +117,7 @@ export const REPEAT_BREAK_EXHAUSTED_INSTRUCTION =
 export function repeatBreakInstruction(kind: RepeatBreakKind | null): string | undefined {
   if (kind === "exhausted") return REPEAT_BREAK_EXHAUSTED_INSTRUCTION;
   if (kind === "identity") return REPEAT_BREAK_IDENTITY_INSTRUCTION;
+  if (kind === "transfer") return REPEAT_BREAK_TRANSFER_INSTRUCTION;
   if (kind === "similar") return REPEAT_BREAK_SIMILAR_INSTRUCTION;
   return undefined;
 }
