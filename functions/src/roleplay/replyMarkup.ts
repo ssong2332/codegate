@@ -12,6 +12,7 @@
 // | 3 | 지문 괄호 — 괄호 안이 아래 지문 어휘로 **시작**하고(어휘 바로 뒤 = `)`·공백·쉼표·말줄임) 12자 이하 | 괄호째 지운다 | #8 subsidy 초급 S5 "(잠시 후) 여보세요?" |
 // | 3-c | D-f2 맨 앞 짧은 괄호 지문 — 대사 **맨 앞**의 한글 괄호(2~15자 · 숫자 · 라틴 0)가 지문 끝맺음("-음" · "-며" · "중" · "후" · "뒤" · "채" · "듯" · "-히")으로 끝남 | 괄호째 지운다(지우면 빈 대사면 그대로) | P2 확인 실측 2026-11-01 지인 메신저 fv-42wd "(통화 맺음) 확인해 보니…" |
 // | 3-d | R11(#477 실측) 지시 해설 괄호 — 괄호 안이 진행 해설 어휘(참가자 · 신호 · 기록 · 재촉 · 되풀이 · 다음 단계 · 지시 · 앱 화면 …)를 담고 해라체("-다")로 끝남 | 괄호째 지운다(지우면 빈 대사면 그대로) | 메신저 자녀 사칭 verbalInstall S3 · S8 · S10 |
+// | 3-e | N1 괄호 속 대답 계획 — 괄호 안에 1인칭 대답 계획("대답은 이렇게 할게" · "이렇게 답하겠다") | 괄호째 지운다(지우면 빈 대사면 그대로) | 페르소나 전수 점검 2026-11-23 지인 메신저 fv-42wd S9 |
 // | 4 | 메타 표식 — 대괄호 · 괄호 · 겹낫표 안이 아래 메타 어휘를 담은 짧은 표기("[훈련 종료]" · "(시뮬레이션 끝)") | 괄호째 지운다 | 2026-10-21 실기 신고 6 friend-loan "…보내줘.[훈련 종료]" |
 // | 4-b | §129 D10 자리표시 이름 — "나 ㅇㅇ이야"처럼 이름 자리를 자음 "ㅇㅇ"으로 채운 자기소개 | "나야"로 바꾼다(이름을 지어내지 않는다) | 프로브 2026-10-24 지인 카톡 고급 거절 S1 |
 // | 3-b | §131(9) 괄호 속 혼잣말 — 띄어쓰기 있는 한국어 문장 + 종결 어미로 끝나는 괄호(숫자 0) | 괄호째 지운다(지우면 빈 대사면 그대로) | 프로브 2026-10-24b D6 |
@@ -72,6 +73,12 @@ const LEADING_STAGE_DIRECTION = /^\s*\((?=[가-힣\s]{2,15}\))(?:[가-힣]+\s){0
 // R11(#477 실측 2026-11-01 — "(앱 설치 확인 신호가 없으니 아직 설치된 것으로 보지 않는다.)"처럼 지시 해설이 괄호째 대사에 섞였다) — 괄호 안이
 // 진행 해설 어휘(참가자 · 신호 · 기록 · 재촉 · 되풀이 · 다음 단계 · 지시 · 앱 화면 …)를 담고 해라체("-다")로 끝나면 괄호째 지운다. 인물 대사는 이런 괄호를 쓰지 않는다.
 const DIRECTIVE_COMMENTARY = /[ \t]*\((?=[^()\n]*(?:참가자|상대(?:가|의|는|에게)|신호|기록|재촉|되풀이|다음\s*단계|지시|넘어가지|앱\s*(?:화면|알림|확인)))[^()\n]{4,240}?다\.?\)/g;
+
+// 3-e행(N1 · 페르소나 전수 점검 2026-11-23 · 지인 사칭 초급 fv-42wd — "(이번에는 이체 화면에 기록이 없어서 입금이 확인되지 않았어. 그래서 대답은 이렇게 할게.) 아, 그래?") —
+// 괄호 안에 **1인칭 대답 계획**("대답은 이렇게 할게" · "이렇게 답하겠다")이 있으면 모델의 내부 추론이다. 판정표 MK-1(`docs/research/messenger-meta-leak-2026-11-24.md`).
+// ⛔ 시키는 말 "(누가 물으면 대답은 이렇게 하세요)"는 어미가 달라 남는다 · 괄호 밖은 손대지 않는다.
+const ANSWER_PLANNING =
+  /[ \t]*\((?=[^()\n]*(?:(?:대답|답변|응답|답)(?:은|을|는)?\s*이렇게\s*(?:할게|하겠|할래|해야겠|한다)|이렇게\s*(?:대답|답변|응답|답|말)\s*(?:할게|하겠|해야겠|한다)))[^()\n]{4,240}\)/g;
 
 // 4행 — 모델이 대사 밖 진행 표기(훈련 · 대화가 끝났다는 표시)를 대사에 붙인 것. 사기범 인물은 이런 표기를 할 이유가 없으므로
 // 메타 어휘가 들어간 짧은 괄호만 지운다. ⛔ "[지원금 안내]" 같은 문자 머리표는 메타 어휘가 없어 남는다.
@@ -137,7 +144,11 @@ export function tidyScammerReplyMarkup(text: string): ReplyMarkupResult {
   const withoutCommentary = leadingFree.replace(DIRECTIVE_COMMENTARY, "");
   const commentaryFree = withoutCommentary !== leadingFree && withoutCommentary.trim().length > 0 ? withoutCommentary : leadingFree;
   if (commentaryFree !== leadingFree) count();
-  const tidied = commentaryFree
+  // 3-e행 — 괄호 속 대답 계획(지우면 빈 대사면 그대로).
+  const withoutPlanning = commentaryFree.replace(ANSWER_PLANNING, "");
+  const planningFree = withoutPlanning !== commentaryFree && withoutPlanning.trim().length > 0 ? withoutPlanning : commentaryFree;
+  if (planningFree !== commentaryFree) count();
+  const tidied = planningFree
     .replace(BOLD_PAIR, (_m, inner: string) => {
       count();
       return inner;
