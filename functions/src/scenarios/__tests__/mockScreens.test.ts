@@ -39,7 +39,8 @@ import { extractLinkMarker } from "../../roleplay/linkMarker";
 import { REAL_WORLD_APP_NAMES } from "./harmlessnessPatterns";
 import { buildLandingSubmitMoment } from "../../report/mockScreenTimeline";
 
-const allItems = Object.values(MOCK_SCREENS).flat();
+// 2026-11-23 — 여러 시나리오 카탈로그가 **같은 객체**를 공유할 수 있다(앱 안 대출 화면 · 입금 안내 — `mockScreens.ts` `IN_APP_LOAN_LANDINGS` · `inCallSms.ts` `LOAN_DISBURSED_SMS`). 전역 목록은 객체 단위로 한 번만 센다.
+const allItems = [...new Set(Object.values(MOCK_SCREENS).flat())];
 // T104 — kind별 옵셔널 필드가 생겼으므로 **부재를 걸러 내고 전 문자열 필드를 훑는다.** 목록을
 // 손으로 유지하면 새 필드가 조용히 빠지므로, 아래 [T104/G-C] 필드 등록부 단언이 이 목록과
 // `MockScreenItem`의 1:1을 강제한다.
@@ -1004,7 +1005,7 @@ test("[AC-078 (a)] 콘텐츠 카탈로그 ↔ 도달 가능 랜딩 집합이 **�
     false,
     "어떤 프롬프트도 내지 않는 라벨이 도달 가능 집합에 들어왔다",
   );
-  assert.equal(reachableLandingKeysAllUnits().length, 35, "도달 가능 랜딩은 35종이다(2026-11-07 — 기관 · 자산 보호 고급 출금 예약 화면 2종 추가 · 2026-11-07 — 기관 · 자산 보호 고급 금 거래소 화면 2종 추가 · PR-B — 기관 사칭 고급 앱 안 대출 신청 · 대출금 보관 이체 2종 추가 · 2026-11-07 앱 안 결말 — 납치 이체 · 상품권 구매 2종 추가 · §142 — 카드사 고급 재구성 원격 지원 설치 · 안전계좌 이체 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(reachableLandingKeysAllUnits().length, 39, "도달 가능 랜딩은 (시나리오 × 랜딩) 39건이다(2026-11-23 — 앱 안 대출 신청 · 대출금 보관 이체 화면을 카드 배송 · 검찰 시나리오가 함께 연다 +4 · 서로 다른 화면 수는 35 그대로 · 2026-11-07 — 기관 · 자산 보호 고급 출금 예약 화면 2종 추가 · 2026-11-07 — 기관 · 자산 보호 고급 금 거래소 화면 2종 추가 · PR-B — 기관 사칭 고급 앱 안 대출 신청 · 대출금 보관 이체 2종 추가 · 2026-11-07 앱 안 결말 — 납치 이체 · 상품권 구매 2종 추가 · §142 — 카드사 고급 재구성 원격 지원 설치 · 안전계좌 이체 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
 });
 
 test("[AC-078 (a) 역검증] 한쪽에서 1건을 빼면 실제로 실패한다", () => {
@@ -1103,6 +1104,10 @@ const T129B_MULTI_LANDING_UNITS: readonly string[] = [
   "asset-protection-notice-call#fv-t8ga",
   // 2026-11-07(사용자 결정 D-G1 · D-G2 E1-b) — 자산 보호 고급 현금형은 보관 신청서 화면 뒤 출금 예약 화면을 함께 선언한다(다른 문자 · 다른 사기범 메시지).
   "asset-protection-notice-call#fv-k9ra",
+  // 2026-11-23(사용자 결정 "앱 안 대출로 바꾸기") — 카드 배송 고급 · 검찰 고급 대출금형은 앞 화면(설치 · 사건 조회) 뒤 앱 안 대출 신청 · 대출금 보관 이체 화면을
+  // 함께 선언한다(다른 문자 · 다른 사기범 메시지).
+  "card-delivery-call#fv-e5mv",
+  "prosecution-cooperation-call#fv-a6lq",
 ];
 
 /** 등재 단위를 뺀 단위 키 — 역검증들의 기준 입력(등재 단위 때문에 기대 배열이 흔들리지 않게). */
@@ -1260,7 +1265,7 @@ function bodySignature(item: MockScreenItem): string {
 }
 
 test("[AC-078 (b)] 서로 다른 랜딩의 본문이 **하나도 수렴하지 않는다**(쌍별 비교)", () => {
-  const items = Object.values(MOCK_SCREENS).flat();
+  const items = [...new Set(Object.values(MOCK_SCREENS).flat())];
   assert.ok(items.length >= 5, "비교 대상이 5종 이상이어야 한다");
   for (let i = 0; i < items.length; i += 1) {
     for (let j = i + 1; j < items.length; j += 1) {
@@ -1371,7 +1376,7 @@ function findFieldConvergence(
 }
 
 test("[AC-079] bodyLines·fields·successHeadline·issuerLabel이 **각각 단독으로** 수렴하지 않는다", (t) => {
-  const items = Object.values(MOCK_SCREENS).flat();
+  const items = [...new Set(Object.values(MOCK_SCREENS).flat())];
   assert.equal(items.length, 35, "현행 비교 대상은 도달 가능 랜딩 35종이다(2026-11-07 — 출금 예약 화면 2종 추가 · 2026-11-07 — 금 거래소 화면 2종 추가 · PR-B — 기관 사칭 고급 앱 안 대출 신청 · 대출금 보관 이체 2종 추가 · 2026-11-07 앱 안 결말 2종 추가 · §142 — 카드사 고급 재구성 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
   const stats = fieldDivergenceStats(items);
   for (const { field, compared, excluded, converged } of stats) {
@@ -1388,7 +1393,7 @@ test("[AC-079] bodyLines·fields·successHeadline·issuerLabel이 **각각 단�
 });
 
 test("[AC-079 (c) 역검증] 헤드라인·CTA만 남기고 4필드를 범용화하면 — 기존 두 단언은 통과하고 AC-079만 실패한다", (t) => {
-  const items = Object.values(MOCK_SCREENS).flat();
+  const items = [...new Set(Object.values(MOCK_SCREENS).flat())];
   // 오염은 **테스트 코드 안에서만** 만든다(실제 카탈로그를 고쳤다 되돌리지 않는다 —
   // `callContinuity.test.ts:161-162`가 세운 관례).
   const GENERIC = {
@@ -1478,7 +1483,7 @@ test("[AC-079 (b)] 옵셔널 필드가 **양쪽 다 부재인 쌍**은 비교에
 
   // 한쪽만 부재인 쌍은 **서로 다른 것으로 본다**. T194-a(§84.4.3) — `parcel-install`이 더해져 app-install이 **2종**이 됐다 ⇒
   // 위 주석이 예고한 대로 오늘 실제로 제외되는 쌍이 생겼다(`subsidy-install ↔ parcel-install`의 fields · successHeadline 각 1쌍).
-  const realStats = fieldDivergenceStats(Object.values(MOCK_SCREENS).flat());
+  const realStats = fieldDivergenceStats([...new Set(Object.values(MOCK_SCREENS).flat())]);
   t.diagnostic(
     `현행 카탈로그 제외쌍: ${realStats.map((s) => `${s.field}=${s.excluded}`).join(" · ")}`,
   );

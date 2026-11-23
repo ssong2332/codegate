@@ -25,13 +25,10 @@ test("[§104.10] 카탈로그 전 문자 — 자리표시 0000-0000 0 · 발신�
     for (const item of items) {
       assert.equal(item.senderLabel.includes("0000-0000"), false, item.smsId);
       // 2026-11-07(카드사 고급 R1 축소) — R1 문자 3통은 보낸 곳마다 다른 번호 · 번호만(`CARD_R1_SMS_SENDER` 표 — 단언은 `cardR1Reduce.test.ts`).
-      // ⭐ PR-B — 기관 사칭 고급 입금 안내는 가상 캐피탈 대출센터 번호만(`INSTITUTION_LOAN_SMS_SENDER` — 사기범 번호 대화방에 묶이지 않는다).
+      // ⭐ PR-B — 입금 안내는 가상 캐피탈 대출센터 번호만(`INSTITUTION_LOAN_SMS_SENDER` — 사기범 번호 대화방에 묶이지 않는다). 2026-11-23 — 기관 사칭 · 카드 배송 ·
+      // 검찰 고급이 같은 입금 안내 항목을 공유한다(시나리오 무관).
       const r1Sender =
-        scenarioId === "card-company-impersonation"
-          ? CARD_R1_SMS_SENDER[item.smsId]
-          : scenarioId === "institutional-impersonation"
-            ? INSTITUTION_LOAN_SMS_SENDER[item.smsId]
-            : undefined;
+        scenarioId === "card-company-impersonation" ? CARD_R1_SMS_SENDER[item.smsId] : INSTITUTION_LOAN_SMS_SENDER[item.smsId];
       if (r1Sender !== undefined) {
         assert.equal(item.senderLabel, r1Sender, item.smsId);
         assert.match(r1Sender, FICTIONAL_NUMBER, item.smsId);

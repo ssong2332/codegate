@@ -86,10 +86,15 @@ test("[§124 말로 끝나는 결말] 현금 · 금 · 대출금 전달 약속 �
   assert.equal(cash.goalFollowUpUserTurns, undefined);
   assert.doesNotMatch(cash.decisionMoment ?? "", /약속/);
   assert.match(cash.stages.at(-1)!.summary, /장소 · 시간 · 주소[^.]*정하지도 묻지도 않는다/);
-  for (const id of ["fv-r4hc", "fv-e5mv"]) {
+  // 2026-11-23(사용자 결정 "앱 안 대출로 바꾸기") — 카드 배송 대출금형 fv-e5mv도 앱 안 대출(대출 신청 → 대출금 보관 이체 화면) 결말이 되어 C-5 · '약속' 대상에서 뺐다.
+  const loan = findFlowVariant("fv-e5mv")!;
+  assert.equal(loan.goalFollowUpUserTurns, undefined);
+  assert.doesNotMatch(loan.decisionMoment ?? "", /약속/);
+  assert.ok(loan.stages.some((s) => /장소 · 시간 · 주소[^.]*정하지도 묻지도 않는다/.test(s.summary)), "fv-e5mv: 만날 곳 0(AC-102 (c))");
+  for (const id of ["fv-r4hc"]) {
     const v = findFlowVariant(id)!;
     // §124 실측 — 설치 문자가 결말보다 두 단계 앞인 fv-r4hc만 6.
-    assert.equal(v.goalFollowUpUserTurns, id === "fv-r4hc" ? 6 : 4, id);
+    assert.equal(v.goalFollowUpUserTurns, 6, id);
     assert.match(v.decisionMoment ?? "", /약속/, id);
     const last = v.stages[v.stages.length - 1]!.summary;
     assert.match(last, /장소 · 시간 · 주소[^.]*정하지도 묻지도 않는다/, `${id}: 만날 곳 0(AC-102 (c))`);
