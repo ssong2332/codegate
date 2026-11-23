@@ -70,9 +70,19 @@ export type LiveRealNameReplacers = {
   replaceRealNames: (text: string) => { text: string };
 };
 
+/**
+ * S1b(2026-11-24 페르소나 점검 N8 — 대출 중급 "지금 결정 안하시면 این 조건") — 한국어 통화에 섞인 아랍(페르시아) · 키릴 · 히브리 · 타이 · 데바나가리 문자 묶음을 지운다.
+ * 라틴 · 한자 · 숫자는 그대로(라틴 영어 문장은 사고 문장 차단이 따로 다룬다). 이미 나간 소리는 되돌리지 못한다.
+ */
+const FOREIGN_SCRIPT_RUN = /[\u0590-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFE\u0400-\u04FF\u0E00-\u0E7F\u0900-\u097F]+/g;
+export function stripForeignScript(text: string): string {
+  if (!new RegExp(FOREIGN_SCRIPT_RUN.source).test(text)) return text;
+  return text.replace(FOREIGN_SCRIPT_RUN, " ").replace(/[ \t]{2,}/g, " ").replace(/ +([.,?!])/g, "$1").trim();
+}
+
 /** S1 ~ S3. `userTexts` = 같은 통화에서 이 줄보다 앞선(같은 flush 포함) 참가자 줄 원문. */
 export function guardLiveScammerLineWith(text: string, userTexts: readonly string[], replace: LiveRealNameReplacers): string {
-  const stripped = stripControlMarkers(text);
+  const stripped = stripForeignScript(stripControlMarkers(text));
   return replace.replaceRealNames(replace.neutralizeUserMentioned(stripped, userTexts).text).text;
 }
 // ── 사본 끝 ──

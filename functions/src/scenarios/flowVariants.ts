@@ -2586,9 +2586,28 @@ export function resolveVariantPrompt(
       : `${legPersona}\n\n${buildFlowBlock(variant)}`;
   return {
     ...base,
-    personaPrompt,
-    weakenedTactics: [...variant.tactics],
+    personaPrompt: withPlaceholderNames(variant.scenarioId, personaPrompt),
+    weakenedTactics: variant.tactics.map((tactic) => withPlaceholderNames(variant.scenarioId, tactic)),
   };
+}
+
+/**
+ * ⭐ 2026-11-24(페르소나 점검 N6 · 판정표 PH — `docs/research/persona-consistency-2026-11-24.md`) — 카드 배송 고급 3/4에서 사기범이 자리표시 앱 이름
+ * "○○안심보안 앱"을 소리 내어 읽었다. 카드 배송 변형은 시나리오 원본 페르소나 · 설치 수법의 '○○안심보안'을 그대로 물려받는다. 원본 문면은 카드사
+ * `fv-akj5`(#192 바이트 고정)가 같은 수법을 복사하므로 원본을 고치지 않고, **카드 배송 변형을 풀 때만** 설치 화면(`card-delivery-app-install`) 이름으로 바꾼다.
+ * | # | If | Then |
+ * |---|---|---|
+ * | PH1 | 변형의 시나리오 = `card-delivery-call` | '○○안심보안 점검 앱' · '○○안심보안' → '보안 점검 앱' |
+ * | PH2 | 그 밖(fv-akj5 · fv-6s5p 포함) | 무변경 |
+ */
+const PLACEHOLDER_NAMES: Readonly<Record<string, readonly (readonly [string, string])[]>> = {
+  "card-delivery-call": [
+    ["○○안심보안 점검 앱", "보안 점검 앱"],
+    ["○○안심보안", "보안 점검 앱"],
+  ],
+};
+export function withPlaceholderNames(scenarioId: string, text: string): string {
+  return (PLACEHOLDER_NAMES[scenarioId] ?? []).reduce((out, [from, to]) => out.split(from).join(to), text);
 }
 
 // §142 — 다통화 레그 프롬프트. 흐름 블록 = **현재 레그 단계만** + 레그 끝 규칙 1줄 · 수법 = 레그 라벨만(부재 = 전부).

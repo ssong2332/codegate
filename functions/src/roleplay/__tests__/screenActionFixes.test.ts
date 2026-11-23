@@ -170,7 +170,8 @@ test("[배선] 백스톱 응답 화면 기록 · 제출 비교 저장 · 폴백 
   const sms = read("inCallSms/index.ts");
   assert.ok(sms.includes("const withScreenStatus = (response: DeliverInCallSmsResponse): DeliverInCallSmsResponse =>"));
   assert.equal((sms.match(/withScreenStatus\(/g) ?? []).length, 7, "대기 · 남은 문자 없음 3 · §142 D1 레그 넘김 대기 1 · 넛지(이미 넛지 포함) — 발송 · 전환 뒤 = 0");
-  assert.ok(sms.includes("!(await isVerifyOfferPlaced(db, sessionId, session.scenarioId))"), "호 전환 뒤 = 없음");
+  // 2026-11-24(페르소나 점검 N10 · 판정표 VS1) — 호 전환 완료 뒤뿐 아니라 오퍼가 시작된 뒤에도 없음.
+  assert.ok(sms.includes('(await readVerifyOfferStage(db, sessionId, session.scenarioId)) === "none" ? rawScreenStatus : undefined'), "오퍼 시작 · 호 전환 뒤 = 없음");
   // 2026-11-08(§15.5 관찰 ③) — 첫 제출 호출은 화면 id를 함께 넘긴다.
   assert.ok(sms.includes('contextInstruction: landingSubmittedInstructionFor(amountComparison, false, snap.get("fakeLandingId") as string | undefined)'));
   assert.ok(sms.includes('if (previousComparison === "less") return { recorded: true, contextInstruction: landingSubmittedInstructionFor(amountComparison, true) };'));

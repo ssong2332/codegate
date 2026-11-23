@@ -96,9 +96,22 @@ async function isVerifyOfferPlaced(
   sessionId: string,
   scenarioId: string,
 ): Promise<boolean> {
-  if (!hasVerifyIntercept(scenarioId)) return false;
+  return (await readVerifyOfferStage(db, sessionId, scenarioId)) === "placed";
+}
+
+/**
+ * ⭐ 2026-11-24(페르소나 점검 N10 · 판정표 VS — `docs/research/persona-consistency-2026-11-24.md`) — 확인 창구 오퍼 단계(문서 없음 · 시작 · 완료).
+ * 카드 배송 고급 fv-u9fz에서 사기범이 "확인창구로 연결해 드릴 테니" 한 턴에 화면 상태 줄의 "포기로 끝내라"가 함께 실려(넘김 **완료 전**이라 빼지 않았다),
+ * 넘겨받은 창구 담당자가 바로 "여기서 통화 종료하겠습니다"로 끝냈다 → 실시간 화면 상태 줄은 오퍼가 **시작**만 돼도 빼낸다(VS1). 실패 = "none"(종전대로 싣는다).
+ */
+async function readVerifyOfferStage(
+  db: FirebaseFirestore.Firestore,
+  sessionId: string,
+  scenarioId: string,
+): Promise<"none" | "offered" | "placed"> {
+  if (!hasVerifyIntercept(scenarioId)) return "none";
   const verifyItem = findVerifyInterceptItem(scenarioId);
-  if (!verifyItem) return false;
+  if (!verifyItem) return "none";
   try {
     const verifySnap = await db
       .collection("sessions")
@@ -106,9 +119,10 @@ async function isVerifyOfferPlaced(
       .collection("verifyIntercept")
       .doc(verifyItem.offerId)
       .get();
-    return Boolean(verifySnap.get("placedAt"));
+    if (!verifySnap.exists) return "none";
+    return verifySnap.get("placedAt") ? "placed" : "offered";
   } catch {
-    return false;
+    return "none";
   }
 }
 
@@ -224,7 +238,7 @@ export const deliverInCallSms = onCall<
         )
       : undefined;
     const screenStatusInstruction =
-      rawScreenStatus !== undefined && !(await isVerifyOfferPlaced(db, sessionId, session.scenarioId)) ? rawScreenStatus : undefined;
+      rawScreenStatus !== undefined && (await readVerifyOfferStage(db, sessionId, session.scenarioId)) === "none" ? rawScreenStatus : undefined;
     const withScreenStatus = (response: DeliverInCallSmsResponse): DeliverInCallSmsResponse =>
       screenStatusInstruction !== undefined ? { ...response, screenStatusInstruction } : response;
     const plan = planSmsBackstop({

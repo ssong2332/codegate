@@ -128,6 +128,20 @@ export const LIVE_CALL_COMPANY_RULE = `- 자기 소속을 밝힐 때도 택배 �
  */
 export const LIVE_CALL_USER_NAME_RULE = `- 상대가 말한 은행 · 카드사 · 회사 이름은 그대로 따라 말하지 않는다. 처음 듣는 이름이든 실제로 있는 이름이든, 전화로 잘못 알아들었을 수도 있으니 그 이름을 소리 내어 되풀이하거나 확인하지 않는다 — "말씀하신 은행", "거래하시는 은행", "말씀하신 카드사"처럼 이름 없이 받는다. 네 쪽에서 계좌나 은행을 불러 줄 때는 위 설명에 정해진 은행 이름만 쓴다. 검찰 · 금융감독원처럼 위 설명에서 네 소속이나 사칭하는 기관으로 정해진 이름은 이 줄의 대상이 아니다.`;
 
+/**
+ * ⭐ 2026-11-24(페르소나 점검 묶음 ③ · 판정표 LV — `docs/research/persona-consistency-2026-11-24.md`). 소리가 나가는 Live에만 싣는다(폴백 · 오프닝 ·
+ * 메신저 · 바이트 고정 `fv-akj5` · `fv-6s5p` 조립 무변경).
+ * | 줄 | 실측 결함 | 지시 |
+ * |---|---|---|
+ * | L5 | 협박 · 납치범이 "네? 잘 안 들렸는데요. 다시 한번 말씀해 주시겠어요?"(공통 언어 규칙의 되묻기 예시 그대로 · 들었는데도) | 알아들었으면 되묻지 않는다 · 되물을 때도 인물 말투로 짧게 |
+ * | L6 | 검찰 고급 fv-v2mk "정선희 님 맞으신가요?"(생년월일만 받음) | 이름을 넣어 확인하는 꼴도 지어낸 이름이다 |
+ * | L7 | 대출 초급 fv-bqr9 실존 공공 기금 이름 | 정부 지원 상품 · 공공 기금 · 공공기관 실제 이름 0 · 일반 이름으로 |
+ * ⛔ 실제 기관 · 상품 이름을 예로 적지 않는다(예시가 그 이름을 부른다).
+ */
+export const LIVE_CALL_REASK_RULE = `- 상대의 말을 알아들었으면 되묻지 말고 바로 그 말에 답한다. 정말 못 알아들어 되물을 때도 위 언어 규칙의 예시 문장을 그대로 쓰지 말고 네 인물의 말투 그대로 짧게 되묻는다 — 상담원처럼 공손하게 "다시 한번 말씀해 주시겠어요?"라고 부탁하는 것은 상담원 · 직원 인물일 때만이다.`;
+export const LIVE_CALL_NAME_CONFIRM_RULE = `- 상대가 이 통화에서 자기 이름을 말하지 않았고 [미리 확보한 상대 정보]에도 이름이 없으면, "○○ 님 맞으시죠?"처럼 이름을 넣어 확인하지 않는다 — 조회한 척 대는 이름도 지어낸 이름이다. 생년월일 같은 다른 정보만 받았으면 이름은 다시 묻거나 이름 없이 상황에 맞는 호칭으로 부르며 진행한다.`;
+export const LIVE_CALL_PUBLIC_PROGRAM_RULE = `- 정부 지원 대출 상품 · 공공 기금 · 공공기관의 실제 이름도 쓰지 않는다. 위 설명에 정해진 이름이 없으면 "정부 지원 저금리 대출"처럼 일반 이름으로만 말한다.`;
+
 /** 겹대괄호 표식을 쓰는 시나리오 문면인가(페르소나 · 수법 중 하나라도 `[[`). */
 export function scenarioUsesControlMarkers(prompt: Pick<ScenarioPromptDoc, "personaPrompt" | "weakenedTactics">): boolean {
   return prompt.personaPrompt.includes("[[") || prompt.weakenedTactics.some((tactic) => tactic.includes("[["));
@@ -141,6 +155,9 @@ export function buildLiveCallSafetyBlock(usesControlMarkers: boolean): string {
     LIVE_CALL_PASSWORD_RULE,
     LIVE_CALL_COMPANY_RULE,
     LIVE_CALL_USER_NAME_RULE,
+    LIVE_CALL_REASK_RULE,
+    LIVE_CALL_NAME_CONFIRM_RULE,
+    LIVE_CALL_PUBLIC_PROGRAM_RULE,
   ].join("\n");
 }
 
