@@ -324,7 +324,7 @@ function isWaitTurn(text: string): boolean {
   return isStallLine(text) || WAIT_REQUEST_LINE.test(text);
 }
 
-export type LiveRepeatBreakKind = "exhausted" | "stall" | "identity" | "transfer" | "similar";
+export type LiveRepeatBreakKind = "exhausted" | "hostile" | "stall" | "identity" | "transfer" | "similar";
 
 /**
  * 2-b행 — 참가자 자금 소진 선언(서버 `EXHAUSTED_DECLARATION`과 같은 정규식). 2026-10-22 사용자 실기 대본(검찰 고급): *"이제 탈탈 털렸어. 나도 이제 없어.
@@ -334,6 +334,13 @@ export const EXHAUSTED_DECLARATION =
   /돈\s*(?:이|은|도)?\s*(?:더\s*|이제\s*)?없|(?:더|이제|남은)\s*(?:돈|게|건|것)?\s*(?:이|은)?\s*(?:하나도\s*)?없|다\s*털렸|탈탈|빈털터리|한\s*푼도|잔고\s*(?:가)?\s*없|전부\s*(?:다\s*)?보냈/;
 
 /**
+ * 2-c행 — 참가자의 거절 · 의심 · 따짐(서버 `HOSTILE_PARTICIPANT`와 같은 정규식).
+ * shortcut: 표기만 본다(의미 아님) — 표본 밖 표현은 못 잡는다. 실측 전사에서 놓친 표현이 나오면 서버 · 클라 함께 낱말을 더한다.
+ */
+export const HOSTILE_PARTICIPANT =
+  /사기|피싱|신고|경찰|거짓말|꺼져|그만\s*(?:해|하)|싫(?:어|습|다)|못\s*믿|내가\s*왜|너\s*누구|누구(?:냐|야)|누구한테\s*전화|안\s*(?:믿|속|알려|불러|줘|해요?(?=[\s.?!~,]|$)|할(?:래|게|\s*거))/;
+
+/**
  * 사기범 턴이 끝날 때마다 1회 — 판정표(⛔ 이 순서 그대로 · 새 유형은 행을 추가할지 먼저 묻는다).
  *
  * | # | If(A = 직전 사기범 턴, B = 방금 끝난 사기범 턴) | Then |
@@ -341,6 +348,7 @@ export const EXHAUSTED_DECLARATION =
  * | 1 | 래치가 걸렸다 | 없음(G510) |
  * | 2 | 참가자가 아직 한 번도 말하지 않았다(오프닝 구간) | 없음 |
  * | 2-b | 이 턴이 답한 참가자 발화가 자금 소진 선언이다("돈 없어" · "다 털렸어" · "전부 보냈어" — `EXHAUSTED_DECLARATION`) | `exhausted`(직전 턴 없어도) |
+ * | 2-c | 이 턴이 답한 참가자 발화와 그 앞 참가자 발화가 둘 다 거절 · 의심 · 따짐이다(`HOSTILE_PARTICIPANT` — 서버 1-c행 · 2026-11-23 검찰 고급 실기: 적대가 이어지자 대화가 빙빙 돌고 같은 설명 반복) | `hostile`(직전 턴 없어도) |
  * | 3 | A가 없다 | 없음 |
  * | 4 | A와 B가 모두 대기 말이다(2절 `isStallLine` 또는 "대기해 주십시오"류) | `stall` |
  * | 5 | A와 B가 같은 인적사항 항목(성함 · 생년월일 · 주민번호 · 주소)을 요구하는 형태로 꺼냈다 | `identity` |
@@ -357,10 +365,20 @@ export function decideLiveRepeatBreak(input: {
   participantHasSpoken: boolean;
   /** §104 — 이 사기범 턴이 답한 참가자 발화(부재 = 판정 안 함). */
   lastParticipantText?: string;
+  /** 2-c — 그 앞 참가자 발화(부재 = 2-c행 안 봄). */
+  previousParticipantText?: string;
 }): LiveRepeatBreakKind | null {
   if (input.latched) return null; // 1행
   if (!input.participantHasSpoken) return null; // 2행
   if (input.lastParticipantText !== undefined && EXHAUSTED_DECLARATION.test(input.lastParticipantText)) return "exhausted"; // 2-b행
+  if (
+    input.lastParticipantText !== undefined &&
+    input.previousParticipantText !== undefined &&
+    HOSTILE_PARTICIPANT.test(input.lastParticipantText) &&
+    HOSTILE_PARTICIPANT.test(input.previousParticipantText)
+  ) {
+    return "hostile"; // 2-c행
+  }
   const a = input.previousScammerTurn;
   if (a === undefined || a.trim().length === 0) return null; // 3행
   const b = input.scammerTurn;
@@ -381,6 +399,8 @@ export function decideLiveRepeatBreak(input: {
 export const LIVE_REPEAT_BREAK_TEXT: Readonly<Record<LiveRepeatBreakKind, string>> = {
   exhausted:
     "(상대가 더 보낼 돈이나 줄 정보가 없다고 분명히 말했다. 같은 요구를 다시 하지 마라. 수법 목록이나 통화 흐름에 있는데 아직 권하지 않은 다른 수단이 있으면 그것만 권하고, 이미 권했거나 상대가 그것도 거절하면 더 요구할 것이 남지 않은 것이니 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)",
+  hostile:
+    "(상대가 연달아 거절하거나 의심하거나 따지고 있다. 같은 요구나 같은 설명을 되풀이하지 마라. 상대가 너에게 물은 것이 있으면 이번 대답 첫 문장에서 그것부터 답하라. 그다음 수법 목록에 있는데 아직 쓰지 않은 가장 센 압박 하나만 꺼내라. 상대가 그 뒤에도 거절이나 의심을 이어 가면 더는 진행할 수 없는 것이니 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)",
   stall:
     "(너는 직전 대답과 그 앞 대답에서 대기하라거나 확인 중이라는 말을 했다. 이번 대답에서는 대기하라거나 확인 중이라는 말을 하지 말고, 지금까지 받은 것을 근거로 새 요구를 꺼내라 — 흐름에 남은 다음 요구, 추가 정보, 주변 사람이나 은행에 알리지 말라는 다짐 중 하나로 상황을 앞으로 움직여라. 더 요구할 것이 정말 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)",
   identity:

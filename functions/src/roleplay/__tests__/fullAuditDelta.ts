@@ -9,6 +9,7 @@ import {
   BEGINNER_ENDING_HANGUP,
   BEGINNER_ENDING_NO_HANGUP,
   CLAIM_CONSISTENCY_RULE,
+  DIRECT_QUESTION_REPLY_SENTENCE,
   HANGUP_EXHAUSTED_SENTENCE,
   HANGUP_NO_NEW_DEMAND_SENTENCE,
   IMPOSSIBLE_IDENTITY_VALUE_SENTENCE,
@@ -43,7 +44,7 @@ export const P0_TEXT_CHANGES: readonly (readonly [string, string, "once" | "mayb
 /** 두 교체로 늘어난 글자 수. */
 // §104 — 전 경로 공통으로 늘 실리는 [대화 방식] 1문장(주변 이야기 받아치기)도 더한다(조건형 ③④는 NONE 조립에 없어 빼지 않는다).
 export const FULL_AUDIT_LENGTH_DELTA =
-  FULL_AUDIT_PAYLOAD_NEW.length - FULL_AUDIT_PAYLOAD_OLD.length + FULL_AUDIT_REPEAT_ADDED.length + OFF_TOPIC_REPLY_SENTENCE.length + USER_MENTIONED_FINANCIAL_SENTENCE.length +
+  FULL_AUDIT_PAYLOAD_NEW.length - FULL_AUDIT_PAYLOAD_OLD.length + FULL_AUDIT_REPEAT_ADDED.length + OFF_TOPIC_REPLY_SENTENCE.length + DIRECT_QUESTION_REPLY_SENTENCE.length + USER_MENTIONED_FINANCIAL_SENTENCE.length +
   // §129 — NO_STALL_RULE 뒤 무조건부 1항(줄바꿈 포함).
   1 + CLAIM_CONSISTENCY_RULE.length +
   // 2026-10-31 — 본인확인 항목 끝 무조건부 1문장(있을 수 없는 생년월일 · 날짜 되묻기).
@@ -74,7 +75,8 @@ export function revertFullAudit(assembled: string): string {
   const exhaustReverted = removeAtMostOnce(idleReverted, HANGUP_EXHAUSTED_SENTENCE, "자금 소진 끊기");
   const newDemandReverted = removeAtMostOnce(exhaustReverted, HANGUP_NO_NEW_DEMAND_SENTENCE, "끊는 응답 새 요구 금지");
   // ⑤ §104 — [대화 방식] 첫 항목 끝 1문장(주변 이야기 받아치기 — 전 경로 공통이라 정확히 1회).
-  const offTopicReverted = replaceOnce(newDemandReverted, OFF_TOPIC_REPLY_SENTENCE, "", "주변 이야기 받아치기");
+  const directQuestionReverted = replaceOnce(newDemandReverted, DIRECT_QUESTION_REPLY_SENTENCE, "", "직접 질문 답부터 · 거절 짚기");
+  const offTopicReverted = replaceOnce(directQuestionReverted, OFF_TOPIC_REPLY_SENTENCE, "", "주변 이야기 받아치기");
   // ⑥ §127 — "페이로드는 가상값만" 줄의 참가자 언급 은행 되받기 1문장(무조건부 — 정확히 1회).
   const userMentionedReverted = replaceOnce(offTopicReverted, USER_MENTIONED_FINANCIAL_SENTENCE, "", "참가자 언급 은행 되받기");
   // ⑦ §129(DECISIONS #245) — NO_STALL_RULE 바로 뒤 "하지 않은 일을 확인됐다고 하지 않는다" 1항(무조건부 — 정확히 1회) ·

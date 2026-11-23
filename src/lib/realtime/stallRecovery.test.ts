@@ -15,6 +15,7 @@ import {
   IDENTITY_REQUEST_FORM,
   LIVE_REPEAT_BREAK_TEXT,
   EXHAUSTED_DECLARATION,
+  HOSTILE_PARTICIPANT,
   REPEAT_MIN_CHARS,
   REPEAT_SIMILARITY_THRESHOLD,
   TRANSFER_DEMAND_FORM,
@@ -596,4 +597,34 @@ test("[5-b 짝] 클라 5-b행 = 서버 2-c행(정규식 · 문면 글자 단위)
   assert.ok(server.includes(`export const TRANSFER_DEMAND_NOUN = ${TRANSFER_DEMAND_NOUN.toString()};`));
   assert.ok(server.includes(`export const TRANSFER_DEMAND_FORM = ${TRANSFER_DEMAND_FORM.toString()};`));
   assert.ok(server.includes(JSON.stringify(LIVE_REPEAT_BREAK_TEXT.transfer)), "transfer 문면");
+});
+
+// 2026-11-23 사용자 실기(검찰 고급) — 참가자가 연달아 거절 · 의심 · 따지자 대화가 빙빙 돌고 같은 설명이 반복됐다(docs/research/hostile-reply-loop-2026-11-23.md 3-B).
+test("[2-c 적대 재현] 사기범 대사가 서로 달라도(유사도 < 0.6) 참가자 적대가 두 발화 이어지면 hostile — 수정 전 입력(참가자 발화 하나)으로는 0", () => {
+  const base = {
+    previousScammerTurn: "서울 OO지방검찰청 수사관입니다. 본인 명의 계좌가 사건에 연루돼 연락드렸습니다.",
+    scammerTurn: "협조하지 않으시면 절차상 불이익이 있을 수 있습니다. 본인 계좌가 범죄에 이용된 정황이 있습니다.",
+    latched: false,
+    participantHasSpoken: true,
+  };
+  assert.ok(bigramSimilarity(base.previousScammerTurn, base.scammerTurn) < REPEAT_SIMILARITY_THRESHOLD);
+  assert.equal(decideLiveRepeatBreak({ ...base, lastParticipantText: "너 누구한테 전화했는데?" }), null, "수정 전 입력");
+  assert.equal(decideLiveRepeatBreak({ ...base, lastParticipantText: "너 누구한테 전화했는데?", previousParticipantText: "본인 확인 안 해요." }), "hostile");
+  assert.equal(decideLiveRepeatBreak({ ...base, previousScammerTurn: undefined, lastParticipantText: "사기잖아", previousParticipantText: "못 믿어요" }), "hostile", "직전 턴 없어도");
+  assert.equal(decideLiveRepeatBreak({ ...base, lastParticipantText: "네, 알겠습니다.", previousParticipantText: "못 믿어요" }), null, "한 번의 의심");
+  assert.equal(decideLiveRepeatBreak({ ...base, latched: true, lastParticipantText: "사기잖아", previousParticipantText: "못 믿어요" }), null, "래치 뒤 0");
+  assert.equal(decideLiveRepeatBreak({ ...base, lastParticipantText: "돈 없어 사기꾼아", previousParticipantText: "못 믿어요" }), "exhausted", "2-b가 먼저");
+  assert.equal(HOSTILE_PARTICIPANT.test("대출은 안 해봤어요."), false);
+  assert.equal(formatLiveRepeatBreakLog("hostile"), 'cause:"repeat" kind:"hostile"');
+});
+
+test("[2-c 짝 · 배선] 클라 2-c행 = 서버 1-c행(정규식 · 문면 글자 단위) · 프로브 미러 · 세션 컴포넌트가 그 앞 참가자 발화를 넘긴다", () => {
+  const server = readFileSync("functions/src/roleplay/repeatBreak.ts", "utf8").replace(/\r\n/g, "\n");
+  assert.ok(server.includes(`export const HOSTILE_PARTICIPANT =\n  ${HOSTILE_PARTICIPANT.toString()};`), "정규식 짝");
+  assert.ok(server.includes(JSON.stringify(LIVE_REPEAT_BREAK_TEXT.hostile)), "hostile 문면");
+  const probe = readFileSync("scripts/full-audit-probe.mjs", "utf8");
+  assert.ok(probe.includes("repeatBreakLib.HOSTILE_PARTICIPANT?.test(lastParticipantText)"), "프로브 Live 미러");
+  const src = codeOnly(readFileSync("src/lib/realtime/GeminiVoiceSession.tsx", "utf8"));
+  assert.ok(src.includes("...(participantText.trim() && previousParticipantText ? { previousParticipantText } : {}),"));
+  assert.ok(src.includes("if (participantText.trim()) previousParticipantText = participantText;"));
 });

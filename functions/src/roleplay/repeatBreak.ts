@@ -9,6 +9,7 @@
 // | # | If(직전 사기범 대답 A = 그 앞, B = 가장 최근) | Then |
 // |---|---|---|
 // | 1-b | 이번 참가자 발화가 자금 소진 선언("돈 없어" · "다 털렸어" · "전부 보냈어" — §104 사용자 실기 대본) | `exhausted`(사기범 대답 수와 무관) |
+// | 1-c | 이번 참가자 발화와 그 앞 참가자 발화가 **둘 다 거절 · 의심 · 따짐**(`HOSTILE_PARTICIPANT` — 2026-11-23 검찰 고급 실기: 적대가 이어지자 대화가 빙빙 돌고 같은 설명 반복 · docs/research/hostile-reply-loop-2026-11-23.md) | `hostile`(사기범 대답 수와 무관) |
 // | 1 | 사기범 대답이 둘 미만 | 없음 |
 // | 2 | A와 B가 **같은 인적사항 항목**(성함 · 생년월일 · 주민번호 · 주소)을 요구하는 형태로 꺼냈다 | `identity` |
 // | 2-c | A와 B가 **둘 다 송금 요구**를 재촉했다 — 같은 문장에 송금 낱말(`TRANSFER_DEMAND_NOUN`)과 재촉 형태(`TRANSFER_DEMAND_FORM`)가 함께 있다(2026-11-22 자녀 납치 고급 실측 — "링크 화면에서 이체 완료하세요"를 말만 바꿔 6~8턴 · 3행 유사도로는 0회) | `transfer` |
@@ -20,7 +21,7 @@
 //   두 파일의 정규식 · 임계값은 루트 테스트(`stallRecovery.test.ts` [§104 짝])가 글자 단위로 대조한다.
 // ⛔ 잎 모듈(import 0) · 문면에 숫자 · 횟수 · 따옴표 대사 예시 · 끊기 어휘 0(F11/G130 — `repeatBreak.test.ts`가 고정).
 
-export type RepeatBreakKind = "exhausted" | "identity" | "transfer" | "similar";
+export type RepeatBreakKind = "exhausted" | "hostile" | "identity" | "transfer" | "similar";
 
 /** 3행 임계값 — 전수 검수 판정표 §1.1 ② 자동 후보 탐지 기준과 같은 값. */
 export const REPEAT_SIMILARITY_THRESHOLD = 0.6;
@@ -30,6 +31,13 @@ export const REPEAT_MIN_CHARS = 8;
 /** 1-b행 — 참가자 자금 소진 선언(클라 `EXHAUSTED_DECLARATION`과 같은 정규식). */
 export const EXHAUSTED_DECLARATION =
   /돈\s*(?:이|은|도)?\s*(?:더\s*|이제\s*)?없|(?:더|이제|남은)\s*(?:돈|게|건|것)?\s*(?:이|은)?\s*(?:하나도\s*)?없|다\s*털렸|탈탈|빈털터리|한\s*푼도|잔고\s*(?:가)?\s*없|전부\s*(?:다\s*)?보냈/;
+
+/**
+ * 1-c행 — 참가자의 거절 · 의심 · 따짐(클라 `HOSTILE_PARTICIPANT`와 같은 정규식).
+ * shortcut: 표기만 본다(의미 아님) — 표본 밖 표현은 못 잡는다. 실측 전사에서 놓친 표현이 나오면 낱말을 더한다.
+ */
+export const HOSTILE_PARTICIPANT =
+  /사기|피싱|신고|경찰|거짓말|꺼져|그만\s*(?:해|하)|싫(?:어|습|다)|못\s*믿|내가\s*왜|너\s*누구|누구(?:냐|야)|누구한테\s*전화|안\s*(?:믿|속|알려|불러|줘|해요?(?=[\s.?!~,]|$)|할(?:래|게|\s*거))/;
 
 /** 2행 — 인적사항 항목별 낱말. */
 export const IDENTITY_ITEM_PATTERNS: Readonly<Record<string, RegExp>> = {
@@ -85,9 +93,15 @@ export function bigramSimilarity(a: string, b: string): number {
   return (2 * shared) / (ga.size + gb.size);
 }
 
-/** 판정표 본체 — `scammerTexts`는 시간순 사기범 대답(마지막 = 가장 최근) · `currentUserText` = 이번에 답할 참가자 발화(§104 · 부재 = 1-b행 안 봄). */
-export function decideRepeatBreak(scammerTexts: readonly string[], currentUserText?: string): RepeatBreakKind | null {
+/**
+ * 판정표 본체 — `scammerTexts`는 시간순 사기범 대답(마지막 = 가장 최근) · `currentUserText` = 이번에 답할 참가자 발화(§104 · 부재 = 1-b행 안 봄)
+ * · `previousUserText` = 그 앞 참가자 발화(부재 = 1-c행 안 봄).
+ */
+export function decideRepeatBreak(scammerTexts: readonly string[], currentUserText?: string, previousUserText?: string): RepeatBreakKind | null {
   if (currentUserText !== undefined && EXHAUSTED_DECLARATION.test(currentUserText)) return "exhausted"; // 1-b행
+  if (currentUserText !== undefined && previousUserText !== undefined && HOSTILE_PARTICIPANT.test(currentUserText) && HOSTILE_PARTICIPANT.test(previousUserText)) {
+    return "hostile"; // 1-c행
+  }
   if (scammerTexts.length < 2) return null; // 1행
   const a = scammerTexts[scammerTexts.length - 2]!;
   const b = scammerTexts[scammerTexts.length - 1]!;
@@ -114,8 +128,16 @@ export const REPEAT_BREAK_SIMILAR_INSTRUCTION =
 export const REPEAT_BREAK_EXHAUSTED_INSTRUCTION =
   "(상대가 더 보낼 돈이나 줄 정보가 없다고 분명히 말했다. 같은 요구를 다시 하지 마라. 수법 목록이나 통화 흐름에 있는데 아직 권하지 않은 다른 수단이 있으면 그것만 권하고, 이미 권했거나 상대가 그것도 거절하면 더 요구할 것이 남지 않은 것이니 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
 
+/**
+ * 1-c행 지시(서버 소유 · 클라 `LIVE_REPEAT_BREAK_TEXT.hostile`과 같은 글자). 실제 사례(노컷뉴스 2020-06-29 · 2020-02-17): 거절을 받아쳐 위협을 올리고,
+ * 그래도 안 되면 끊는다 — 끊을지는 [진행 강제] 끊기 항목 · 서버 끊기 판정에 맡긴다.
+ */
+export const REPEAT_BREAK_HOSTILE_INSTRUCTION =
+  "(상대가 연달아 거절하거나 의심하거나 따지고 있다. 같은 요구나 같은 설명을 되풀이하지 마라. 상대가 너에게 물은 것이 있으면 이번 대답 첫 문장에서 그것부터 답하라. 그다음 수법 목록에 있는데 아직 쓰지 않은 가장 센 압박 하나만 꺼내라. 상대가 그 뒤에도 거절이나 의심을 이어 가면 더는 진행할 수 없는 것이니 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
+
 export function repeatBreakInstruction(kind: RepeatBreakKind | null): string | undefined {
   if (kind === "exhausted") return REPEAT_BREAK_EXHAUSTED_INSTRUCTION;
+  if (kind === "hostile") return REPEAT_BREAK_HOSTILE_INSTRUCTION;
   if (kind === "identity") return REPEAT_BREAK_IDENTITY_INSTRUCTION;
   if (kind === "transfer") return REPEAT_BREAK_TRANSFER_INSTRUCTION;
   if (kind === "similar") return REPEAT_BREAK_SIMILAR_INSTRUCTION;
