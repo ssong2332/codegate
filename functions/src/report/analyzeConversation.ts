@@ -659,29 +659,36 @@ const BANK_NAME = /[가-힣]{1,6}은행|농협|우체국|새마을\s*금고|신�
 // | W2 | 답에서 뽑은 숫자열(`extractSpokenCodes` — 리포트 (D3) · (D4)와 같은 규칙) 중 정답과 자릿수가 같은 것이 없다 | 대조 안 함(전화 · 금액 등) |
 // | W3 | 같은 자릿수 후보 중 하나라도 정답과 같다 | 대조 결과 "정답" — 종전처럼 속음 |
 // | W3b | 2026-11-22 재시험 27 ⑮(정답 739316 · "칠삼구삼일육이요" → 전사 "739326" · "7393262") — 후보와 정답이 **한 자리만** 다르고 그 짝이 1 ↔ 2(일 ↔ 이 — 음성 인식이 헷갈리는 짝) | W3과 같다 — 정답으로 본다(가짜 정보 아님) |
-// | W4 | 같은 자릿수 후보가 있고 모두 W3 · W3b가 아니다(두 자리 이상 차이 · 1 ↔ 2 밖 차이 — 예 785135 vs 785136) | **오답** — 숫자 응답만으로는 속음이 아니다(H1 · H2 실제 제공은 그대로 속음) · 위험 신호 `fake_info` |
+// | W3c | 2026-11-23 재시험 28 ⑯(정답 965326 · "구육오, 삼이육" → 전사 "965426"(3 → 4) → 뒤에 "9653262") — 후보와 정답이 **한 자리만** 다르고(짝 무관), 이 답 **뒤** 참가자 줄에 정답(W3 · W3b) 번호가 있다 | W3과 같다 — 인식 오류로 본다(가짜 정보 아님) |
+// | W4 | 같은 자릿수 후보가 있고 모두 W3 · W3b · W3c가 아니다(두 자리 이상 차이 · 1 ↔ 2 밖 차이 — 예 785135 vs 785136) | **오답** — 숫자 응답만으로는 속음이 아니다(H1 · H2 실제 제공은 그대로 속음) · 위험 신호 `fake_info` |
 const OTP_ASKED =
   /인증\s*(?:번호|코드)|번호가[^.?!]{0,24}(?:안\s*맞|맞지\s*않|일치하지\s*않|틀|다르|다릅)|문자[^.?!]{0,20}다시[^.?!]{0,20}불러/;
 
-function isWrongOtpReply(scammerText: string, replyText: string, otpCodes: readonly string[]): boolean {
+function isWrongOtpReply(scammerText: string, replyText: string, otpCodes: readonly string[], laterCorrect = false): boolean {
   if (otpCodes.length === 0 || !OTP_ASKED.test(scammerText)) return false;
   const lengths = new Set(otpCodes.map((code) => code.length));
   // 2026-11-08(관찰 e) — 말끝 "이"가 숫자 2로 붙은 L+1자리도 끝 2를 빼고 후보로 본다(`otpCandidatesForLength` C2 — 서버 대조와 같은 규칙).
   const spoken = extractSpokenCodes(replyText);
   const candidates = [...lengths].flatMap((length) => otpCandidatesForLength(spoken, length));
-  return candidates.length > 0 && !candidates.some((code) => otpCodes.some((answer) => isOtpMatchOrAsrSlip(code, answer)));
+  return candidates.length > 0 && !candidates.some((code) => otpCodes.some((answer) => isOtpMatchOrAsrSlip(code, answer, laterCorrect)));
 }
 
-// W3 · W3b — 같은 번호이거나, 한 자리만 다르고 그 짝이 1 ↔ 2.
-function isOtpMatchOrAsrSlip(code: string, answer: string): boolean {
+// W3 · W3b · W3c — 같은 번호이거나, 한 자리만 다르고 그 짝이 1 ↔ 2이거나, 한 자리만 다르고 뒤에 정답을 말했다(`laterCorrect`).
+function isOtpMatchOrAsrSlip(code: string, answer: string, laterCorrect = false): boolean {
   if (code.length !== answer.length) return false;
   const diffs = [...code].flatMap((digit, i) => (digit === answer[i] ? [] : [digit + answer[i]]));
-  return diffs.length === 0 || (diffs.length === 1 && (diffs[0] === "12" || diffs[0] === "21"));
+  return diffs.length === 0 || (diffs.length === 1 && (laterCorrect || diffs[0] === "12" || diffs[0] === "21"));
 }
 
-function resolveRiskSignalKind(scammerText: string, replyText: string, otpCodes: readonly string[] = []): RiskSignalKind | undefined {
+// W3c — 답 줄에 정답(W3 · W3b) 번호가 있는가(인증번호 물음 여부는 보지 않는다 — 6자리 정답과 우연히 같을 일은 무시).
+function hasCorrectOtp(replyText: string, otpCodes: readonly string[]): boolean {
+  const spoken = extractSpokenCodes(replyText);
+  return otpCodes.some((answer) => otpCandidatesForLength(spoken, answer.length).some((code) => isOtpMatchOrAsrSlip(code, answer)));
+}
+
+function resolveRiskSignalKind(scammerText: string, replyText: string, otpCodes: readonly string[] = [], laterCorrect = false): RiskSignalKind | undefined {
   if (FAKE_INFO_MARKER.test(replyText)) return "fake_info";
-  if (isWrongOtpReply(scammerText, replyText, otpCodes)) return "fake_info";
+  if (isWrongOtpReply(scammerText, replyText, otpCodes, laterCorrect)) return "fake_info";
   if (isResistanceForReport(replyText)) return undefined;
   if (SECRECY_PROMISE.test(replyText)) return "secrecy_promise";
   // 2026-11-07 사용자 결정 — 요구 뒤 일반 방법 질문만(C6c) = 위험 신호. 요구 없는 대사 뒤는 신호 0(종전 C4).
@@ -1029,6 +1036,9 @@ export function analyzeConversation(
   const sorted = [...messages]
     .filter((m) => !m.notSpoken)
     .sort((a, b) => a.turnIndex - b.turnIndex);
+  // W3c — j번째 줄 뒤 참가자 줄에 인증번호 정답이 있는가.
+  const correctOtpAfter = (j: number): boolean =>
+    otpCodes.length > 0 && sorted.slice(j + 1).some((m) => m.role === "user" && hasCorrectOtp(m.textMasked, otpCodes));
   const deceivedMoments: DeceivedMomentResult[] = [];
   const tacticLabelsUsed = new Set<string>();
   const tacticMatchers = buildTacticMatchers(weakenedTactics, premiseText);
@@ -1119,7 +1129,7 @@ export function analyzeConversation(
       const fake = FAKE_INFO_MARKER.test(reply.textMasked);
       const resisted = isResistanceForReport(reply.textMasked);
       // 사용자 결정 2026-10-21 — 인증번호 오답(위 W4)은 숫자 응답에서 오는 순응 판정을 끈다(실제 제공 H1 · H2는 그대로).
-      const wrongOtp = isWrongOtpReply(pair.textMasked, reply.textMasked, otpCodes);
+      const wrongOtp = isWrongOtpReply(pair.textMasked, reply.textMasked, otpCodes, correctOtpAfter(j));
       // 2026-11-07 판 31 · 32 — C6a(부정된 행동 구절 제거) · C6b(따지는 질문) — 위 표.
       const affirmText = reply.textMasked.replace(NEGATED_ACTION, " ");
       // C6c — 요구 뒤 일반 방법 질문만은 속음이 아니다(위험 신호는 아래 `resolveRiskSignalKind`).
@@ -1149,7 +1159,7 @@ export function analyzeConversation(
     for (let j = i + 1; j < sorted.length && sorted[j].role === "user"; j += 1) {
       const reply = sorted[j];
       if (reply === userReply) continue;
-      const kind = resolveRiskSignalKind(pair.textMasked, reply.textMasked, otpCodes);
+      const kind = resolveRiskSignalKind(pair.textMasked, reply.textMasked, otpCodes, correctOtpAfter(j));
       // 2026-11-07 Edge 재시험(기관 사칭 고급 "거래 은행은 새솔은행이고요, 잔액은 천이백만 원쯤 있어요." → 위험 신호 "거래 은행을 알려 줬어요"
       // + 속은 순간 "거래 은행·자산 정보 수집"이 둘 다) — 같은 대사에 대한 답 묶음에서 이미 속은 순간이 잡혔으면 은행명 신호(RS3)는 달지 않는다
       // (같은 답 하나를 두 번 표기 · RS5). 가짜 정보 · 비밀 약속 · 방법 질문 신호는 그대로다.

@@ -98,3 +98,35 @@ test("[W 6] 배선 — 리포트 생성이 그 세션 시나리오의 정답(§1
   const src = readFileSync(path.resolve(__dirname, "../../../src/report/generateReportCore.ts"), "utf8");
   assert.ok(src.includes("listOtpItems(session.scenarioId).map((item) => withSessionOtp(item, sessionId).otpCode!)"));
 });
+
+test("[W 8] 재시험 28 ⑯ — 한 자리(3 → 4) 오인식 뒤 정답을 말함 = 가짜 정보 아님(W3c) · 뒤에 정답이 없으면 그대로 fake_info", () => {
+  const codes = ["965326"];
+  // 재현: 정답 965326 · "구육오, 삼이육" → 전사 965426(거절) · "구육오삼이육이요" → 9653262(수락).
+  const replay = analyzeConversation(
+    [
+      msg("scammer", ASK, 0),
+      msg("user", "인증 번호는 965426이에요.", 1),
+      msg("scammer", "번호가 다르네요. 문자 메시지를 다시 확인하셔서 인증번호를 정확히 말씀해 주십시오.", 2),
+      msg("user", "9653262", 3),
+      msg("scammer", "인증번호 확인되었습니다.", 4),
+    ],
+    0,
+    [],
+    codes,
+  );
+  assert.deepEqual(replay.riskSignals.filter((s) => s.kind === "fake_info"), [], "두 답 모두 가짜 정보 아님");
+  assert.equal(replay.wasDeceived, true);
+  // W4 유지 — 같은 한 자리 차이라도 뒤에 정답이 없으면 오답.
+  const alone = judge("965426이에요", codes);
+  assert.equal(alone.wasDeceived, false);
+  assert.deepEqual(alone.riskSignals.map((s) => s.kind), ["fake_info"]);
+  // W4 유지 — 뒤에 정답이 있어도 두 자리 이상 차이는 오답.
+  const far = analyzeConversation(
+    [msg("scammer", ASK, 0), msg("user", "945426이요", 1), msg("scammer", "번호가 다르네요.", 2), msg("user", "965326", 3)],
+    0,
+    [],
+    codes,
+  );
+  assert.deepEqual(far.riskSignals.map((s) => s.kind), ["fake_info"]);
+  assert.equal(far.riskSignals[0]!.turnIndex, 1);
+});
