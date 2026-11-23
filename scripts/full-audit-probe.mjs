@@ -13,6 +13,7 @@
 //   · verbal(P2 실측 2026-11-01 — comply와 같되 이체 요구에 "링크는 안 눌렀고 제 은행 앱으로 따로 보냈어요"라고 말하고 화면을 제출하지 않는다)
 //   · verbalInstall(U2 실측 2026-11-01 — comply와 같되 통화 중 문자 설치 화면의 권한 허용을 누르지 않고 "설치했어요"라고 말로만 답한다 · 이체 화면은 comply처럼 제출)
 //   · verbalTransfer(#463 확인 실측 2026-11-01 — comply와 같되 설치 화면은 허용하고, 이체 화면은 제출하지 않은 채 "네, 보냈어요"라고 말로만 답한다)
+//   · hostile · factual(2026-11-23 페르소나 점검 P3 · P4 — makeResponder 위 주석)
 //   · truthful(2026-11-07 앱 안 금 구매 · 출금 예약 — comply와 같되 금 거래소 화면의 고액 구매 확인 · 출금 예약 화면의 문진표에 사실대로 "예"라 답해 보류된다 ·
 //     앱의 `landing_held` 기록 · `GOLD_HELD_INSTRUCTION` / `CASH_HELD_INSTRUCTION` 맥락 주입을 흉내 내고, 그 뒤로는 화면 안내를 들어 망설인다. 그 밖 화면은 comply와 같다)
 //
@@ -186,16 +187,57 @@ const REFUSE_LINES = [
   "싫어요. 안 해요.",
 ];
 
+// 2026-11-23 페르소나 점검(COMMON.md P3 · P4) — 규칙형 두 유형. 화면은 제출하지 않는다(앱 기록 0).
+//   hostile(P3) — 본인 확인 거부 · 역질문 · 날 선 반박. 몇 턴마다 같은 질문을 되풀이해 사기범이 그 질문에 답하는지 본다.
+//   factual(P4) — 실제 상황을 말한다: 돈 없음 · 그 은행 안 씀 · 확인 전화. 신원 질문엔 답하되 돈 · 앱 요구엔 사실로 막는다.
+const HOSTILE_LINES = [
+  "누구한테 전화하신 거예요? 저 아세요?",
+  "어디 소속인데요? 부서랑 직함, 사번까지 말해 보세요.",
+  "제 정보를 왜 그쪽한테 말해요? 그쪽이 먼저 증명하세요.",
+  "아까 물어본 거 대답 안 하셨잖아요. 어디 소속이냐고요.",
+  "말 돌리지 마세요. 그쪽 이름이 뭐냐고요.",
+  "그런 식으로 전화하는 거 사기꾼들이나 하는 거잖아요.",
+];
+const HOSTILE_BY_DEMAND = [
+  [/인증\s?번호|비밀\s?번호|카드\s?번호|주민(등록)?\s?번호|생년월일|성함|이름/, "제 정보를 왜 알려 줘요? 본인 확인은 안 할 거예요."],
+  [/(이체|송금|입금|보내|옮기|옮겨|이관|계좌)/, "돈 얘기를 왜 전화로 해요? 절대 안 보내요."],
+  [/(설치|앱|링크|눌러|접속)/, "모르는 링크 안 눌러요. 그쪽이 누군지부터 대세요."],
+];
+const FACTUAL_BY_DEMAND = [
+  [/인증\s?번호|인증 코드|숫자 여섯|여섯 자리/, "인증번호요? 그런 문자 아직 못 봤는데요."],
+  [/(얼마|잔액|자산|예금|금액)/, "저 돈 별로 없어요. 통장에 한 50만 원 있을 거예요."],
+  [/(은행|거래하시)/, "저는 그 은행 안 써요. 새마을금고 하나만 써요."],
+  [/(대출)/, "대출은 안 받을 거예요. 갚을 돈도 없어요."],
+  [/(이체|송금|입금|보내\s?(주|셔|시|세|라|요)|넣어|옮기|옮겨|이관|현금|인출)/, "보낼 돈이 없어요. 50만 원밖에 없다니까요."],
+  [/(설치|앱|링크|눌러|접속)/, "제 폰 오래돼서 그런 앱 못 깔아요. 아들이 해 줘야 돼요."],
+  [/성함|이름/, "김민수예요."],
+  [/생년월일|생일|몇 년생/, "61년생이에요."],
+  [/(자녀|아이|아드님|따님|아들|딸)/, "우리 아들은 지금 회사에 있을 텐데요? 아까 통화했어요."],
+];
+const FACTUAL_CHECK = "일단 끊고 제가 대표번호로 확인 전화 해 볼게요.";
+
 // getOtp — 도착한 문자 속 인증번호(있으면 순응 참가자는 그 번호를 부른다 · 2026-10-24). 없으면 종전 고정값.
 function makeResponder(persona, getOtp = () => undefined) {
   let paid = false, lastReply = "";
   return function respond(lastScammerText, i) {
     if (i === 0) return "여보세요, 네 누구세요?";
-    if (persona !== "refuse" && /인증\s?번호|인증 코드|숫자 여섯|여섯 자리/.test(lastScammerText) && getOtp()) {
+    if (persona !== "refuse" && persona !== "hostile" && persona !== "factual" && /인증\s?번호|인증 코드|숫자 여섯|여섯 자리/.test(lastScammerText) && getOtp()) {
       const r = `${persona === "suspicious" ? "음… 알겠어요. " : ""}${getOtp()}요.`;
       if (r !== lastReply) return (lastReply = r);
     }
     if (persona === "refuse") return i === 1 ? "네? 무슨 소리예요?" : REFUSE_LINES[(i - 2) % REFUSE_LINES.length];
+    if (persona === "hostile") {
+      const hit = HOSTILE_BY_DEMAND.find(([re]) => re.test(lastScammerText));
+      // 짝수 턴은 요구에 반박 · 홀수 턴은 역질문(같은 질문을 되풀이해 답했는지 본다).
+      const r = hit && i % 2 === 0 ? hit[1] : HOSTILE_LINES[(i - 1) % HOSTILE_LINES.length];
+      return (lastReply = r === lastReply ? HOSTILE_LINES[i % HOSTILE_LINES.length] : r);
+    }
+    if (persona === "factual") {
+      if (i % 5 === 4) return (lastReply = FACTUAL_CHECK);
+      const hit = FACTUAL_BY_DEMAND.find(([re]) => re.test(lastScammerText));
+      const r = hit ? hit[1] : FILLER[i % FILLER.length];
+      return (lastReply = r === lastReply ? "아까 말씀드렸잖아요. " + r : r);
+    }
     if (persona === "suspicious" && i <= SUSPICIOUS_OPEN.length) return SUSPICIOUS_OPEN[i - 1];
     const prefix = persona === "suspicious" ? "음… 알겠어요. " : "";
     // 1차 측정 교훈 — 보낸 뒤에는 "입금 확인됐다" 같은 확인 문장에도 걸려 재요구로 오판했다. 보낸 뒤에는 송금 **명령형**에만 반응한다.
@@ -214,7 +256,7 @@ function makeResponder(persona, getOtp = () => undefined) {
     return (lastReply = FILLER[i % FILLER.length]);
   };
 }
-const MAX_USER_TURNS = { comply: 16, suspicious: 16, refuse: 9, verbal: 16, verbalInstall: 16, verbalTransfer: 16, truthful: 16 };
+const MAX_USER_TURNS = { comply: 16, suspicious: 16, refuse: 9, verbal: 16, verbalInstall: 16, verbalTransfer: 16, truthful: 16, hostile: 12, factual: 14 };
 // 2026-11-07 — truthful 참가자가 금 거래소 화면 보류 뒤 하는 말(첫 줄 = 보류 직후 1회 · 나머지 = 이후 망설임 반복).
 const GOLD_HELD_FIRST_LINE = "화면에서 구매가 보류됐다고 나와요. 수사기관이 금을 사라고 하지 않는다고, 112에 확인하라던데요?";
 const CASH_HELD_FIRST_LINE = "화면에서 출금 예약이 보류됐다고 나와요. 수사기관이 현금을 찾으라고 하지 않는다고, 112에 확인하라던데요?";
@@ -620,7 +662,7 @@ async function runMultiCall(job, tag) {
   if (variant.openerSmsId) delivered.push({ smsId: variant.openerSmsId, userTurnsAtArrival: 0, by: "opener" });
   let relay, userTurns = 0, outcome = null, idx = 0;
   let otpSource = () => undefined;
-  const respond = job.persona === "refuseInstall" ? makeRefuseInstallResponder(() => otpSource()) : makeResponder("comply", () => otpSource());
+  const respond = job.persona === "refuseInstall" ? makeRefuseInstallResponder(() => otpSource()) : makeResponder(job.persona ?? "comply", () => otpSource());
   const installConsented = () => delivered.some((d) => d.landingSubmitted && isInCallInstallLanding(scenarioId, findInCallSmsItem(scenarioId, d.smsId)?.fakeLandingId));
   const numberOf = (numberId) => dialLib.findDialEntry(scenarioId, numberId)?.number ?? "";
   // 다음 레그를 열 행동(계획 항목 `dials` — 키 = "start" 또는 끝난 레그 번호 · 부재 = transfer 레그는 transfer, 그 밖은 계획 끝).
@@ -629,7 +671,8 @@ async function runMultiCall(job, tag) {
     if (d) return d;
     return exit === "transfer" ? { action: "transfer" } : null;
   };
-  let key = variant.legs[0].entry === "incoming" ? null : "start";
+  // 2026-11-23 — 첫 레그 entry 부재 = incoming(앱 `isLegConnected`와 같은 기본값 · fv-c5fj).
+  let key = (variant.legs[0].entry ?? "incoming") === "incoming" ? null : "start";
   for (let guard = 0; guard < variant.legs.length + 1; guard += 1) {
     let legIndex, entry;
     if (key === null) {
@@ -663,7 +706,7 @@ async function runMultiCall(job, tag) {
         firstLine: entry === "dial" ? DIAL_FIRST_LINE[legDef.dialTarget] : undefined },
     };
     if (existsSync(stopFile)) throw new Error("정지 파일 감지(429)");
-    const r = await runVoice(scenarioId, level, job.persona === "refuseInstall" ? "refuseInstall" : "comply", tag, legJob);
+    const r = await runVoice(scenarioId, level, job.persona ?? "comply", tag, legJob);
     turns.push(...r.turns.map((t) => ({ ...t, leg: legIndex })));
     events.push(...r.events.map((e) => ({ ...e, leg: legIndex })));
     idx = startIndex + (r.userTurns - userTurns);
