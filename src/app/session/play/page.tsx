@@ -225,7 +225,7 @@ import {
 } from "@/lib/callLegs/legTransition";
 import { buildRecents, officialNumberForTitle, type PhoneCallLog } from "@/lib/callLegs/phoneApp";
 import BankAppOverlay from "@/components/BankAppOverlay";
-import { fictionalBalanceFor, isBankAppEnabled, latestDemandAmount, myBankNameFor, spokenAccountFrom, type TransferTarget } from "@/lib/bankapp/bankApp";
+import { fictionalBalanceFor, isBankAppEnabled, latestDemandAmount, myBankNameFor, spokenAccountFrom, spokenBalanceField, type TransferTarget } from "@/lib/bankapp/bankApp";
 import { disburseLoan, loadCardAccount, loanDisbursedAmount, realBankMentionsIn, resolveMyAccount, type MyAccount } from "@/lib/bankapp/withdrawAccounts";
 import { LOAN_DISBURSED_SMS_ID, LOAN_SAFE_TRANSFER_LANDING_ID } from "@/lib/bankapp/loanFlow";
 import { readDebugFlagSearch } from "@/lib/realtime/debugFlags";
@@ -801,6 +801,12 @@ export default function SessionCallPage() {
   const transcriptQueueRef = useRef<QueuedBatch<TranscriptTurn>[]>([]);
   // 아직 서버에 없는 턴 — 다시 보낼 batch + 아직 큐에 안 넣은 턴(말한 순서).
   const unsubmittedTurns = () => [...transcriptQueueRef.current.flatMap((batch) => batch.turns), ...transcriptRef.current];
+  // ⭐ 2026-11-23 판정표 BL3′ — 문자 발송 요청에 싣는 말한 잔액(렌더마다 최신 대사로 다시 묶는다 — 백스톱 effect · Live 도구가 ref로 읽는다).
+  const spokenBalanceNowRef = useRef<() => number | undefined>(() => undefined);
+  useEffect(() => {
+    spokenBalanceNowRef.current = () => spokenAccountFrom([...messages, ...unsubmittedTurns()]).balance;
+  });
+  const getSpokenBalanceWon = useCallback(() => spokenBalanceNowRef.current(), []);
   // §140 판정표 4 — 조용한 재연결 뒤 대화 맥락으로 다시 넣을 전사(지금까지 전부 · 세션 컴포넌트가 읽기만 한다).
   const readTranscriptForResume = useCallback(() => transcriptRef.current, []);
   // §57.2 (6) 처방 D1 — 참가자가 "받기"를 누른 시각(클라 타임스탬프, `handleAnswer`에서 1회
@@ -1337,6 +1343,7 @@ export default function SessionCallPage() {
           trigger: "backstop",
           ...(smsClaimPendingRef.current ? { smsClaimed: true } : {}),
           ...(smsClaimPendingRef.current && smsClaimPurposesRef.current.length > 0 ? { smsClaimedPurposes: [...smsClaimPurposesRef.current] } : {}),
+          ...spokenBalanceField(spokenBalanceNowRef.current()),
         });
         setSmsError(null);
         // R1(#465) — 아직 마치지 않은 화면이 있으면 남은 문자가 없어도 다음 발화에 다시 묻는다(화면 기록 줄이 매 발화 온다).
@@ -2783,6 +2790,8 @@ export default function SessionCallPage() {
       spoken: spokenAccountFrom([...messages, ...unsubmittedTurns()], realBankMentionsIn),
       fixedBankName: myBankNameFor(sid, target.bankName),
       fixedBalance: fictionalBalanceFor(sid),
+      // ⭐ 2026-11-23 판정표 Z4 — 잔액을 모르면 문자 요구액보다 적게.
+      demand: target.requestedAmount ?? target.amount,
     });
     setBankTransfer({ smsId, target, mine });
     setSmsOverlayOpen(false);
@@ -3054,7 +3063,8 @@ export default function SessionCallPage() {
     setSending(true);
     setSendError(null);
     try {
-      const result = await sendMessage({ sessionId, userText: text });
+      // 판정표 BL3′ — 이번 대사까지 넣어 말한 잔액을 싣는다(텍스트 폴백 문자 발송도 같은 원천).
+      const result = await sendMessage({ sessionId, userText: text, ...spokenBalanceField(spokenAccountFrom([...messages, { role: "user", text }]).balance) });
       // T158(§48.5.1) — OR-fold 두 번째 항.
       setDialogueDegraded((current) => foldDegraded(current, result.isMock));
       setInput("");
@@ -3494,6 +3504,7 @@ export default function SessionCallPage() {
             primedAudio={primedCallAudio}
             getSessionUserTurns={getSessionUserTurns}
             getSessionScammerTurns={getSessionScammerTurns}
+            getSpokenBalanceWon={getSpokenBalanceWon}
             getPendingInstruction={getPendingInstruction}
             isHangupLatched={isHangupLatched}
             onScammerHangupAccepted={handleScammerHangupAccepted}

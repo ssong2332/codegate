@@ -21,6 +21,27 @@
 import { personaBalanceText, personaBalanceWon } from "../scenarios/personaCardCatalog";
 import type { PersonaCardItem } from "../shared/types";
 
+// ⭐ 2026-11-23 사용자 결정 2b(*"참가자가 말한 잔액에 맞춰 요구액과 문자 금액을 바꾼다"*) — 판정표 BL3′(맞춤 잔액의 원천 · 앞 행이 먼저).
+// | # | If | Then |
+// |---|---|---|
+// | B1 | 카드 잔액 있음 | 카드 잔액(종전 BL3 — 프롬프트 · 문자 둘 다) |
+// | B2 | B1 아님 ∧ 문자 발송 요청에 말한 잔액(`spokenBalanceWon` — 화면 판정표 S4 ~ S9 · S14 · 정수 1만 ~ 10억 원 · 만 원 단위 내림) | 말한 잔액 → 위 F2 · F3으로 **문자**(본문 '금액:' 줄 · `transferAmount`) 금액만 맞춘다 |
+// | B3 | B2로 문자 금액이 바뀜 | 도착 지시 끝에 새 금액 1줄(`spokenFitAnnounceLine` — 실시간 시스템 프롬프트는 통화 중에 바꿀 수 없어 단계 문면의 옛 금액을 이 줄이 덮는다) |
+// | B4 | 둘 다 없음 · 말한 값이 범위 밖 · '돈 없다'(화면 Z3 — 클라가 싣지 않는다) | 종전 금액 그대로(화면은 판정표 Z3 · Z4로 잔액 부족) |
+// | B5 | 고정형 금액(F4) | 종전 그대로 |
+// ⚠️ 시스템 프롬프트(`fitPromptAmounts`)는 B1만 — 말한 잔액은 세션 시작 뒤에 생기므로 문자 도착 지시(B3)로만 알린다(바이트 고정 변형 해시 무변경).
+
+/** B2 — 요청의 말한 잔액(원). 정수 · 1만 ~ 10억 원 밖 = undefined · 만 원 단위로 내린다. */
+export function spokenBalanceWonFrom(raw: unknown): number | undefined {
+  if (typeof raw !== "number" || !Number.isSafeInteger(raw) || raw < 10_000 || raw > 1_000_000_000) return undefined;
+  return Math.floor(raw / 10_000) * 10_000;
+}
+
+/** B3 — 말한 잔액으로 바뀐 문자 금액을 알리는 1줄. */
+export function spokenFitAnnounceLine(balanceWon: number): string {
+  return `(문자에 적힌 금액은 상대가 말한 잔액에 맞춘 ${personaBalanceText(fittedDemandWon(balanceWon))}이다. 앞서 다른 금액을 말했더라도 이제부터 금액은 이것만 말하라.)`;
+}
+
 export const BALANCE_FIT_SOURCE_AMOUNTS: readonly number[] = [4_120_000, 9_800_000, 2_340_000, 7_600_000];
 /** 1회 이체 한도(클라 `amountInput.ts` · 판정표 W2와 같은 값). */
 export const TRANSFER_LIMIT_PER_ONCE = 10_000_000;

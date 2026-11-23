@@ -24,6 +24,7 @@ import { useEffect, useRef } from "react";
 import { GoogleGenAI, Modality } from "@google/genai";
 import type { CallLegEnd, CreateRealtimeCallResponse } from "@/lib/api";
 import { deliverInCallSms, deliverVerifyOffer, recordLoanReview, requestScammerHangup } from "@/lib/api";
+import { spokenBalanceField } from "@/lib/bankapp/bankApp";
 import {
   GEMINI_INPUT_SAMPLE_RATE,
   GEMINI_OUTPUT_SAMPLE_RATE,
@@ -301,6 +302,8 @@ export type GeminiVoiceSessionProps = {
    * — 다음 통화 · 재연결)마다 다시 마운트되며 0부터 세어, 통화 2 · 3에서 보낸 문자가 리포트에서 세션 맨 앞에 찍혔다.
    */
   getSessionScammerTurns: () => number;
+  /** ⭐ 2026-11-23 판정표 BL3′ — 참가자가 통화에서 말한 통장 잔액(원 · 부모 `spokenAccountFrom`). `send_prepared_sms`가 서버에 싣는다. 부재 = 종전. */
+  getSpokenBalanceWon?: () => number | undefined;
   /** 부모 클라 항 — 지시 큐 비어 있지 않음 ∨ 이번 턴 지시 처리 중 ∨ 교대 대기(`isRelaySwitchPending` — S7 전 `false`). */
   getPendingInstruction: () => boolean;
   /** 승인 · 종료 래치(`isEndLatched(callEndingRef.current)`) — 마이크 · 클라 텍스트 턴 · 침묵 넛지 차단의 판정(G510). */
@@ -415,6 +418,7 @@ export default function GeminiVoiceSession({
   turnPhaseRef,
   getSessionUserTurns,
   getSessionScammerTurns,
+  getSpokenBalanceWon,
   getPendingInstruction,
   isHangupLatched,
   onScammerHangupAccepted,
@@ -445,6 +449,7 @@ export default function GeminiVoiceSession({
     releaseVerifyAnnounceSlot,
     getSessionUserTurns,
     getSessionScammerTurns,
+    getSpokenBalanceWon,
     getPendingInstruction,
     isHangupLatched,
     onScammerHangupAccepted,
@@ -492,6 +497,7 @@ export default function GeminiVoiceSession({
       releaseVerifyAnnounceSlot,
       getSessionUserTurns,
       getSessionScammerTurns,
+      getSpokenBalanceWon,
       getPendingInstruction,
       isHangupLatched,
       onScammerHangupAccepted,
@@ -517,6 +523,7 @@ export default function GeminiVoiceSession({
     releaseVerifyAnnounceSlot,
     getSessionUserTurns,
     getSessionScammerTurns,
+    getSpokenBalanceWon,
     getPendingInstruction,
     isHangupLatched,
     onScammerHangupAccepted,
@@ -805,6 +812,7 @@ export default function GeminiVoiceSession({
             userTurns: claimedUserTurns(),
             scammerTranscriptTurns: sessionScammerTurns(),
             trigger: "model_tool",
+            ...spokenBalanceField(handlersRef.current.getSpokenBalanceWon?.()),
           });
           // PR-A2(audit-A R1) — 서버 결과 신호는 도구 응답에 섞지 않고, 응답을 **보낸 뒤** 부모에 넘긴다(아래 `toolCall` 처리부).
           if (result.status === "delivered" && result.confirmResultInstruction) {
