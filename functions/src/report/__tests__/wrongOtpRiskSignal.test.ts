@@ -69,6 +69,31 @@ test("[W 4 · 5] 실제 제공은 오답이어도 속음 · 인증번호를 묻�
   assert.deepEqual(birth.riskSignals, []);
 });
 
+test("[W 7] 재시험 27 ⑮ — 맞게 읽었는데 전사가 1 ↔ 2 한 자리 틀림 = 가짜 정보 아님 · 진짜 오답은 그대로 fake_info", () => {
+  const codes = ["739316"];
+  // 재현: 정답 739316 · "칠삼구삼일육이요" → 전사 739326(거절) · 7393262(수락).
+  const replay = analyzeConversation(
+    [
+      msg("scammer", ASK, 0),
+      msg("user", "739326이요", 1),
+      msg("scammer", "번호가 맞지 않습니다. 문자 다시 확인해서 불러 주십시오.", 2),
+      msg("user", "7393262", 3),
+      msg("scammer", "네, 확인되었습니다.", 4),
+    ],
+    0,
+    [],
+    codes,
+  );
+  assert.deepEqual(replay.riskSignals.filter((s) => s.kind === "fake_info"), [], "두 답 모두 가짜 정보 아님");
+  assert.equal(replay.wasDeceived, true, "정답을 불러 준 것 = 종전 W3처럼 속음");
+  // W4 유지: 두 자리 차이 · 1 ↔ 2 밖 한 자리 차이 · 말끝 2를 뗀 뒤 5 ↔ 6 차이(7851352 vs 785136).
+  for (const [reply, answer] of [["729326이요", "739316"], ["739416이요", "739316"], ["7851352", "785136"]] as const) {
+    const result = judge(reply, [answer]);
+    assert.equal(result.wasDeceived, false, reply);
+    assert.deepEqual(result.riskSignals.map((s) => s.kind), ["fake_info"], reply);
+  }
+});
+
 test("[W 6] 배선 — 리포트 생성이 그 세션 시나리오의 정답(§114 세션 번호)을 넘긴다", () => {
   const src = readFileSync(path.resolve(__dirname, "../../../src/report/generateReportCore.ts"), "utf8");
   assert.ok(src.includes("listOtpItems(session.scenarioId).map((item) => withSessionOtp(item, sessionId).otpCode!)"));

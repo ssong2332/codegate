@@ -289,6 +289,15 @@ function requestedIdentityItems(text: string): Set<string> {
   return out;
 }
 
+/** 5-b행 — 서버 `TRANSFER_DEMAND_NOUN`과 같은 정규식. */
+export const TRANSFER_DEMAND_NOUN = /이체|송금|입금|계좌|링크|돈|만\s*원/;
+/** 5-b행 — 서버 `TRANSFER_DEMAND_FORM`과 같은 정규식. */
+export const TRANSFER_DEMAND_FORM = /(?:이체|송금|입금|완료|진행|전송|처리)\s*(?:하세요|해요|하십시오|해\s*주세요|하라)|보내(?:세요|요)|넣(?:어요|으세요)|끝내(?:세요|요)/;
+
+function isTransferDemand(text: string): boolean {
+  return text.split(/(?<=[.?!])\s+|\n+/).some((sentence) => TRANSFER_DEMAND_NOUN.test(sentence) && TRANSFER_DEMAND_FORM.test(sentence));
+}
+
 function normalizeForSimilarity(text: string): string {
   return text.replace(/[\s.,!?~…·'"“”‘’()\-]/g, "");
 }
@@ -315,7 +324,7 @@ function isWaitTurn(text: string): boolean {
   return isStallLine(text) || WAIT_REQUEST_LINE.test(text);
 }
 
-export type LiveRepeatBreakKind = "exhausted" | "stall" | "identity" | "similar";
+export type LiveRepeatBreakKind = "exhausted" | "stall" | "identity" | "transfer" | "similar";
 
 /**
  * 2-b행 — 참가자 자금 소진 선언(서버 `EXHAUSTED_DECLARATION`과 같은 정규식). 2026-10-22 사용자 실기 대본(검찰 고급): *"이제 탈탈 털렸어. 나도 이제 없어.
@@ -335,6 +344,7 @@ export const EXHAUSTED_DECLARATION =
  * | 3 | A가 없다 | 없음 |
  * | 4 | A와 B가 모두 대기 말이다(2절 `isStallLine` 또는 "대기해 주십시오"류) | `stall` |
  * | 5 | A와 B가 같은 인적사항 항목(성함 · 생년월일 · 주민번호 · 주소)을 요구하는 형태로 꺼냈다 | `identity` |
+ * | 5-b | A와 B가 둘 다 송금 요구를 재촉했다(같은 문장에 송금 낱말 + 재촉 형태 — 서버 2-c행 · 2026-11-22 자녀 납치 고급 실측: 말만 바꾼 "링크 화면에서 이체 완료하세요" 6~8턴에 6행은 0회) | `transfer` |
  * | 6 | A와 B의 글자 2-gram 유사도 ≥ 0.6 | `similar` |
  * | 7 | 그 외 | 없음 |
  * - 5행이 "같은 항목"만 보는 이유: 순순히 따르는 참가자에게 성함 → 주민번호처럼 **다른** 항목을 잇는 것은 정상 진행이다.
@@ -359,6 +369,7 @@ export function decideLiveRepeatBreak(input: {
   for (const item of requestedIdentityItems(b)) {
     if (itemsA.has(item)) return "identity"; // 5행
   }
+  if (isTransferDemand(a) && isTransferDemand(b)) return "transfer"; // 5-b행
   if (bigramSimilarity(a, b) >= REPEAT_SIMILARITY_THRESHOLD) return "similar"; // 6행
   return null; // 7행
 }
@@ -374,6 +385,8 @@ export const LIVE_REPEAT_BREAK_TEXT: Readonly<Record<LiveRepeatBreakKind, string
     "(너는 직전 대답과 그 앞 대답에서 대기하라거나 확인 중이라는 말을 했다. 이번 대답에서는 대기하라거나 확인 중이라는 말을 하지 말고, 지금까지 받은 것을 근거로 새 요구를 꺼내라 — 흐름에 남은 다음 요구, 추가 정보, 주변 사람이나 은행에 알리지 말라는 다짐 중 하나로 상황을 앞으로 움직여라. 더 요구할 것이 정말 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)",
   identity:
     "(너는 직전 대답과 그 앞 대답에서 같은 인적사항을 달라고 했다. 상대가 그 정보를 아직 주지 않았으면 이번 대답에서는 그 정보를 다시 달라고 하지 말고, 다른 수법이나 다른 요구로 넘어가라 — 불이익 암시, 확인 절차 차단, 비밀 유지 요구처럼 아직 쓰지 않은 카드를 골라라.)",
+  transfer:
+    "(너는 직전 대답과 그 앞 대답에서 같은 송금 요구를 재촉했다. 이번 대답에서는 그 재촉을 되풀이하지 말고 먼저 상대의 마지막 말에 맞게 답하라. 상대가 이미 보냈다고 하면 어디서 어떻게 보냈는지 짧게 묻고 답을 기다리고, 그렇지 않으면 아직 쓰지 않은 다른 수법이나 다른 이유로 상황을 앞으로 움직여라. 더 요구할 것이 정말 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)",
   similar:
     "(너는 직전 대답과 그 앞 대답에서 거의 같은 말을 했다. 이번 대답에서는 그 말을 되풀이하지 말고, 다른 수법이나 다른 요구, 다른 이유를 꺼내 상황을 앞으로 움직여라. 더 요구할 것이 정말 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)",
 };
