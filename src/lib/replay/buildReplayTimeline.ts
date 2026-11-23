@@ -118,6 +118,10 @@ export type ReplayMockScreenSource = {
   timeLabel?: string;
   /** true면 같은 순간이 `deceivedMoments`에도 있다 — 교육 문구는 그쪽 주석이 전담한다. */
   consented: boolean;
+  /** 2026-11-24(browser-c N4) — 서버 스냅샷에 이미 있는 화면 사실(`mockScreenTimeline.ts`). 부재 = 옛 리포트(종전 문구). */
+  bankTransfer?: boolean;
+  submitted?: boolean;
+  amountComparison?: "less" | "equal" | "more";
 };
 
 export type ReplayTimelineMockScreenItem = {

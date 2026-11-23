@@ -467,6 +467,8 @@ export type RequestScammerHangupRequest = {
   userTurns: number;
   pendingInstruction: boolean;
   kind?: string;
+  // 판정표 VD(2026-11-24) — 이 통화의 참가자 줄에 송금 이행 보고("보냈어요")가 있는가. 부재 = 모름(서버 종전 판정).
+  participantSaidSent?: boolean;
 };
 export type RequestScammerHangupResponse = {
   status: ScammerHangupStatus;

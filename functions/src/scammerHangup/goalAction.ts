@@ -16,6 +16,7 @@ import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import { findFlowVariant, type FlowVariantSms } from "../scenarios/flowVariants";
 import { findInCallSmsItem } from "../scenarios/inCallSms";
 import { isBankTransferLanding, resolveMockScreenKind } from "../scenarios/mockScreens";
+import { TRANSFER_DONE_REPORT } from "../shared/transferClaim";
 
 /**
  * C-3 — 마지막 문자 도착 뒤 참가자 발화 수. ⚠️ **판단값**(측정값 아님): 문자 백스톱의 넛지 간격(`BACKSTOP_USER_TURNS = 2`) · 문자 간 간격
@@ -200,6 +201,35 @@ export function isLegScreenHoldPending(input: {
     if (record === undefined || record.landingSubmitted !== true || record.landingAmountComparison === "less") return true;
   }
   return false;
+}
+
+// ── ⭐ 2026-11-24 페르소나 점검 N3(가족 사고 중급 fv-krq3 — U8 "음… 알겠어요. 은행 하나 쓰고 있어요." → S9 "보내줘서 고마워, 엄마." + goal 끊기) ──
+// 화면 없이 계좌를 **말로** 부르는 송금 루트는 4-c(결정 화면)가 비어 하한(5행)만 넘으면 보내지도 않았는데 goal로 끊을 수 있었다. 판정표 VD(4-c행 입력에 더한다):
+// | # | If | Then |
+// |---|---|---|
+// | VD1 | 참가자 송금 이행 보고 여부를 모른다(`participantSaidSent` 부재 — 옛 클라 · 그 밖 경로) | 대기 아님(종전) |
+// | VD2 | 변형이 `VERBAL_TRANSFER_VARIANTS` 밖(화면 루트 · 송금이 아닌 결말) | 대기 아님(종전 — 화면 루트는 D-1 ~ D-5가 맡는다) |
+// | VD3 | 참가자가 보냈다고 말했다(`shared/transferClaim.ts` — 리포트 H4와 같은 어형) | 대기 아님 |
+// | VD4 | 그 밖 | 대기(참) — 4-c행이 `goal` · 사유 없음 끊기를 막는다(`give_up`은 통과) |
+/**
+ * VD2 — 화면 없이 계좌를 말로 부르고 결말이 **송금 하나**인 루트(선언 문자 0 · `outOfServiceActions.test.ts` 계좌 낭독 장부의 부분집합).
+ * 장부에서 뺀 것: 카드사 `fv-akj5`(결말 = 앱 설치 또는 피해금 이관 — 송금만이 아니다) · 손주 `fv-cx5y`(어려우면 상품권 사진으로 바꾼다 — 사진 턴은 '보냈' 어형이 없을 수 있다).
+ */
+export const VERBAL_TRANSFER_VARIANTS: readonly string[] = [
+  "fv-4dy4", "fv-krq3", "fv-66hh", "fv-h5sz", // 가족 사고
+  "fv-brcb", "fv-mabg", // 손주 사칭
+  "fv-c5ih", "fv-dxwu", // 자녀 납치 초 · 중급
+];
+
+export function isVerbalTransferPending(flowVariantId: string | undefined, participantSaidSent: boolean | undefined): boolean {
+  if (participantSaidSent === undefined) return false; // VD1
+  if (flowVariantId === undefined || !VERBAL_TRANSFER_VARIANTS.includes(flowVariantId)) return false; // VD2
+  return !participantSaidSent; // VD3 · VD4
+}
+
+/** VD3 — 참가자 발화 중 송금 이행 보고가 있는가(폴백 = 저장 전사 · 실시간 = 클라가 같은 어형으로 센 값). */
+export function saidTransferDone(userTexts: readonly string[]): boolean {
+  return userTexts.some((text) => TRANSFER_DONE_REPORT.test(text));
 }
 
 /** D-3 — 이 선언의 결정 화면 문자(선언 순서상 마지막 · 없으면 undefined). */

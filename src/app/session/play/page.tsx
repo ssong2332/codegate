@@ -3207,7 +3207,12 @@ export default function SessionCallPage() {
   // T72(§15.6 G6) — 자격증명을 아직 못 받았으면(수신 대기 중) 기본은 true다. 실제로 난이도를
   // 반영하지 못하는 경로(ElevenLabs)만 서버가 false로 명시해 내려준다.
   const difficultyApplied = realtime.credentials?.difficultyApplied !== false;
-  const latestScammerLine = latestScammerLineFrom(messages, legCaptionFrom);
+  // 2026-11-24 페르소나 점검 N-B2(6/6) — 실시간 경로는 서버 오프닝 문서(turnIndex 0)를 낭독하지 않는다(제출 때 `notSpoken` · 리플레이 · 리포트 제외).
+  // 그 문서를 자막 대체값으로 보여 주면 '말하지 않은 첫 대사'가 자막에만 남았다 ⇒ 실시간에서는 자막 대체값에서 뺀다.
+  const latestScammerLine = latestScammerLineFrom(
+    messages,
+    callMode === "realtime" && messages[0]?.turnIndex === 0 ? Math.max(legCaptionFrom, 1) : legCaptionFrom,
+  );
   // T103 — 통화 필 자막의 단일 소스: 실시간 턴 자막 우선, 없으면 폴백 경로의 마지막 사기범 대사.
   const pillCaption = liveScammerCaption ?? latestScammerLine;
   const isRinging = phase === "incoming";

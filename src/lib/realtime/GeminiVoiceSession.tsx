@@ -65,6 +65,7 @@ import { INITIAL_UNHEARD_REPLY_STATE, UNHEARD_REPLY_TEXT, stepUnheardReply } fro
 import { appendScammerChunk, claimedScammerTranscriptTurns, shouldMarkToolBoundary } from "./toolTurnTranscript";
 import { INITIAL_THOUGHT_LEAK_GATE_STATE, pickLiveAudioData, stepThoughtLeakGate, stripLeakedThought, type LiveContentPart } from "./thoughtLeak";
 import { guardLiveScammerLine, guardLiveUserLine } from "./liveTranscriptGuard";
+import { participantSaidSent } from "./transferClaim";
 import {
   AWAIT_RESPONSE_TIMEOUT_MS,
   INITIAL_CLIENT_TURN_QUEUE_STATE,
@@ -749,6 +750,8 @@ export default function GeminiVoiceSession({
             userTurns: claimedUserTurns(),
             pendingInstruction,
             kind: readEndCallReasonArg(call.args),
+            // 판정표 VD(2026-11-24) — 말로 계좌를 부르는 송금 루트에서 보냈다는 말 없이 goal로 끊지 않게.
+            participantSaidSent: participantSaidSent(userTextsForGuard()),
           });
           if (result.status === "accepted" || result.status === "already_accepted") {
             // R2 — 응답 전송 **전에** 부모 래치를 건다(마이크 · 클라 텍스트 턴 · 침묵 넛지가 즉시 멈춘다 — G510).
