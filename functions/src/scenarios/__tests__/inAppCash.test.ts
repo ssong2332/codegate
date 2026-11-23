@@ -94,7 +94,7 @@ test("[C3] 끊기 4-c — 예약 전 · 보류 뒤 대기 · 예약 뒤 완료 �
 });
 
 test("[C4] 화면 카탈로그 · 화면 행동 · 예약 · 보류 실시간 지시 · 보류 이벤트 배선", () => {
-  assert.deepEqual([...CASH_LANDINGS], ["cash-withdraw", "asset-cash-withdraw"]);
+  assert.deepEqual([...CASH_LANDINGS], ["cash-withdraw", "asset-cash-withdraw", "loan-cash-withdraw"]); // 2026-11-24 대출 고급 현금 상환형(fv-r4hc)
   for (const route of CASH_ROUTES) {
     assert.equal(isCashLanding(route.landingId), true);
     assert.equal(isGoldLanding(route.landingId), false);

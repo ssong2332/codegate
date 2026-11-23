@@ -28,7 +28,7 @@ function mappingViolations(catalogIds: string[], mapping: Readonly<Record<string
 
 test("[PR-2 매핑] 서버 카탈로그 landingId 35종 = 매핑표 키(양방향) · 계열 10개가 모두 쓰인다", (t) => {
   const ids = catalogLandingIds(read("functions/src/scenarios/mockScreens.ts"));
-  assert.equal(ids.length, 35, "카탈로그 landingId 수가 바뀌었다 — 새 랜딩이면 계열을 정해 매핑표에 넣을 것");
+  assert.equal(ids.length, 36, "2026-11-24 대출 고급 현금 상환형 출금 예약 화면 +1 · 카탈로그 landingId 수가 바뀌었다 — 새 랜딩이면 계열을 정해 매핑표에 넣을 것");
   assert.deepEqual(mappingViolations(ids, SITE_FAMILY_BY_LANDING), []);
   const used = new Set(Object.values(SITE_FAMILY_BY_LANDING));
   assert.deepEqual([...used].sort(), Object.keys(SITE_SKINS).sort());

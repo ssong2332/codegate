@@ -96,7 +96,7 @@ const cashProps = (extra: Record<string, unknown> = {}) => ({
 const won = (value: number) => `${String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}원`;
 
 test("[SA5] 렌더 — 말한 은행 · 잔액이 머리띠 · 출금 계좌 줄에 / 말 없으면 종전 고정 값", () => {
-  for (const id of ["cash-withdraw", "asset-cash-withdraw"]) {
+  for (const id of ["cash-withdraw", "asset-cash-withdraw", "loan-cash-withdraw"]) {
     const spoken = renderLandingScreen(cashProps({ landingId: id, spokenAccountNow: () => spokenAccountFrom(LIVE_TURNS) })).text;
     assert.ok(spoken.includes("새솔은행 모바일뱅킹"), `${id}: 머리띠 = 말한 은행`);
     assert.ok(spoken.includes("12,000,000원"), `${id}: 출금 가능 금액 = 말한 잔액`);
