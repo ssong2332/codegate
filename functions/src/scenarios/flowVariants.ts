@@ -1766,18 +1766,21 @@ const SPECS: VariantSpec[] = [
   // ⭐ 2026-11-07(Edge 시험 판 7 · 사용자 결정 "앱 안 화면 추가") — 고급 2종(fv-k268 · fv-w7tb)은 계좌를 말로만 부르지 않고 계좌 문자(`kidnap-ransom-account`
   // — 계좌 · 금액 50만 원)를 보내 문자 속 링크의 이체 화면에서 보내게 한다. 끊기 4-c(결정 화면 전 goal 끊기 금지) · 화면 행동만 인정 · 요구액 비교는 이 선언에서
   // 자동으로 붙는다(`goalAction.ts` `isDecisionScreenPending` · `roleplay/screenAction.ts`). 초 · 중급은 무변경(문자 0).
+  // ⭐ 2026-11-24(페르소나 점검 판단 요청 1 · 사용자 결정 (A) "바꾼다") — 초 · 중급(fv-c5ih · fv-dxwu)도 같은 계좌 문자 · 이체 화면 · 4-c를 쓴다
+  // (말로 "보냈어요" = 미완료). 초급은 문자 1통(AC-096 (b) 초급 0~1) · 단계 2개 그대로 — 송금 단계만 문자 링크 이체 화면으로 바꿨다.
   {
     variantId: "fv-c5ih",
     scenarioId: "kidnapping-threat",
     level: "beginner",
     authoring: "authored",
-    stages: st("자녀가 자기 쪽에 있다고 위협한다.", "곧바로 송금을 요구한다."),
-    keepLabels: ["자녀 인질 협박", "명령조·단절적 어조", "냉담한 반응", "여지를 남긴 경고", "즉시 송금 요구", "부인 시 냉담한 떠넘기기", "촉박한 결정 압박"],
+    stages: st("자녀가 자기 쪽에 있다고 위협한다.", `곧바로 ${KIDNAP_TRANSFER_STAGE_TAIL}`),
+    keepLabels: ["자녀 인질 협박", "명령조·단절적 어조", "냉담한 반응", "여지를 남긴 경고", "부인 시 냉담한 떠넘기기", "촉박한 결정 압박"],
+    extraTactics: [KIDNAPPING_SCREEN_TRANSFER_TACTIC],
     exitBlock: ["D0_none"],
-    sms: [],
-    legs: ONE_LEG("신원 불상", "male"),
+    sms: [KIDNAP_ACCOUNT_SMS],
+    legs: KIDNAP_SCREEN_LEG,
     ...BEGINNER,
-    channels: ["voice"],
+    channels: ["voice", "sms"],
     demandStages: 1,
   },
   {
@@ -1788,10 +1791,12 @@ const SPECS: VariantSpec[] = [
     stages: [],
     // "신고 차단 지시"(D6)를 빼지 않는다 — DECISIONS #44(planner 확인 대기 — AC-096 (b) vs #44).
     exitBlock: ["D2_secrecy", "D5_call_retention", "D6_report_blocking"],
-    sms: [],
-    legs: ONE_LEG("신원 불상", "male"),
+    dropLabels: KIDNAP_SCREEN_DROP_LABELS,
+    extraTactics: [KIDNAPPING_SCREEN_TRANSFER_TACTIC],
+    sms: [KIDNAP_ACCOUNT_SMS],
+    legs: KIDNAP_SCREEN_LEG,
     ...INTERMEDIATE,
-    channels: ["voice"],
+    channels: ["voice", "sms"],
     demandStages: 2,
   },
   {

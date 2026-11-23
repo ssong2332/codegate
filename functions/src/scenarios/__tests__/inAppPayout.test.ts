@@ -1,7 +1,7 @@
 // ⭐ 2026-11-07(Edge 시험 판 7 · 판 12 · 사용자 결정 "앱 안 화면 추가") — 앱 밖 행동을 유도하던 두 결말을 앱 안 화면으로 끝까지 겪게 한다.
 // | # | 고정하는 것 |
 // |---|---|
-// | K1 | 납치 고급 2변형(fv-k268 · fv-w7tb)이 계좌 문자(`kidnap-ransom-account` → 이체 화면)를 선언 · 초 · 중급은 선언 0(조립 무변경) |
+// | K1 | 납치 전 변형(고급 fv-k268 · fv-w7tb · 2026-11-24 사용자 결정 (A)로 초급 fv-c5ih · 중급 fv-dxwu도)이 계좌 문자(`kidnap-ransom-account` → 이체 화면)를 선언 · 초급 문자 1통 |
 // | K2 | 납치 고급 페르소나 · 수법 — "말로 보냈다 = 받음"이 없고 문자 속 링크 이체 화면 · 은행 앱 등 금지 · 문자 금액과 어긋나는 금액 조정 재요구 0 |
 // | K3 | 문자 문서 = 이체 화면 미리 채움(예금주 · 금액 · 세션 은행 · 계좌) · 끊기 4-c(이체 전 goal 금지 · 적게 보내면 계속 대기) · 화면 행동(말로만 보냈다 = 미완료) |
 // | V1 | 검찰 상품권형(fv-v2mk) = 사건 조회 문자 뒤 상품권 구매 문자 선언 · 4-c 대상(말로 끝나는 결말 목록에서 뺐다) · 고급 문자 범위 0~3 |
@@ -28,21 +28,21 @@ const read = (rel: string) => readFileSync(path.resolve(__dirname, "../../../src
 const variant = (id: string) => findFlowVariant(id) as FlowVariant;
 const labels = (v: FlowVariant) => v.tactics.map(extractTacticLabel);
 
-test("[K1] 납치 고급 2변형만 계좌 문자를 선언한다 · 초 · 중급은 문자 0", () => {
-  for (const id of ["fv-k268", "fv-w7tb"]) {
+test("[K1] 납치 전 변형이 계좌 문자를 선언한다(2026-11-24 초 · 중급 추가 — 사용자 결정 (A))", () => {
+  for (const id of ["fv-c5ih", "fv-dxwu", "fv-k268", "fv-w7tb"]) {
     const v = variant(id);
     assert.deepEqual(v.sms.map((s) => [s.purpose, s.smsId, s.required]), [["transfer", "kidnap-ransom-account", true]], id);
     assert.ok(v.channels.includes("sms"), id);
     assert.equal(sessionDeclaresInCallSms(KIDNAP, id), true, id);
-    assert.ok(v.sms.length <= 3, "AC-096 (b) 고급 문자 0~3");
+    assert.ok(v.sms.length <= (v.level === "beginner" ? 1 : 3), "AC-096 (b) 초급 문자 0~1 · 그 밖 0~3");
+    // 말로 "보냈어요" = 받음 페르소나 줄 0(화면 기록으로만 판단).
+    assert.ok(!resolveSessionScenarioPrompt(KIDNAP, id)!.personaPrompt.includes("받은 것으로 친다"), id);
   }
   assert.deepEqual(listFlowVariants(KIDNAP, "advanced").map((v) => v.variantId).sort(), ["fv-k268", "fv-w7tb"]);
-  for (const level of ["beginner", "intermediate"] as const) {
-    for (const v of listFlowVariants(KIDNAP, level)) {
-      assert.deepEqual(v.sms, [], v.variantId);
-      assert.equal(sessionDeclaresInCallSms(KIDNAP, v.variantId), false, v.variantId);
-    }
-  }
+  // 초급 흐름 길이 — 단계 2개 그대로(위협 → 문자 링크 송금).
+  assert.equal(variant("fv-c5ih").stages.length, 2);
+  // 역검증 — 변형 없는 옛 세션(원본 페르소나)은 그대로 말로 받는다.
+  assert.ok(resolveSessionScenarioPrompt(KIDNAP)!.personaPrompt.includes("받은 것으로 친다"));
   const sms = findInCallSmsItem(KIDNAP, "kidnap-ransom-account")!;
   assert.equal(sms.kind, "account");
   assert.equal(sms.fakeLandingId, "kidnap-ransom-transfer");
