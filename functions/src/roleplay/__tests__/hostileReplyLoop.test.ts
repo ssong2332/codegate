@@ -33,10 +33,10 @@ test("[1-c] 참가자 발화 두 개가 연달아 거절 · 의심 · 따짐이�
 test("[1-c 판정표] 한 번의 의심 · 순순한 답 · 사실 진술은 아니다 · 자금 소진(1-b)이 먼저 이긴다", () => {
   assert.equal(decideRepeatBreak(LOOPING_SCAMMER, "네, 알겠습니다.", HOSTILE_USER[0]), null, "앞만 적대");
   assert.equal(decideRepeatBreak(LOOPING_SCAMMER, HOSTILE_USER[0], "네, 홍길동이에요."), null, "뒤만 적대");
-  for (const t of ["네, 알겠습니다.", "대출은 안 해봤어요.", "안해본 거라 잘 몰라요.", "OO은행 쓰고 있어요.", "얼마 보내면 돼요?", "안녕하세요"]) {
+  for (const t of ["네, 알겠습니다.", "대출은 안 해봤어요.", "안해본 거라 잘 몰라요.", "제 번호는 어떻게 아셨어요?", "그건 못 해봤어요.", "OO은행 쓰고 있어요.", "얼마 보내면 돼요?", "안녕하세요"]) {
     assert.equal(HOSTILE_PARTICIPANT.test(t), false, t);
   }
-  for (const t of ["사기 치지 마", "보이스피싱 같은데요", "경찰에 확인해 볼게요", "못 믿겠어요", "안 알려 줄 거예요", "안 해요", "싫어요", "내가 왜 알려 줘야 돼?", "너 누구야", "누구한테 전화했는데?", "그만해요"]) {
+  for (const t of ["사기 치지 마", "보이스피싱 같은데요", "경찰에 확인해 볼게요", "못 믿겠어요", "안 알려 줄 거예요", "안 해요", "싫어요", "내가 왜 알려 줘야 돼?", "너 누구야", "누구한테 전화했는데?", "그만해요", "개인정보는 못 알려 드려요.", "안 한다고요. 이제 끊을게요.", "그쪽이 누군지 어떻게 믿어요?"]) {
     assert.ok(HOSTILE_PARTICIPANT.test(t), t);
   }
   assert.equal(decideRepeatBreak(LOOPING_SCAMMER, "돈 없어. 사기 치지 마", HOSTILE_USER[0]), "exhausted");
