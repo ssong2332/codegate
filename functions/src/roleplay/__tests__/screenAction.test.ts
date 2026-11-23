@@ -171,7 +171,10 @@ test("[배선] 호출부 6곳 같은 술어 · 폴백 SA가 확인 결과 · 송
   const send = read("roleplay/index.ts");
   assert.ok(send.includes("const confirmPlan =\n      !screenPlan &&"), "말로만 주장한 턴엔 확인 결과 신호 0");
   // N1 — 요구액보다 적게 보냈으면 받은 것으로 치지 않는다 · R1 등 — 상태 줄에 재촉 단계 맥락을 넘긴다.
-  assert.ok(send.includes('userReportedTransfer(storedHistory, maskedUserText) && !transferScreenPending && latestTransferAmount(screenFacts) !== "less",'));
+  // 2026-11-24 판정표 TR1 — 이체 화면 마침 기록도 받은 것으로 친다(personaConsistency.test.ts).
+  assert.ok(send.includes('(userReportedTransfer(storedHistory, maskedUserText) || screenFacts.some((f) => f.kind === "transfer" && f.done)) &&
+        !transferScreenPending &&
+        latestTransferAmount(screenFacts) !== "less",'));
   assert.ok(send.indexOf("buildScreenStatusLine(screenApplies, screenFacts, {") < send.indexOf("confirmPlan?.instruction,\n        escalatedCallInstruction,"));
   assert.ok(send.includes("...(installPending !== undefined ? { installPendingSince: installPending } : {}),"));
   const live = read("inCallSms/index.ts");

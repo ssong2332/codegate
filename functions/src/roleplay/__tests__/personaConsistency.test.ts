@@ -153,9 +153,9 @@ test("[VS] 확인 창구 오퍼가 시작만 돼도 실시간 화면 상태 줄(
 });
 
 // ── 항목 10 ───────────────────────────────────────────────────────
-test("[항목 10] 평판 협박 송금 요구 — 문자가 도착하기 전에는 '보냈다'고 말하지 않게(종전 '문자로 보낸 것을 확인하게')", () => {
+test("[항목 10] 평판 협박 송금 요구 — 문자가 도착하기 전에는 '보냈다'고 말하지 않게(계좌 문자 확인 절은 유지)", () => {
   const demand = SCENARIO_PROMPTS["reputation-blackmail-scam"]!.weakenedTactics.find((t) => extractTacticLabel(t) === "입막음 송금 요구")!;
-  assert.equal(demand.includes("문자로 보낸 것을 확인하게"), false);
-  assert.match(demand, /이미 보냈다고 말하지 않는다/);
+  assert.ok(demand.includes("문자로 보낸 것을 확인하게"), "2026-10-17 계좌 문자 절(음성 계좌 금지) 유지");
+  assert.match(demand, /문자가 실제로 도착했다는 안내를 받기 전에는 '계좌는 문자로 보내 드리겠습니다'처럼 보낼 것이라고만 말하고 이미 보냈다고 말하지 않는다/);
   assert.ok(demand.includes("'조용히 정리하시려면 300만 원을 오늘 안에 보내세요'"), "수법 인용구(리포트 키) 무변경");
 });
