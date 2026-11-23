@@ -582,8 +582,13 @@ const GOLD_DECISION_MOMENT = "문자 속 링크의 거래소 화면에서 예금
 // ③ 현금 상환 수거형 — 근거 경향신문 2026-01-06(대구 중부경찰서 · 저축은행 상담원 사칭 → 연체금 대환 제안 → 현금 1,800만 원 대면 수거) · C02(기존 대출을 현금 상환하면 직원이 처리).
 const LOAN_DEPOSIT_DEMAND =
   "예치금 입금 요구 — '정부지원 대출 대상이신데 신용점수가 기준에 조금 못 미칩니다, 예치금을 넣어 거래 실적을 만드시면 점수가 올라 바로 승인되고 예치금은 대출과 함께 돌려드립니다' 처럼 승인 조건을 이유로 문자로 보낸 계좌에 예치금을 넣게 한다 — 그 문자 속 링크의 이체 화면에서 보내게 하고, 은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다. 실제 기관 · 금융사 이름은 쓰지 않는다.";
+// ⭐ 2026-11-24(페르소나 점검 N1 · 묶음 ①) — 현금 상환형(fv-r4hc) 결말을 말 약속("예금을 현금으로 찾아 직원에게 직접 상환")에서 앱 안 출금 예약 화면
+// (`loan-cash-withdraw`)으로 바꿨다(기관 · 자산 보호 현금형 `INSTITUTION_CASH_DEPOSIT_STAGE`와 같은 방식). 라벨(" — " 앞)은 종전 그대로(리포트 라벨 연속성).
+const LOAN_CASH_REPAY_STAGE = withSmsFirst(
+  "문자 보내기 도구로 상환금 출금 예약 안내 문자를 보낸 뒤 문자 속 링크의 은행 화면에서 기존 대출 상환금의 현금 · 수표 출금 예약을 하게 한다. 예약 화면의 금융사기 예방 문진표가 출금 목적을 물으면 생활비를 고르고, 수사기관 요구 · 통화 중 · 앱 설치를 묻는 질문에는 모두 아니라고 답하라고 시킨다. 은행 창구 · 현금인출기에서 따로 찾으라고 하지 않는다. 상환 절차는 담당 직원이 따로 연락드려 안내한다고만 하고 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 더 조르지 않고 마무리한다. 은행 화면에서 예약한 기록이 오기 전에는 원하던 것을 얻은 것처럼 통화를 끝내지 않는다.",
+);
 const LOAN_CASH_REPAY_DEMAND =
-  "현금 상환 인출 요구 — '기존 대출을 먼저 갚으셔야 대환이 되는데, 계좌로 보내시면 전산에 중도상환 기록이 남아 심사가 늦어집니다, 현금으로 찾아 저희 직원에게 직접 상환하시면 바로 처리됩니다' 처럼 기록 · 속도를 이유로 현금 인출과 직원 전달을 약속하게 한다. 만날 곳 · 시간은 정하지 않는다.";
+  "현금 상환 인출 요구 — '기존 대출을 먼저 갚으셔야 대환이 되는데, 계좌로 보내시면 전산에 중도상환 기록이 남아 심사가 늦어집니다, 문자로 보내 드린 은행 화면에서 상환금 출금 예약만 해 두시면 상환 담당 직원이 따로 연락드립니다' 처럼 기록 · 속도를 이유로 문자 속 은행 화면에서 상환금 출금을 예약하게 한다. 예약 화면은 문자로 보낸 것을 확인하게 하고, 은행 이름을 지어내 말하지 않고, 은행 창구 · 현금인출기에 가라고 하지 않고, 만날 곳 · 시간은 정하지 않는다.";
 
 // 직접 확인 은행 사칭 고급 — 새 루트 0. 후보였던 ② 새 휴대폰 개통 지시(경찰청 2024-07-23)는 AC-102 (e) "고립 상세(기기 마련)"에 걸리고(셀프 감금의
 // 안전폰과 같은 형식 — `flowVariants.test.ts` AC102 규칙), ③ 112 신고 가로채기는 원문 미확인이라 넣지 않았다(D-7).
@@ -668,6 +673,17 @@ const ASSET_PROTECTION_STAGES_HEAD = [
   "본인 확인 뒤 계좌번호보다 거래 은행과 자산 규모부터 묻는다.",
   "비공개 진행을 강조하고, 은행에서 이유를 물으면 그럴듯한 개인 용도로 둘러대라고 일러 준다. 구체적인 문장은 만들어 주지 않는다.",
 ] as const;
+// ⭐ 2026-11-24(페르소나 점검 N4 · fv-k9ra S5 "은행에서 돈을 찾는 이유를 물어보면, 개인 용도로 둘러대시면 됩니다") — 위 3단계는 실제 은행 창구 인출을
+// 전제한 코칭이다(현행 결말은 앱 안 화면 — 출금 예약 · 공탁금 이체 · 금 거래소). 은퇴 fv-bmiq 바이트는 그대로 두고 현행 3변형(fv-k9ra · fv-p3jx · fv-t8ga)만
+// 이 머리를 쓴다. 문진표 둘러대기 코칭은 결말 단계(앱 안 화면)가 맡는다.
+const ASSET_PROTECTION_STAGES_HEAD_IN_APP = [
+  ASSET_PROTECTION_STAGES_HEAD[0],
+  ASSET_PROTECTION_STAGES_HEAD[1],
+  "비공개 진행을 강조하고, 가족 · 지인에게도 알리지 말라고 당부한다. 은행에 가서 무엇이라 둘러대라는 말은 하지 않는다.",
+] as const;
+// 같은 까닭 — 원본 수법 "비밀 유지 요구"(`assetProtectionNoticeCall.prompt.ts`)의 은행 둘러대기 꼬리를 현행 3변형에서만 뺀다(라벨 그대로 · 원본 · 은퇴 변형 무변경).
+const ASSET_SECRECY_IN_APP =
+  "비밀 유지 요구 — '비공개로 진행되는 건이라 가족에게도 말씀하시면 안 됩니다' 처럼 주변에 알리지 못하게 한다. 은행에 가서 무엇이라 둘러대라는 말은 하지 않는다.";
 const ASSET_PROTECTION_HANDOFF_STAGE =
   "보관 조치 절차를 설명하며 돈을 찾아 담당 직원에게 맡기겠다는 약속을 받아 내려 한다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다.";
 const ASSET_PROTECTION_DECISION_MOMENT = "인출 · 전달 약속에 동의하는 순간";
@@ -1553,7 +1569,7 @@ const SPECS: VariantSpec[] = [
       "상대 대출 이력을 이미 아는 듯 연체 정리를 돕는 대환 안내라고 말한다. 상대가 말하지 않은 이름 · 금액은 지어내 단정하지 않는다.",
       withSmsFirst("대출 심사 전에 보안 점검 앱을 설치하라고 요구한다."),
       "기존 대출을 먼저 갚아야 대환이 되는데 계좌로 보내면 중도상환 기록이 남아 심사가 늦어진다며, 현금으로 직접 상환해야 하는 이유부터 설명한다.",
-      `예금을 현금으로 찾아 회사 직원에게 직접 상환하겠다는 약속을 받아 내려 한다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 더 조르지 않고 마무리한다. ${VERBAL_ENDING_WRAP}`,
+      LOAN_CASH_REPAY_STAGE,
     ),
     keepLabels: ["권위·정당성 포장", "이익 유혹", "마감 압박", "절차·서류 정당화", "확인 차단", "전화 끊음 저지"],
     extraTactics: [
@@ -1562,11 +1578,13 @@ const SPECS: VariantSpec[] = [
       LOAN_APP_INSTALL_VIA_SMS,
       LOAN_CASH_REPAY_DEMAND,
     ],
-    sms: [{ purpose: "link", smsId: "loan-check-app-link", required: true, notBeforeUserTurns: 2, ...FAST_BACKSTOP }],
+    sms: [
+      { purpose: "link", smsId: "loan-check-app-link", required: true, notBeforeUserTurns: 2, ...FAST_BACKSTOP },
+      // 2026-11-24(페르소나 점검 N1) — 설치 화면 뒤 출금 예약 안내 문자(결정 화면 = `loan-cash-withdraw` · 끊기 4-c). 종전 후속 단계 값(C-5) 6은 뺐다.
+      { purpose: "transfer", smsId: "loan-cash-reserve", required: true, notBeforeUserTurns: 5, ...FAST_BACKSTOP },
+    ],
     channels: ["voice", "sms"],
-    decisionMoment: "기존 대출을 현금으로 찾아 직원에게 상환하겠다고 약속하는 순간",
-    // §124 실측(2026-10-23 · 순응) — 설치 문자(2단계)가 발화 4에 도착하고 4발화 뒤 끊겨 현금 상환 단계(4단계)에 닿지 못했다. 설치 문자부터 결말까지 두 단계가 남아 6.
-    goalFollowUpUserTurns: 6,
+    decisionMoment: "문자 속 링크의 은행 화면에서 기존 대출 상환금 현금 · 수표 출금 예약을 마치는 순간",
     sources: ["S37", "C02"],
   },
 
@@ -1993,7 +2011,8 @@ const SPECS: VariantSpec[] = [
       "폰 액정이 깨졌다고 한다.",
       "보험 처리에 앱 설치가 필요하다며 설치를 부탁한다.",
       "보험 접수에 신분증 사진이 필요하다고 한다.",
-      "급한 돈 송금을 부탁한다.",
+      // 2026-11-24(페르소나 점검 N4 · S7 "지금 바로 은행 앱 열어서 … 이체해 줘") — 송금 화면 링크에서 보내게 한다.
+      "급한 돈 송금을 부탁하고, 계좌를 알려 주는 메시지에 송금 화면 링크를 함께 보내 그 화면에서 보내 달라고 한다. 은행 앱을 열어 보내라고 하지 않는다.",
     ),
     extraTactics: [
       // §110.2(실기 신고 10) — 이름만 대던 설치 요구를 링크 마커로(누르면 모의 설치 화면). 실존 앱 이름 · 마켓 주소 · URL 0.
@@ -2284,13 +2303,13 @@ const SPECS: VariantSpec[] = [
     level: "advanced",
     authoring: "authored",
     stages: st(
-      ...ASSET_PROTECTION_STAGES_HEAD,
+      ...ASSET_PROTECTION_STAGES_HEAD_IN_APP,
       // 2026-11-07(사용자 결정 D-G1 · D-G2 E1-b) — 보관 신청서 뒤 앱 안 출금 예약 화면 결말(종전 "돈을 찾아 담당 직원에게 맡기겠다는 약속" 대신).
       withSmsFirst("보관 조치 절차라며 문자로 보낸 링크에서 보관 신청서를 먼저 작성하게 한다."),
       ASSET_CASH_STAGE,
     ),
-    dropLabels: ["절차·서류 정당화", "인출·전달 요구"],
-    extraTactics: [ASSET_CUSTODY_PROCEDURE_TACTIC, ASSET_CASH_DEMAND],
+    dropLabels: ["절차·서류 정당화", "인출·전달 요구", "비밀 유지 요구"],
+    extraTactics: [ASSET_CUSTODY_PROCEDURE_TACTIC, ASSET_CASH_DEMAND, ASSET_SECRECY_IN_APP],
     exitBlock: ["D2_secrecy", "D4_procedural_legitimacy"],
     sms: [
       { purpose: "link", smsId: "asset-custody-link", required: true, notBeforeUserTurns: 3 },
@@ -2312,11 +2331,11 @@ const SPECS: VariantSpec[] = [
     authoring: "authored",
     stages: st(
       `${ASSET_PROTECTION_STAGES_HEAD[0]} ${INVESTIGATION_CARD_USE}`,
-      ...ASSET_PROTECTION_STAGES_HEAD.slice(1),
+      ...ASSET_PROTECTION_STAGES_HEAD_IN_APP.slice(1),
       withSmsFirst(`정식 수사로 넘어가면 계좌가 전부 묶이니 약식으로 처리하려면 공탁금 500만 원을 먼저 넣어 둬야 하고 수사가 끝나면 전액 돌려준다고 이유부터 설명한 뒤, 문자로 보낸 계좌에 공탁금을 문자 속 링크의 이체 화면에서 넣으라고 요구한다. 상대가 거절하거나 망설이면 더 조르지 않고 마무리한다. ${VERBAL_ENDING_WRAP}`),
     ),
-    dropLabels: ["인출·전달 요구"],
-    extraTactics: [ASSET_DEPOSIT_DEMAND],
+    dropLabels: ["인출·전달 요구", "비밀 유지 요구"],
+    extraTactics: [ASSET_DEPOSIT_DEMAND, ASSET_SECRECY_IN_APP],
     exitBlock: ["D2_secrecy", "D4_procedural_legitimacy"],
     sms: [{ purpose: "transfer", smsId: "asset-deposit-account", required: true, notBeforeUserTurns: 4, ...FAST_BACKSTOP }],
     legs: [{ callerLabel: "금융감독원 직원", personaPrompt: ASSET_DEPOSIT_PERSONA, speakerGender: "male", minUserTurns: 0, maxUserTurns: 20 }],
@@ -2333,13 +2352,13 @@ const SPECS: VariantSpec[] = [
     authoring: "authored",
     stages: st(
       `${ASSET_PROTECTION_STAGES_HEAD[0]} ${INVESTIGATION_CARD_USE}`,
-      ...ASSET_PROTECTION_STAGES_HEAD.slice(1),
+      ...ASSET_PROTECTION_STAGES_HEAD_IN_APP.slice(1),
       withSmsFirst("보관 조치 절차라며 문자로 보낸 링크에서 보관 신청서를 먼저 작성하게 한다."),
       // 2026-11-07(사용자 결정 D-G1) — 기관 고급 금형과 같은 앱 안 거래소 화면 결말(말로 끝나는 꼬리 제거).
       INSTITUTION_GOLD_STAGE.replace("인증번호 단계가 끝나면 ", "신청서 단계가 끝나면 "),
     ),
-    dropLabels: ["절차·서류 정당화", "인출·전달 요구"],
-    extraTactics: [ASSET_CUSTODY_PROCEDURE_TACTIC, INSTITUTION_GOLD_DEMAND],
+    dropLabels: ["절차·서류 정당화", "인출·전달 요구", "비밀 유지 요구"],
+    extraTactics: [ASSET_CUSTODY_PROCEDURE_TACTIC, INSTITUTION_GOLD_DEMAND, ASSET_SECRECY_IN_APP],
     exitBlock: ["D2_secrecy", "D4_procedural_legitimacy"],
     sms: [
       { purpose: "link", smsId: "asset-custody-link", required: true, notBeforeUserTurns: 3, ...FAST_BACKSTOP },

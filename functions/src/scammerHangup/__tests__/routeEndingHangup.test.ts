@@ -119,10 +119,10 @@ test("[§127 로그 재현] 243a51df — 할 일을 마친 뒤 6행에 막히면
 // 앱 안 금 거래소 화면 결말이 되어 뺐다(7 → 5 — 약속만으로 끝나지 않는다 · 결정 화면 4-c). 같은 날(사용자 결정 D-G2 E1-b) 현금 예탁형 fv-q7cn도
 // 앱 안 출금 예약 화면 결말이 되어 뺐다(5 → 4).
 test("[§127] 말로 끝나는 결말 4벌(1a 2 + 1b 2) — 약속하면 되풀이 없이 마무리 · 통화를 끝낸다 줄을 갖는다", () => {
-  for (const id of ["fv-g2ld", "fv-t8ga", "fv-q7cn"]) {
+  for (const id of ["fv-g2ld", "fv-t8ga", "fv-q7cn", "fv-r4hc"]) {
     assert.equal(findFlowVariant(id)!.stages.some((s) => /같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary)), false, `${id}: 앱 안 화면 결말`);
   }
-  for (const id of ["fv-r4hc", "fv-e5mv", "fv-a6lq", "fv-p3jx"]) {
+  for (const id of ["fv-e5mv", "fv-a6lq", "fv-p3jx"]) {
     const v = findFlowVariant(id)!;
     const hits = v.stages.filter((s) => /같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary));
     assert.equal(hits.length, 1, `${id}: 마무리 줄 1번`);

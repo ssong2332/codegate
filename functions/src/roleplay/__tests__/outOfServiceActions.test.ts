@@ -247,7 +247,9 @@ const ROUTE_LEDGER: Readonly<Record<string, number>> = {
   // 같은 날(사용자 결정 D-G2 E1-b) — 현금 예탁형 fv-q7cn이 앱 안 출금 예약 화면으로 바뀌어 "은행 직원이 이유를 물으면 개인 용도" 코칭 1문장이 빠졌다(J11 5 → 4 —
   // 문진표 코칭으로 대체). 새 출금 예약 문면은 J2 패턴(현금으로 찾 · 인출)에 걸리지 않아 J2는 그대로(7).
   "functions/src/scenarios/flowVariants.ts#J11_COVER_STORY": 4, // P5
-  "functions/src/scenarios/flowVariants.ts#J2_CASH": 7, // P5
+  // ⭐ 2026-11-24(페르소나 점검 N1 · 묶음 ①) — 대환대출 고급 현금 상환형 fv-r4hc가 앱 안 출금 예약 화면(`loan-cash-withdraw`)으로 바뀌어 "예금을 현금으로 찾아"
+  // 단계 · 수법 · 결정 순간 3문장이 빠졌다(7 → 4). 새 출금 예약 문면은 J2 패턴에 걸리지 않는다.
+  "functions/src/scenarios/flowVariants.ts#J2_CASH": 4, // P5
   // 2026-11-07(Edge 시험 판 12 · 사용자 결정 "앱 안 화면 추가") — 검찰 상품권형 fv-v2mk의 상품권 문면은 이제 앱 안 구매 화면(`voucher-purchase`)을 가리킨다
   // (문자 속 구매 화면에서 사고 화면에 뜬 핀을 불러 달라 — J12 통화 안 말 요구 · O4). 패턴은 표기만 봐서 계속 센다(5 → 6 · 문자 · 화면 · 화면 문구 · 결제 뒤 지시 새 항목).
   "functions/src/scenarios/flowVariants.ts#J4_VOUCHER": 6, // O4 확인(상품권 구매 화면 안)

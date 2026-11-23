@@ -1072,6 +1072,19 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     issuerLabel: "ⓒ 모바일뱅킹 출금 예약 · 보관",
     mockHost: "custody-reserve.invalid",
   },
+  // ⭐ 2026-11-24(페르소나 점검 N1) — 대환대출 고급 현금 상환형(fv-r4hc) 출금 예약 화면(서버 카탈로그 mockScreens.ts와 글자 단위로 동일).
+  "loan-cash-withdraw": {
+    headline: "기존 대출 상환금 현금 · 수표 출금 예약",
+    bodyLines: ["예약하신 상환금은 고르신 형태로 미리 준비해 드립니다."],
+    fields: [
+      { label: "상환할 금액", placeholder: "상환할 금액을 입력하세요", inputMode: "numeric", amount: true },
+      { label: "받으실 형태", placeholder: "형태를 고르세요" },
+    ],
+    submitLabel: "상환금 출금 예약하기",
+    successHeadline: "상환금 출금 예약이 접수되었습니다.",
+    issuerLabel: "ⓒ 모바일뱅킹 출금 예약 · 상환",
+    mockHost: "repay-reserve.invalid",
+  },
   // ⭐ P2-d(X6) — 환급 처리 수수료 이체 화면(서버 카탈로그 mockScreens.ts와 글자 단위로 동일).
   "tax-refund-fee-transfer": {
     headline: "수수료 이체 정보를 확인해 주세요",
@@ -1123,7 +1136,7 @@ const VOUCHER_LANDINGS: readonly string[] = ["voucher-purchase"];
 const GOLD_LANDINGS: readonly string[] = ["gold-buy", "asset-gold-buy"];
 
 /** ⭐ 2026-11-07(사용자 결정 D-G2 E1-b) — 출금 예약 화면 landingId(서버 `mockScreens.ts` `CASH_LANDINGS`와 같은 목록 — `mockScreenCopy.test.ts`). 정확 일치만(R8). */
-const CASH_LANDINGS: readonly string[] = ["cash-withdraw", "asset-cash-withdraw"];
+const CASH_LANDINGS: readonly string[] = ["cash-withdraw", "asset-cash-withdraw", "loan-cash-withdraw"];
 
 /** S2(실기기 확인 2026-11-01) — 대화방 링크 카드가 이체 화면 칩인가(그림 자리 없는 송금 카드로 그린다 · 정확 일치). */
 export function isBankTransferLandingId(landingId: string): boolean {
