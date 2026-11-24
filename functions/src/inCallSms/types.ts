@@ -29,6 +29,11 @@ export type DeliverInCallSmsRequest = {
    */
   smsClaimedPurposes?: string[];
   /**
+   * ⭐ 2026-11-23 판정표 BL3′(`session/cardBalanceFit.ts`) — 참가자가 통화에서 말한 통장 잔액(원 · 화면 판정표 S4 ~ S9 · S14 — '돈 없다'는 싣지 않는다).
+   * 카드 잔액이 없을 때 잔액형 문자 금액을 이 값에 맞춘다. 서버 검증 = 정수 · 1만 ~ 10억 원 · 만 원 단위 내림(밖 = 없음 · 종전 금액).
+   */
+  spokenBalanceWon?: number;
+  /**
    * @deprecated 이 계약 이전 클라(캐시된 화면)가 보내는 값. 서버는 **읽지 않는다** — `userTurns`가 없는 요청은
    * 문자를 보내지 않고 `not_allowed`로 응답한다(옛 화면은 그 응답에 오류를 띄우지 않는다).
    */

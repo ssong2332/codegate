@@ -15,7 +15,7 @@
 // |---|---|---|
 // | W1 | 빈 칸 · 숫자 아님 · 0 | `amountError` 안내(이 모듈 밖) |
 // | W2 | 1회 1,000만 원 초과 | `transferLimitError` 안내(이 모듈 밖) |
-// | W3 | 고른 계좌의 출금 가능 금액(잔액 − 이 세션에서 그 계좌로 보낸 합계) 초과 | "출금 가능 금액보다 많습니다." |
+// | W3 | 고른 계좌의 출금 가능 금액(잔액 − 이 세션에서 그 계좌로 보낸 합계) 초과 | "잔액이 부족합니다. 출금 가능 금액은 {N}원입니다."(⭐ 2026-11-23 판정표 Z — 종전 "출금 가능 금액보다 많습니다.") |
 // | W4 | 오늘 보낸 합계 + 이번 금액 > 1일 5,000만 원 | 1일 한도 안내 + 남은 한도 |
 // | W5 | 그 밖 | 통과(undefined) |
 //
@@ -80,16 +80,23 @@ export function withdrawAccountsFor(input: {
   avoidBankName?: string;
   /** 판정표 C1 — 첫 계좌 하나만(다른 은행 계좌 숨김). 부재 = C2(종전 3개). */
   single?: boolean;
+  /** 판정표 Z5 — 이 화면의 요구액("9,800,000" 꼴 · 부재 = 종전). 다른 은행 계좌 잔액을 요구액의 25% · 15% 이하로 자른다. */
+  demand?: string;
 }): WithdrawAccount[] {
-  const { seed, appBankName, primaryBalance, avoidBankName, single } = input;
+  const { seed, appBankName, primaryBalance, avoidBankName, single, demand } = input;
   const others: string[] = [];
   const start = hash(`other-banks:${seed}`) % BANKS.length;
   for (let i = 0; i < BANKS.length && others.length < 2; i += 1) {
     const name = BANKS[(start + i) % BANKS.length]!;
     if (name !== appBankName && name !== avoidBankName) others.push(name);
   }
-  // 다른 은행 잔액: 1번 = 200만 ~ 900만 · 2번 = 30만 ~ 400만(10만 원 단위) — 첫 계좌(1,000만 이상)보다 늘 적다.
-  const otherBalance = (key: string, min: number, max: number) => (min + (hash(`${key}:${seed}`) % (max - min + 1))) * 100_000;
+  // 다른 은행 잔액: 1번 = 200만 ~ 900만 · 2번 = 30만 ~ 400만(10만 원 단위) (판정표 Z5 — 요구액이 있으면 그 25% · 15% 이하로 자른다).
+  const demandWon = demand !== undefined ? amountValue(demand) : undefined;
+  // 첫 계좌보다 늘 적게(첫 계좌의 60% · 30% 이하 — 고정 값이 100만 ~ 500만 원으로 내려간 뒤에도 종전 성질 유지).
+  const otherBalance = (key: string, min: number, max: number, share: number, mainShare: number) => {
+    const value = Math.min((min + (hash(`${key}:${seed}`) % (max - min + 1))) * 100_000, manwonFloor(primaryBalance * mainShare));
+    return demandWon === undefined ? value : Math.min(value, manwonFloor(demandWon * share)); // Z5
+  };
   const all: WithdrawAccount[] = [
     { id: "main", bankName: appBankName, productName: "입출금통장", maskedNumber: maskedNumberFor(seed, "main"), balance: primaryBalance, own: true },
     {
@@ -97,7 +104,7 @@ export function withdrawAccountsFor(input: {
       bankName: others[0] ?? appBankName,
       productName: "입출금통장",
       maskedNumber: maskedNumberFor(seed, "other-1"),
-      balance: otherBalance("other-1", 20, 90),
+      balance: otherBalance("other-1", 20, 90, 0.25, 0.6),
       own: false,
     },
     {
@@ -105,7 +112,7 @@ export function withdrawAccountsFor(input: {
       bankName: others[1] ?? appBankName,
       productName: "급여통장",
       maskedNumber: maskedNumberFor(seed, "other-2"),
-      balance: otherBalance("other-2", 3, 40),
+      balance: otherBalance("other-2", 3, 40, 0.15, 0.3),
       own: false,
     },
   ];
@@ -240,7 +247,31 @@ export function myBankAppName(bankName: string, suffix: string = MY_BANK_NEUTRAL
 /** 시작 전 카드에 넣은 거래 은행 · 잔액(둘 다 선택). */
 export type CardAccount = { bankName?: string; balance?: number };
 /** 통화에서 말한 값(`bankApp.ts` `SpokenAccount`와 같은 모양 — 잎 모듈이라 타입만 다시 둔다). `realBankName` = 표 R이 알아본 표기(A3a). */
-export type SpokenAccountValues = { bankName?: string; balance?: number; realBank?: true; realBankName?: string };
+export type SpokenAccountValues = { bankName?: string; balance?: number; realBank?: true; realBankName?: string; noMoney?: true };
+
+// ── ⭐ 2026-11-23 사용자 결정 1b · 2b(실기 — 검찰 고급 980만 원 요구를 참가자가 말한 적 없는 잔액으로 그대로 보냄 · *"없는데 보내라면 보내지는 거야? 아니잖아."*) ──
+// 판정표 Z — 첫 계좌 잔액(판정표 A5 ~ A7을 대신한다 · 앞 행이 먼저). 이체 · 결제 화면은 판정표 W3(잔액 부족)로 막는다.
+// | # | If | Then |
+// |---|---|---|
+// | Z1 | 카드 잔액 있음 | 잔액 = 카드 잔액(종전 A5) |
+// | Z2 | 통화에서 말한 잔액 금액 있음(판정표 S4 ~ S9 · S14) | 잔액 = 말한 잔액(종전 A6) |
+// | Z3 | 마지막으로 '돈이 없다'고 말함(판정표 S13 `noMoney`) | 잔액 = 0(어떤 금액도 W3 '잔액 부족') · C1(계좌 하나) |
+// | Z4 | 그 밖(잔액을 모른다) ∧ 화면에 요구액 있음 | 잔액 = min(고정 값 100만 ~ 500만 원, 요구액의 50% 만 원 내림) — 요구액을 늘 채우지 못한다 |
+// | Z4′ | 그 밖 ∧ 요구액 없음(금 · 출금 예약 · 상품권 · 대출 화면) | 잔액 = 고정 값 100만 ~ 500만 원(`fictionalBalanceFor` · 종전 1,000만 ~ 3,000만) |
+// | Z5 | Z4 · Z4′ ∧ C2(계좌 3개) ∧ 요구액 있음 | 다른 은행 계좌 = min(종전, 요구액 25% · 15%) — 세 계좌를 다 합쳐도 요구액의 90% 이하 |
+// | Z6 | 대출금 보관 이체(`loan-safe-transfer`) | 요구액을 넘기지 않는다(Z4′) — 입금된 대출금이 출금 가능 금액에 더해져 그 금액은 보낼 수 있다(종전 PR-B) |
+// 서버 쪽(판정표 BL3′ — `functions/src/session/cardBalanceFit.ts`): Z2 잔액은 문자 발송 요청에 실려 잔액형 문자 금액을 그 잔액에 맞춘다(카드 잔액이 먼저).
+
+/** 만 원 단위 내림(1만 원 미만 = 0). */
+function manwonFloor(won: number): number {
+  return Math.floor(won / 10_000) * 10_000;
+}
+
+/** 판정표 Z4 — 잔액을 모를 때 요구액("9,800,000")보다 적은 잔액. 요구액 없음 · 판정 불가 = 고정 값 그대로(Z4′). */
+export function belowDemandBalance(fixedBalance: number, demand: string | undefined): number {
+  const demandWon = demand !== undefined ? amountValue(demand) : undefined;
+  return demandWon === undefined ? fixedBalance : Math.min(fixedBalance, manwonFloor(demandWon * 0.5));
+}
 
 /** A5 · S8과 같은 잔액 범위(1만 원 ~ 10억 원). */
 export const MY_ACCOUNT_BALANCE_MIN = 10_000;
@@ -264,8 +295,10 @@ export function resolveMyAccount(input: {
   spoken?: SpokenAccountValues;
   fixedBankName: string;
   fixedBalance: number;
+  /** 판정표 Z4 — 이 화면의 요구액(부재 = Z4′). */
+  demand?: string;
 }): MyAccount {
-  const { card, spoken, fixedBankName, fixedBalance } = input;
+  const { card, spoken, fixedBankName, fixedBalance, demand } = input;
   const cardBank = card?.bankName && isCardBankName(card.bankName) ? card.bankName : undefined; // A1′
   const spokenBank =
     spoken?.bankName && BANKS.includes(spoken.bankName)
@@ -277,8 +310,9 @@ export function resolveMyAccount(input: {
   const cardBalance = validBalance(card?.balance); // A5
   const spokenBalance = validBalance(spoken?.balance); // A6
   const bankName = cardBank ?? spokenBank ?? namelessBank ?? fixedBankName; // A4
-  const balance = cardBalance ?? spokenBalance ?? fixedBalance; // A7
-  const single = [cardBank, spokenBank, namelessBank, cardBalance, spokenBalance].some((value) => value !== undefined); // C1 · C2
+  const noMoney = cardBalance === undefined && spokenBalance === undefined && spoken?.noMoney === true ? 0 : undefined; // Z3
+  const balance = cardBalance ?? spokenBalance ?? noMoney ?? belowDemandBalance(fixedBalance, demand); // Z1 · Z2 · Z3 · Z4 · Z4′
+  const single = [cardBank, spokenBank, namelessBank, cardBalance, spokenBalance, noMoney].some((value) => value !== undefined); // C1 · C2
   return { bankName, balance, single };
 }
 
@@ -338,7 +372,8 @@ export function remainingDailyLimit(ledgerKey: string): number {
 export function withdrawError(ledgerKey: string, account: Pick<WithdrawAccount, "id" | "balance">, raw: string): string | undefined {
   const value = amountValue(raw);
   if (value === undefined) return undefined;
-  if (value > availableBalance(ledgerKey, account)) return "출금 가능 금액보다 많습니다."; // W3
+  const available = availableBalance(ledgerKey, account);
+  if (value > available) return `잔액이 부족합니다. 출금 가능 금액은 ${won(available)}입니다.`; // W3
   const remaining = remainingDailyLimit(ledgerKey);
   if (value > remaining) return `1일 이체 한도(5,000만 원)를 넘었습니다. 오늘 더 보낼 수 있는 금액은 ${won(remaining)}입니다.`; // W4
   return undefined; // W5

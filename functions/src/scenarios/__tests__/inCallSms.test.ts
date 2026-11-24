@@ -16,7 +16,8 @@ import { IN_CALL_INSTALL_SCENARIOS, isInCallInstallSms } from "../mockScreens";
 import { resolveAnchor } from "../../report/smsTimeline";
 import { SCENARIO_PROMPTS } from "../index";
 
-const allItems = Object.values(IN_CALL_SMS).flat();
+// 2026-11-23 — 여러 시나리오 카탈로그가 **같은 객체**를 공유할 수 있다(앱 안 대출 화면 · 입금 안내 — `mockScreens.ts` `IN_APP_LOAN_LANDINGS` · `inCallSms.ts` `LOAN_DISBURSED_SMS`). 전역 목록은 객체 단위로 한 번만 센다.
+const allItems = [...new Set(Object.values(IN_CALL_SMS).flat())];
 /** 문서 모양 검사용 임의 앵커(값 자체는 이 검사의 대상이 아니다 — 앵커 의미는 아래 [G539 통합] 테스트가 고정). */
 const DOC_ANCHOR = 2;
 /** T104 — `buildInCallSmsDoc`이 `landingKind` 판정을 위해 scenarioId를 받는다(§19.4 #2). */

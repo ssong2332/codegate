@@ -86,7 +86,8 @@ test("[MA2] 판정표 A · C 전 행 + 역검증(우선순위 · 계좌 수를 �
   const source = read("./withdrawAccounts.ts");
   const mutations: [string, string, string][] = [
     ["말한 은행이 카드보다 먼저", "cardBank ?? spokenBank ?? namelessBank", "spokenBank ?? cardBank ?? namelessBank"],
-    ["말한 잔액이 카드보다 먼저", "cardBalance ?? spokenBalance ?? fixedBalance", "spokenBalance ?? cardBalance ?? fixedBalance"],
+    // 2026-11-23 판정표 Z — 잔액 줄 끝이 Z3 · Z4로 바뀌었다(우선순위 앞 두 칸은 그대로).
+    ["말한 잔액이 카드보다 먼저", "cardBalance ?? spokenBalance ?? noMoney", "spokenBalance ?? cardBalance ?? noMoney"],
     ["실제 은행 언급을 무시", "spoken?.realBank ? NAMELESS_BANK_NAME : undefined", "undefined"],
     ["값이 있어도 3개", ".some((value) => value !== undefined); // C1", ".some(() => false); // C1"],
   ];

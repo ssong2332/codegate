@@ -170,7 +170,7 @@ import { fixMessengerCallWording, fixPersonaIdRequest, personaAnchorInstruction,
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
-import { cardBalanceWonFrom } from "../session/cardBalanceFit";
+import { cardBalanceWonFrom, spokenBalanceWonFrom } from "../session/cardBalanceFit";
 import { applyFictionalBank, resolveFictionalBankName } from "../shared/fictionalBank";
 
 export { generateOpeningLine } from "./openingLine";
@@ -394,6 +394,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       sessionId, // §114 — 세션별 인증번호
       // 2026-11-09 판정표 BL3 — 카드 잔액이 있으면 잔액형 문자 금액을 맞춘다(부재 = 종전).
       cardBalanceWon: cardBalanceWonFrom(session.personaCard?.items),
+      // 2026-11-23 판정표 BL3′ B2 — 카드 잔액이 없으면 참가자가 말한 잔액(클라 값 · 서버 검증).
+      spokenBalanceWon: spokenBalanceWonFrom(request.data?.spokenBalanceWon),
     };
     let smsDelivered: DeliveredSmsRecord[] = [];
     let smsDeliveredLoaded = false;
@@ -764,7 +766,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     }
     const repeatBreakKind =
       turnChoice === "none" && !otpCheckInstruction && !confirmPlan?.instruction && !beginnerRetreatKind
-        ? decideRepeatBreak(storedHistory.filter((m) => m.role === "scammer").map((m) => m.textMasked), maskedUserText)
+        ? decideRepeatBreak(
+          storedHistory.filter((m) => m.role === "scammer").map((m) => m.textMasked),
+          maskedUserText,
+          // 1-c행(적대 지속) — 그 앞 참가자 발화.
+          storedHistory.filter((m) => m.role === "user").at(-1)?.textMasked,
+        )
         : null;
     if (repeatBreakKind) {
       // G170 — 판정 종류 · 턴 번호만(대사 0).

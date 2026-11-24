@@ -83,7 +83,7 @@ test("[T2] 판정표 W — 출금 가능 금액 · 1일 한도 · 보낸 만큼 
   const ledger = `w-test-${Date.now()}`;
   const [main, other] = withdrawAccountsFor({ seed: ledger, appBankName: "새솔은행", primaryBalance: 30_000_000, avoidBankName: "한결은행" });
   // W3 — 다른 은행 계좌(잔액 900만 이하)로 980만 원은 막힌다.
-  assert.equal(withdrawError(ledger, other!, "9,800,000"), "출금 가능 금액보다 많습니다.");
+  assert.match(withdrawError(ledger, other!, "9,800,000") ?? "", /^잔액이 부족합니다\. 출금 가능 금액은 [\d,]+원입니다\.$/); // 2026-11-23 W3 문구
   assert.equal(withdrawError(ledger, main!, "9,800,000"), undefined, "첫 계좌(3,000만)는 통과");
   // 판정 불가 금액은 여기서 막지 않는다(W1 · W2는 화면이 먼저).
   assert.equal(withdrawError(ledger, main!, ""), undefined);
@@ -91,7 +91,7 @@ test("[T2] 판정표 W — 출금 가능 금액 · 1일 한도 · 보낸 만큼 
   // 보낸 만큼 출금 가능 금액이 준다.
   recordWithdrawal(ledger, "main", "9,800,000");
   assert.equal(availableBalance(ledger, main!), 30_000_000 - 9_800_000);
-  assert.equal(withdrawError(ledger, main!, "20,200,001"), "출금 가능 금액보다 많습니다.");
+  assert.equal(withdrawError(ledger, main!, "20,200,001"), "잔액이 부족합니다. 출금 가능 금액은 20,200,000원입니다."); // 2026-11-23 W3 문구
   // W4 — 1일 한도(5,000만)는 계좌와 무관하게 합친다.
   const big = { id: "main" as const, balance: 100_000_000 };
   const ledger2 = `${ledger}-daily`;

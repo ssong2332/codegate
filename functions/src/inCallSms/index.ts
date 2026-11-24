@@ -44,6 +44,7 @@ import { withModelToolNoRepeat } from "./toolGuidance";
 import { findFlowVariant } from "../scenarios/flowVariants";
 import { LEG_LATER_SMS_DECLINE, LEG_TRANSFER_HANDOFF_INSTRUCTION, isLaterLegSmsPurpose, planLegHandoff } from "../callLegs/legHandoff";
 import { landingSubmittedInstructionFor, LOAN_APPLY_LANDING_ID, LOAN_APPLY_SUBMITTED_INSTRUCTION } from "./confirmResult";
+import { deliverLoanDisbursedSmsIfDue, loanDisbursedOnApply } from "../callLegs/loanReviewOrder";
 import {
   CASH_HELD_INSTRUCTION,
   CASH_RESERVED_INSTRUCTION,
@@ -72,7 +73,7 @@ export {
   textPathAnchorScammerTurn,
   resolveInCallSmsPlan,
 } from "./buildDoc";
-import { cardBalanceWonFrom } from "../session/cardBalanceFit";
+import { cardBalanceWonFrom, spokenBalanceWonFrom } from "../session/cardBalanceFit";
 import { resolveFictionalBankName } from "../shared/fictionalBank";
 
 /**
@@ -327,6 +328,8 @@ export const deliverInCallSms = onCall<
     sessionId, // §114 — 세션별 인증번호(문서 본문 · Live 대조 1줄이 같은 값)
     // 2026-11-09 판정표 BL3 — 카드 잔액이 있으면 잔액형 문자 금액을 맞춘다(부재 = 종전).
     cardBalanceWon: cardBalanceWonFrom(session.personaCard?.items),
+    // 2026-11-23 판정표 BL3′ B2 — 카드 잔액이 없으면 참가자가 말한 잔액(클라 값 · 서버 검증).
+    spokenBalanceWon: spokenBalanceWonFrom(request.data?.spokenBalanceWon),
   });
 
   // 관측(§59.11 관례 · AC-099 (h)) — 도착 · 거부 모두 그 시점의 사용자 발화 수와 함께 1줄. 거부는 Firestore 델타 0.
@@ -471,7 +474,11 @@ export const recordInCallSmsEvent = onCall<
     // §132.7 — 이체 화면 제출을 처음 기록한 순간에만 실시간 사기범용 맥락 1줄을 돌려준다(이미 기록됨 = 없음 · 중복 주입 0).
     // N1 — 요구액보다 적게 보냈으면 모자란 금액을 요구하는 문면(판정표 `landingSubmittedInstructionFor`).
     // ⭐ PR-B — 대출 신청 화면(`loan-apply`) 제출은 이체가 아니라 신청 접수 문면(판정표 L0).
-    if (event === "landing_submitted" && snap.get("fakeLandingId") === LOAN_APPLY_LANDING_ID) return { recorded: true, contextInstruction: LOAN_APPLY_SUBMITTED_INSTRUCTION };
+    if (event === "landing_submitted" && snap.get("fakeLandingId") === LOAN_APPLY_LANDING_ID) {
+      // ⭐ 2026-11-23(판정표 LD5) — 확인 전화 레그가 없는 한 통화 앱 안 대출(fv-e5mv · fv-a6lq)은 신청 즉시 입금 안내 문자가 온다(다통화 변형은 무변경 = 0).
+      await deliverLoanDisbursedSmsIfDue(db.collection("sessions").doc(sessionId), sessionId, loanDisbursedOnApply);
+      return { recorded: true, contextInstruction: LOAN_APPLY_SUBMITTED_INSTRUCTION };
+    }
     // 2026-11-08(§15.5 관찰 ③) — 화면 id를 넘긴다: 돈을 옮기지 않는 입력 화면은 이체 문면 대신 입력 제출 문면(판정표 L-F).
     if (event === "landing_submitted") return { recorded: true, contextInstruction: landingSubmittedInstructionFor(amountComparison, false, snap.get("fakeLandingId") as string | undefined) };
   } else if (event === "landing_submitted" && amountComparison !== undefined) {
