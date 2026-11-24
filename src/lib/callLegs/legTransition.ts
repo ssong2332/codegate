@@ -136,6 +136,16 @@ export function afterHangupResponse(response: { status: string } | null): "phone
  */
 export const LEG_INCOMING_CALL_DELAY_MS = 12_000;
 
+/**
+ * 2026-11-24 브라우저 A A4b(판정표 CS · 메인 결정 (a)) — 통화 사이 화면(전화 앱 · 발신 · 수신 · 진짜 안내)이 통화 셸을 덮는가.
+ * 덮였는데 셸이 `inert`가 아니면 가려진 종료 버튼이 키보드 · 스크린리더 · 스크립트로 눌려 `hangupMeaning` 4행(훈련 종료)으로 간다(추정 원인 — 서버 로그).
+ * | CS1 | `none` · `holding`(통화 화면이 보인다) | 덮지 않는다 |
+ * | CS2 | 그 밖 | 덮는다 → 셸 `inert` |
+ */
+export function legScreenCoversCallShell(kind: LegScreen["kind"]): boolean {
+  return kind !== "none" && kind !== "holding";
+}
+
 /** 통화가 끝난 직후의 화면(넘김 = 통화 화면 유지 · 직접 걸기 · 상대가 걸어 옴 = 전화 앱). */
 export function screenAfterLegEnd(exit: "dial" | "transfer" | "incoming"): LegScreen {
   return exit === "transfer" ? { kind: "holding" } : { kind: "dialer", digits: "" };

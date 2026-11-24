@@ -21,6 +21,8 @@ import {
   screenAfterLegEnd,
   labelAfterLegConnect,
   showsReconnectingNotice,
+  legScreenCoversCallShell,
+  hangupMeaning,
 } from "./legTransition.ts";
 import { splitBodyAtDialNumber } from "../incallsms/inCallSms.ts";
 import { RINGBACK_TONE } from "../messenger/voiceTalkDial.ts";
@@ -254,4 +256,15 @@ test("[11-07 수정 4] 시작 문자 세션의 벨 직전 고지 — 제목 · �
   assert.match(page, /<CallStartNotice[\s\S]*?smsStart=\{smsStart\}/);
   assert.equal((page.match(/PRE_CALL_SMS_START_NOTICE/g) ?? []).length, 0, "세션 중 화면(통화 화면)에 이 문구 0 — G437");
   assert.equal((read("src/components/CallLegScreens.tsx").match(/PRE_CALL_SMS_START_NOTICE/g) ?? []).length, 0);
+});
+
+// 2026-11-24 브라우저 A A4b(세션 32adfcb3 — 서버 로그: 사기범이 통화 2를 끊어 전화 앱으로 넘어간 뒤 그 통화 끊기 호출 0 · 18초 뒤 훈련 종료).
+// 추정 원인: 전화 앱 아래 가려진 통화 셸 종료 버튼이 inert가 아니라 키보드 · 스크린리더 · 스크립트로 눌려 `hangupMeaning` 4행(훈련 종료). 판정표 CS.
+test("[CS 재현] 통화 사이 화면이 셸을 덮으면 셸은 inert(가려진 종료 버튼 = 훈련 종료 경로 차단)", () => {
+  // 재현 — 덮인 상태에서 그 버튼이 눌리면 훈련 종료다(그래서 눌리지 않게 해야 한다).
+  assert.equal(hangupMeaning({ endLatched: false, messengerReturn: false, multiCall: true, legScreen: "dialer" }), "end_training");
+  for (const kind of ["dialer", "connecting", "incoming", "genuine"] as const) assert.equal(legScreenCoversCallShell(kind), true, kind);
+  for (const kind of ["none", "holding"] as const) assert.equal(legScreenCoversCallShell(kind), false, kind);
+  const page = read("src/app/session/play/page.tsx");
+  assert.ok(page.includes("inert={chatOpen || smsOverlayOpen || bankAppOpen || legScreenCoversCallShell(legScreen.kind) ? true : undefined}"));
 });

@@ -214,6 +214,7 @@ import {
   callDisplayNumber,
   digitsOf,
   hangupMeaning,
+  legScreenCoversCallShell,
   legCallerLabelOr,
   legOpeningTurnFor,
   pressDialKey,
@@ -3539,7 +3540,7 @@ export default function SessionCallPage() {
       {/* §130(UX D-161 (3)) — 문자함 · 대화방이 통화 화면을 덮는 동안 아래 통화 셸은 `inert`(초점 · 스크린리더 대상 밖). 셸은 그대로
           마운트돼 있어 통화 · 타이머는 이어진다(G10 — 속성만 바뀐다). 확인 시트(UX-031)는 비모달이라 대상이 아니다. */}
       <div
-        inert={chatOpen || smsOverlayOpen || bankAppOpen ? true : undefined}
+        inert={chatOpen || smsOverlayOpen || bankAppOpen || legScreenCoversCallShell(legScreen.kind) ? true : undefined}
         className={`mx-auto flex w-full max-w-[430px] flex-col ${showTextInput ? "h-dvh flex-none" : "min-h-dvh flex-1"} ${callExtras ? "relative" : ""}`}
         style={{
           // §89.5 ⓑ — 수신 벨은 흐린 그라데이션 바탕(그 밖 phase는 단색 — 종전).

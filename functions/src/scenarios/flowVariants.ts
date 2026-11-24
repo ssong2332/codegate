@@ -791,6 +791,9 @@ const PROSECUTION_VOUCHER_SMS: FlowVariantSms = {
   smsId: "prosecution-voucher-link",
   required: true,
   notBeforeUserTurns: 5,
+  // 2026-11-24 브라우저 A A7(판정표 F1 — 인증번호 문자 `INSTITUTION_OTP_V2`와 같은 값) — 흐름이 발화 4에 구매 단계에 이르러 사기범이 "보내 드린 구매 링크"라고 했는데
+  // 모델 도구가 하한 5에 막혀 문자가 한 발화 늦었다. 명시 요청(도구 · "보냈다" 주장)만 3, 자동 백스톱은 5 그대로.
+  explicitNotBeforeUserTurns: 3,
   backstopUserTurns: 1,
 };
 // 검찰 고급 ③ 대출금 전달형 — 근거 전북일보 2025-08-21(검사 · 금감원 사칭 → 대출 실행 → 대출금 현금 전달 직전 저지 · S40) · C07(교사 · 6,000만 원 대출 지시)
@@ -954,6 +957,9 @@ const tacticLabelOf = (tactic: string) => extractTacticLabel(tactic);
 // 세 번 그대로 되풀이했다. '신청했다' 갈래에 반박 대응 규칙을 붙인다(대사 판정은 정규식이 아니라 이 지시문 — 모델 몫).
 const CARD_APPLIED_REBUTTAL_RULE =
   "상대가 구체적으로 반박하면(예: '두 장 신청했다' · '이미 받았다') 그 말을 받아들여 답을 그 내용에 맞게 바꾸고, 앞에서 한 문장을 같은 말로 되풀이하지 않는다. 같은 반박이 이어지면 더 설득하지 말고 문자로 직접 확인해 보시라며 다음 단계로 넘어간다.";
+/** 배송 통화 1단계 — 판정표 CD1 · CD2(아래 단계 주석). Live는 이 지시문이 유일한 층이다. */
+export const CARD_COURIER_FACT_FIRST_RULE =
+  "성함을 받기 전이라도 상대가 카드를 신청한 적 없다고 하면 성함을 다시 묻지 말고 그 말부터 받아 다음 단계(반송 처리 안내)로 넘어간다. 상대가 카드사에 직접 확인해 보겠다고 하면 본인 확인을 되풀이하지 말고 그 말을 받아 '저는 배송만 해서요'라며 물러서되, 반송 접수는 문자로 안내하는 고객센터에서 한다고 말한다.";
 const CARD_REBUILD_COURIER_LEG: FlowVariantLeg = {
   callerLabel: "010-0794-2261",
   personaPrompt: CARD_REBUILD_COURIER_PERSONA,
@@ -964,7 +970,11 @@ const CARD_REBUILD_COURIER_LEG: FlowVariantLeg = {
   entry: "incoming",
   exit: "dial",
   stages: [
-    "카드 배송 연락처럼 말을 걸고, 받으실 분 확인을 핑계로 성함을 묻는다.",
+    // 2026-11-24 브라우저 A 라이브 A5(판정표 CD) — '신청 안 했어요' · '카드사에 직접 확인할게요'를 흘리고 본인 확인만 되풀이했다.
+    // | CD1 | 성함을 받기 전에 상대가 카드를 신청한 적 없다고 한다 | 성함을 고집하지 않고 그 말을 받아 2단계(반송 안내)로 |
+    // | CD2 | 상대가 카드사에 직접 확인하겠다고 한다 | 그 말을 받아 "저는 배송만 해서요"로 물러서며 반송 접수는 문자 속 고객센터라고 한다 |
+    // | CD3 | 그 밖 | 종전(성함을 묻는다) |
+    `카드 배송 연락처럼 말을 걸고, 받으실 분 확인을 핑계로 성함을 묻는다. ${CARD_COURIER_FACT_FIRST_RULE}`,
     withSmsFirst("상대가 카드를 신청한 적 없다고 하면 반송 처리가 필요하다며 반송 접수 안내 문자(고객센터 연락처)를 보낸다."),
     // 실기기 신고 F3(2026-11-02 — "카드 발급했다고 하니까 그냥 끝났다") — 신청했다는 답에도 미끼를 거두지 않고 다른 발급 건으로 이어 간다.
     withSmsFirst(
