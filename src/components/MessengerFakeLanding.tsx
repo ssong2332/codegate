@@ -1006,6 +1006,19 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 즉시",
     mockHost: "quick-send-now.invalid",
   },
+  // ⭐ 2026-11-24(재측정 R-3 · 사용자 결정 (B)) — 가족 사고 · 손주 계좌 문자가 여는 이체 화면(서버 카탈로그 mockScreens.ts와 글자 단위로 동일).
+  "family-send-transfer": {
+    headline: "보낼 금액을 확인해 주세요",
+    bodyLines: ["받는 분 통장에는 보내는 분 실명으로 표시됩니다."],
+    fields: [
+      { label: "입금받을 계좌", placeholder: "문자로 받은 계좌번호를 입력하세요", inputMode: "numeric", prefill: "account" },
+      { label: "보낼 금액", placeholder: "보내실 금액을 입력하세요", inputMode: "numeric", amount: true },
+    ],
+    submitLabel: "바로 보내기",
+    successHeadline: "보내기가 완료되었습니다.",
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 가족",
+    mockHost: "quick-send-now.invalid",
+  },
   // ⭐ 2026-11-07(Edge 시험 판 12) — 검찰 고급 상품권형의 구매 화면(서버 카탈로그 mockScreens.ts와 글자 단위로 동일). 그리는 곳은 아래 `VoucherPurchaseMockup`
   // (이 표의 칸 라벨은 권종 · 수량 선택 줄의 이름이고, 입력 칸 대신 버튼으로 고른다).
   "voucher-purchase": {
@@ -1127,6 +1140,8 @@ const BANK_TRANSFER_LANDINGS: readonly string[] = [
   "loan-safe-transfer",
   // 2026-11-07(Edge 시험 판 7) — 납치 협박 고급 계좌 문자.
   "kidnap-ransom-transfer",
+  // 2026-11-24(재측정 R-3 · 사용자 결정 (B)) — 가족 사고 · 손주 계좌 문자.
+  "family-send-transfer",
 ];
 
 /** ⭐ 2026-11-07(Edge 시험 판 12) — 상품권 구매 화면 landingId(서버 `mockScreens.ts` `VOUCHER_LANDINGS`와 같은 목록 — `mockScreenCopy.test.ts`). 정확 일치만(R8). */

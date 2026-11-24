@@ -14,7 +14,7 @@
 // 빠뜨렸을 때 조용히 엉뚱한 에이전트로 연결되는 사고가 나지 않는다.
 import { ELEVENLABS_API_KEY, GEMINI_API_KEY, getElevenLabsAgentIds } from "../shared/config";
 import { PUBLIC_SCENARIOS, type VoiceMode } from "../scenarios/publicMeta";
-import { sessionDeclaresInCallInstall } from "../scenarios/variantPool";
+import { sessionDeclaresInCallInstall, sessionDeclaresTransferScreenSms } from "../scenarios/variantPool";
 import { parseAgentMap } from "./agentMap";
 import { ElevenLabsRealtimeProvider } from "./elevenLabsProvider";
 import { GeminiRealtimeProvider } from "./geminiProvider";
@@ -108,7 +108,12 @@ export function requiresServerPromptProvider(session: {
   scenarioId: string;
   flowVariantId?: string;
 }): boolean {
-  return session.personaCard !== undefined || sessionDeclaresInCallInstall(session.scenarioId, session.flowVariantId);
+  return (
+    session.personaCard !== undefined ||
+    sessionDeclaresInCallInstall(session.scenarioId, session.flowVariantId) ||
+    // 판정표 EP1(2026-11-24 R-3 (B)) — 이체 화면 문자를 선언한 세션(가족 사고 · 손주 계좌 문자 루트 포함)도 문자 도구가 있는 경로로만.
+    sessionDeclaresTransferScreenSms(session.scenarioId, session.flowVariantId)
+  );
 }
 
 export function getRealtimeProvider(

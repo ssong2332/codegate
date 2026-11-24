@@ -305,6 +305,7 @@ export const SITE_FAMILY_BY_LANDING: Readonly<Record<string, SiteFamilyId>> = {
   "child-bank-transfer": "send",
   "friend-bank-transfer": "send",
   "kidnap-ransom-transfer": "send",
+  "family-send-transfer": "send",
 };
 
 /**

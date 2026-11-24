@@ -81,6 +81,10 @@ export const SMS_SENDER_NUMBER: Readonly<Record<string, string>> = {
   "courier-customs-scam": "032-0617-4429",
   // 2026-11-07(앱 밖 행동 유도 제거 · 사용자 결정 "앱 안 화면 추가") — 납치 협박 고급의 계좌 문자. 협박범 = 인터넷전화 070(위 규칙 · 국번 첫 자리 0).
   "kidnapping-threat": "070-0457-2618",
+  // 2026-11-24(재측정 R-3 · 사용자 결정 (B) — docs/research/verbal-transfer-to-screen-2026-11-24.md) — 가족 사고 · 손주의 계좌 문자. "다른 번호로 연락한다"는 설정이라
+  // 휴대전화 꼴(010 뒤 첫 자리 0 — 배정되지 않는 꼴로 추정 · 위 규칙과 같은 원칙).
+  "family-accident-deepvoice": "010-0472-3816",
+  "grandchild-impersonation": "010-0485-2290",
 };
 
 // ⭐ 2026-11-07(카드사 고급 R1 축소 · 메인 지시 "문자 발신처 분리") — R1(fv-k3dn) 문자 3통은 **보낸 곳마다 다른 번호**이고 발신 표시는 **번호만**이다.
@@ -655,6 +659,49 @@ const KIDNAPPING_THREAT: InCallSmsItem[] = [
   },
 ];
 
+// ⭐ 2026-11-24(재측정 R-3 · 사용자 결정 (B) — `docs/research/verbal-transfer-to-screen-2026-11-24.md` 판정표 TS) — 가족 사고 · 손주가 계좌를 말로만 부르던
+// 송금 루트(초 · 중 · 고급 6변형)를 계좌 문자 → 앱 안 이체 화면(`family-send-transfer` — 두 카탈로그가 같은 화면)으로. 말로 "보냈어요" = 미완료(4-c).
+// 금액: 합의금 3,000,000원(원본 수법 '300만 원') · 소액 500,000원(근거 S26 · C16 — 50만 원 안팎 즉시 이체). 고급 fv-cx5y(상품권 분기)는 선언하지 않는다.
+const FAMILY_TRANSFER_ANNOUNCE =
+  "(참가자 휴대전화로 방금 계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 들어가 지금 바로 보내 달라는 말을 네 인물 말투 그대로 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호·금액을 새로 지어내 말하지 말고, 은행 앱이나 다른 곳에서 보내라고 하지 말고, 실제 주소를 읽어 주지도 마라.)";
+const FAMILY_ACCIDENT_DEEPVOICE: InCallSmsItem[] = [
+  {
+    smsId: "family-settlement-account",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["family-accident-deepvoice"]}`,
+    body: "예금주: 한지우\nOO은행 948-2716-5093-27\n금액: 3,000,000원\n합의금 이 계좌로 보내줘.\n아래 링크 누르면 바로 보내져.",
+    linkDisplayText: "바로 보내기",
+    fakeLandingId: "family-send-transfer",
+    linkAddress: "quick-send-now.invalid/send/Fm3q",
+    afterScammerTurns: 2,
+    announceInstruction: FAMILY_TRANSFER_ANNOUNCE,
+  },
+  {
+    smsId: "family-repair-account",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["family-accident-deepvoice"]}`,
+    body: "예금주: 정은솔\nOO은행 948-2716-5093-27\n금액: 500,000원\n수리비 이 계좌로 보내줘.\n아래 링크 누르면 바로 보내져.",
+    linkDisplayText: "바로 보내기",
+    fakeLandingId: "family-send-transfer",
+    linkAddress: "quick-send-now.invalid/send/Fm7r",
+    afterScammerTurns: 2,
+    announceInstruction: FAMILY_TRANSFER_ANNOUNCE,
+  },
+];
+const GRANDCHILD_IMPERSONATION: InCallSmsItem[] = [
+  {
+    smsId: "grandchild-money-account",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["grandchild-impersonation"]}`,
+    body: "예금주: 이도경\nOO은행 948-2716-5093-27\n금액: 500,000원\n이 계좌로 보내주세요.\n아래 링크 누르면 바로 보내져요.",
+    linkDisplayText: "바로 보내기",
+    fakeLandingId: "family-send-transfer",
+    linkAddress: "quick-send-now.invalid/send/Gc4w",
+    afterScammerTurns: 2,
+    announceInstruction: FAMILY_TRANSFER_ANNOUNCE,
+  },
+];
+
 // §53(§51 커밋 D 집행 — UX-027 v1.24 (1) ㉰ / v1.25 정본, `docs/Architecture.md` §53.6/§53.8) —
 // `bank-security-verify-scam` 최초의 통화 중 문자 항목(OQ-A31 (b) 집행). `afterScammerTurns: 3`은
 // §53.6 (5)의 확정값(ⓐ ≠2 ∩ ⓓ >=2의 유일한 최솟값 — 하한 트립와이어는 inCallSms/__tests__/
@@ -742,6 +789,9 @@ export const IN_CALL_SMS: Record<string, InCallSmsItem[]> = {
   "reputation-blackmail-scam": REPUTATION_BLACKMAIL_SCAM,
   // 2026-11-07 — 납치 협박 고급 계좌 문자(위 KIDNAPPING_THREAT 주석 · 종전 G306 대체).
   "kidnapping-threat": KIDNAPPING_THREAT,
+  // 2026-11-24(재측정 R-3 · 사용자 결정 (B)) — 가족 사고 · 손주 계좌 문자(위 FAMILY_ACCIDENT_DEEPVOICE 주석).
+  "family-accident-deepvoice": FAMILY_ACCIDENT_DEEPVOICE,
+  "grandchild-impersonation": GRANDCHILD_IMPERSONATION,
   // §53(§51 커밋 D) — 카탈로그 자체가 신설(이 시나리오 첫 항목). OQ-A31 (b) 집행.
   "bank-security-verify-scam": BANK_SECURITY_VERIFY_SCAM,
   // T194-c-1(§84.5.2) — 카탈로그 신설(이 시나리오 첫 항목 · Q2 설치 문자).

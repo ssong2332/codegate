@@ -15,7 +15,8 @@
 import type { DifficultyLevel } from "../shared/difficulty";
 import { resolveSessionEscalation } from "./escalation";
 import { findFlowVariant, listFlowVariants, type FlowVariant } from "./flowVariants";
-import { IN_CALL_INSTALL_SCENARIOS, isInCallInstallSms } from "./mockScreens";
+import { findInCallSmsItem } from "./inCallSms";
+import { IN_CALL_INSTALL_SCENARIOS, isBankTransferLanding, isInCallInstallSms } from "./mockScreens";
 import { PUBLIC_SCENARIOS } from "./publicMeta";
 
 /**
@@ -56,4 +57,18 @@ export function assignablePool(scenarioId: string, level: DifficultyLevel, chall
 export function sessionDeclaresInCallInstall(scenarioId: string, flowVariantId: string | undefined): boolean {
   const variant = findFlowVariant(flowVariantId);
   return variant !== undefined && variant.scenarioId === scenarioId && declaresInCallInstall(variant);
+}
+
+/**
+ * ⭐ 2026-11-24(재측정 R-3 · 사용자 결정 (B) · 판정표 EP1 — `docs/research/verbal-transfer-to-screen-2026-11-24.md`) — 이 세션이 **이체 화면을 여는 문자**를
+ * 선언했는가. 가족 사고 · 손주(목소리 복제 시나리오)가 계좌 문자 루트가 되면서 ElevenLabs 에이전트(문자 도구 없음)로 가면 "4-c는 화면 제출을 기다리는데
+ * 문자는 못 보내는" 세션이 된다 — `requiresServerPromptProvider`의 항이 이 함수를 쓴다. 변형 부재 · 다른 시나리오 ID ⇒ 거짓.
+ */
+export function sessionDeclaresTransferScreenSms(scenarioId: string, flowVariantId: string | undefined): boolean {
+  const variant = findFlowVariant(flowVariantId);
+  if (variant === undefined || variant.scenarioId !== scenarioId) return false;
+  return variant.sms.some((item) => {
+    const landingId = findInCallSmsItem(scenarioId, item.smsId)?.fakeLandingId;
+    return landingId !== undefined && isBankTransferLanding(landingId);
+  });
 }
