@@ -15,6 +15,7 @@
 // | 3-b″ | R12(#477) 역할 이탈 결합형 — "이건 훈련이에요" · "이 역할은 여기서 멈추" · "요구 · 대화를 이어가지 않" · "금전 피해로 이어지지 않도록"(`TRAINING_META_PATTERNS` 끝 4개) | 불가 | `training-meta` |
 // | 3-b‴ | Edge 재시험 3 — "훈련은 여기서 · 이만 · 여기까지 마치 · 마무리 · 종료 · 끝 · 중단"(`TRAINING_META_PATTERNS` 맨 끝) | 불가 | `training-meta` |
 // | 3-b⁗ | N1(2026-11-24) "이 응답에는" · "사기범 역할의 대사" · "대사는 제공하지 않" · "통화 전환 신호" · "이 교육 훈련은" · "훈련은 여기까지 진행" — 판정표 UM-1 ~ UM-4(`docs/research/messenger-meta-leak-2026-11-24.md`) | 불가 | `training-meta` |
+// | 3-b⁵ | 재측정 R-2(2026-11-24) MK-2 신호 마커를 조사로 받는 설명문(`SIGNAL_SELF_REFERENCE` · 원문 기준) · UM-5 "이 훈련 대화" — `docs/research/residual-defects-2026-11-24.md` | 불가 | `training-meta` |
 // | 3-b′ | §129.6 교육용 글머리 목록(`isEducationalBulletList` — 글머리표 줄 2개 이상 · 또는 경고형 1줄) | 불가 | `training-meta` |
 // | 3-c  | 본문이 괄호 표기(지문 · 메타)뿐이고 링크·문자 마커가 없다 — §129 D1            | 불가 | `empty`           |
 // | 4    | 한글(음절·자모)이 0자                                                       | 불가 | `no-hangul`       |
@@ -103,6 +104,8 @@ export const TRAINING_META_PATTERNS: readonly RegExp[] = [
   // ⭐ N1(페르소나 전수 점검 2026-11-23 · 택배 스미싱 고급 fv-g454 첫 대사) — *"이 응답에는 통화 전환 신호만 포함되며, 사기범 역할의 대사는 제공하지 않습니다."*
   // 응답 자체를 설명하는 문형(UM-2 · docs/research/messenger-meta-leak-2026-11-24.md). ⛔ 단독 "사기범"은 0 — 검찰 사칭 "사기범 일당이 명의를 도용"은 정상.
   /(?:사기범|사기꾼)\s*(?:의\s*)?(?:역할|대사)|대사(?:는|를|은)\s*(?:제공|생성|작성|출력)(?:하지|할\s*수)|통화\s*전환\s*신호/,
+  // ⭐ UM-5(재측정 R-2 · 2026-11-24 · fv-g454 적대형 S6) — *"이 훈련 대화에서는 제 이름을 말씀드릴 수 없고, …"* 3행은 "훈련 + 조사"만 봐 "훈련 대화"를 못 잡았다.
+  /(?:^|[^가-힣])(?:이|본|이번)\s*(?:(?:교육|모의|예방)\s*)?훈련\s*(?:대화|통화|채팅|메시지)/,
 ];
 
 /**
@@ -120,6 +123,13 @@ function isEducationalBulletList(body: string): boolean {
   return bullets >= 2 || (bullets === 1 && WARNING_BULLET.test(body));
 }
 
+/**
+ * ⭐ MK-2(재측정 R-2 · 2026-11-24 · fv-g454 적대형 S1) — *"[[SIGNAL:ESCALATE_VOICE]]는 지금은 필요 없으니 쓰지 않겠습니다. 첫 마디만 드리겠습니다."*
+ * 모델이 신호 마커를 **문장 주어로 삼아** 그 신호를 설명했다(마커를 지우면 "는 지금은 …"으로 남는다). 신호는 화면에 안 보이는 표식이라 사기범 대사가
+ * 조사로 받을 일이 없다. ⛔ 링크 · 문자 마커("[[LINK:…]]를 눌러")는 대상 밖 — 신호 마커만 본다.
+ */
+const SIGNAL_SELF_REFERENCE = /\[\[SIGNAL:[^\]]*\]\]\s*(?:은|는|이|가|을|를|도|의)(?=[\s,.]|$)/;
+
 /** §129 D1 — 화면에 무언가를 남기는 마커(링크 칩 · 문자). 신호(`[[SIGNAL:…]]`)만 있는 응답은 말풍선이 빈다. */
 const VISIBLE_MARKER_PATTERN = /\[\[(?:LINK|SMS):[^\]]*\]\]/;
 /** §129 D1 — 본문이 괄호 표기뿐인가(대사 없이 지문 · 메타 표기만 — 저장 전 `roleplay/replyMarkup.ts`가 지우면 말풍선이 빈다). 어휘를 가리지 않는 근사다. */
@@ -136,6 +146,7 @@ export function judgeScammerReplyUsability(text: string): UnusableReplyReason | 
   }
   if (ENGLISH_REFUSAL_PATTERNS.some((pattern) => pattern.test(body))) return "english-refusal";
   if (KOREAN_AI_REFUSAL_PATTERNS.some((pattern) => pattern.test(body))) return "korean-ai-refusal";
+  if (SIGNAL_SELF_REFERENCE.test(text)) return "training-meta"; // MK-2
   if (TRAINING_META_PATTERNS.some((pattern) => pattern.test(body))) return "training-meta";
   if (isEducationalBulletList(body)) return "training-meta"; // §129.6 M1 · M2
   // §129 D1 — 괄호 표기만 남은 본문("(잠시 침묵)")도 저장 전에 지워져 말풍선이 빈다(메타 문형은 바로 위 행이 먼저 잡는다).

@@ -33,12 +33,20 @@ export const INSTITUTION_PERSONA = new RegExp(
 // | K2 | 응답이 기관 · 수사기관 직원 자기소개(P2의 앞 두 꼴 · "소속" 포함) | 쓸 수 없는 응답(`persona-drift`) → 다음 단계 모델 → 끝은 Mock(수법 문구) |
 // ⛔ "고객님"은 K2에 넣지 않는다(협박범 대사의 표기 정리가 "○○님"을 "고객님"으로 바꾼다 — §132.11 · 검사는 정리 전 원문이지만 범위를 좁혀 둔다).
 // ⛔ "경찰에 신고하면"처럼 남을 말하는 문장은 자기소개 어미 · "저는/제가" 없이는 걸리지 않는다.
-export const IDENTITY_HIDDEN_SCENARIOS: readonly string[] = ["kidnapping-threat"];
+// ⭐ 2026-11-24 재측정 R-1(통합 22 · 평판 협박 고급 fv-egum 첫마디 "보담서비스센터 건으로 연락드렸습니다") — 평판 협박도 신원을 밝히지 않는 협박범인데
+// 이 목록에 없어 역할 고정 줄 · 거르기가 0이었다(#606은 프롬프트 문면만 고쳤다). 판정표 K3(`docs/research/residual-defects-2026-11-24.md`):
+// | K3a | 소속(기관 낱말 · 센터 · 팀 · 본부 · 사무소) + 건으로 · 에서 · 쪽에서 + (10자 안) 연락 · 전화 + 드렸 · 드립 | `persona-drift` |
+// | K3b | 소속 + 직함 + 이름(한글 2 ~ 4자) + 입니다 · 이에요 · 예요 · 인데요 | `persona-drift` |
+// ⛔ "출입 기록 건으로 연락드렸습니다" · "은행에서 연락 오면"(드렸 · 드립 없음)은 통과.
+export const IDENTITY_HIDDEN_SCENARIOS: readonly string[] = ["kidnapping-threat", "reputation-blackmail-scam"];
 const SELF_INTRO_ROLE = "직원|팀장|과장|대리|주임|담당자?|상담원|소속|수사관|형사";
-/** K2 — 기관 · 수사기관 직원 자기소개(호칭 꼴 제외). */
+const AFFILIATION = `${INSTITUTION_NOUNS}|센터|팀|본부|사무소`;
+/** K2 · K3 — 기관 · 수사기관 직원 자기소개 · 소속 대기(호칭 꼴 제외). */
 export const INSTITUTION_SELF_INTRO = new RegExp(
   `(?:저는|제가|여기는)\\s*[^.?!\\n]{0,20}(?:${INSTITUTION_NOUNS}|사이버\\s*수사|수사\\s*(?:팀|과|대))[^.?!\\n]{0,15}(?:${SELF_INTRO_ROLE}|입니다|이에요|예요|인데요)` +
-    `|(?:${INSTITUTION_NOUNS})[^.?!\\n]{0,12}(?:${SELF_INTRO_ROLE})\\s*(?:인데요|입니다|이에요|예요)`,
+    `|(?:${INSTITUTION_NOUNS})[^.?!\\n]{0,12}(?:${SELF_INTRO_ROLE})\\s*(?:인데요|입니다|이에요|예요)` +
+    `|(?:${AFFILIATION})\\s*(?:건으로|에서|쪽에서)\\s*[^.?!\\n]{0,10}(?:연락|전화)\\s*(?:드렸|드립)` + // K3a
+    `|(?:${AFFILIATION})[^.?!\\n]{0,12}(?:${SELF_INTRO_ROLE})\\s*[가-힣]{2,4}\\s*(?:입니다|이에요|예요|인데요)`, // K3b
 );
 
 // ── R15 ⓑ(#479 확인 실측 ② S5 · 예비 모델 — 자녀가 엄마에게 "내 신분증 사진 · 내 주민등록증 사진 찍어서 보내줘") — 판정표 P4 ─────────────────
