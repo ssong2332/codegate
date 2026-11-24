@@ -96,7 +96,7 @@ test("[§104 배선] sendMessage — 앱 진행 지시가 없는 턴에만 반�
   assert.match(
     src,
     // D4 2차(2026-11-07) — 초급 물러섬 · 마무리 지시가 있는 턴은 반복 차단을 판정하지 않는다(반대 방향 지시 — `beginnerRetreat.ts`).
-    /const repeatBreakKind =\n\s*turnChoice === "none" && !otpCheckInstruction && !confirmPlan\?\.instruction && !beginnerRetreatKind\n\s*\? decideRepeatBreak\(storedHistory\.filter\(\(m\) => m\.role === "scammer"\)\.map\(\(m\) => m\.textMasked\), maskedUserText\)\n\s*: null;/,
+    /const repeatBreakKind =\n\s*turnChoice === "none" && !otpCheckInstruction && !confirmPlan\?\.instruction && !beginnerRetreatKind\n\s*\? decideRepeatBreak\(\n\s*storedHistory\.filter\(\(m\) => m\.role === "scammer"\)\.map\(\(m\) => m\.textMasked\),\n\s*maskedUserText,\n\s*\/\/ 1-c행\(적대 지속\) — 그 앞 참가자 발화\.\n\s*storedHistory\.filter\(\(m\) => m\.role === "user"\)\.at\(-1\)\?\.textMasked,\n\s*\)\n\s*: null;/,
   );
   const iKind = src.indexOf("const repeatBreakKind =");
   assert.ok(src.indexOf("const confirmPlan =") < iKind, "확인 결과 판정 뒤에 계산해야 한다");

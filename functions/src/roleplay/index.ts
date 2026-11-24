@@ -763,7 +763,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     }
     const repeatBreakKind =
       turnChoice === "none" && !otpCheckInstruction && !confirmPlan?.instruction && !beginnerRetreatKind
-        ? decideRepeatBreak(storedHistory.filter((m) => m.role === "scammer").map((m) => m.textMasked), maskedUserText)
+        ? decideRepeatBreak(
+          storedHistory.filter((m) => m.role === "scammer").map((m) => m.textMasked),
+          maskedUserText,
+          // 1-c행(적대 지속) — 그 앞 참가자 발화.
+          storedHistory.filter((m) => m.role === "user").at(-1)?.textMasked,
+        )
         : null;
     if (repeatBreakKind) {
       // G170 — 판정 종류 · 턴 번호만(대사 0).

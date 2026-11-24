@@ -1159,16 +1159,20 @@ export default function GeminiVoiceSession({
     // ⭐ §104(전수 검수 2차 F4 · F11) — 직전 두 사기범 턴이 대기 말 · 같은 인적사항 요구 · 거의 같은 말이면 맥락 1줄(`turnComplete:false`).
     // 위 넛지는 참가자가 침묵할 때만 나가므로, 참가자가 말하는 사이사이 반복되는 "대기해 주십시오"는 이 판정이 맡는다(판정표 `stallRecovery.ts` §4).
     let previousScammerTurnText: string | undefined;
+    // 2-c(적대 지속) — 직전 판정 때 넘겨받은 참가자 발화(그 앞 참가자 발화로 쓴다).
+    let previousParticipantText: string | undefined;
     const noteScammerTurnForRepeatBreak = (scammerText: string, participantText: string) => {
       const kind = decideLiveRepeatBreak({
         previousScammerTurn: previousScammerTurnText,
         scammerTurn: scammerText,
         // §104 — 이 턴이 답한 참가자 발화(자금 소진 선언 2-b행). 비었으면 판정하지 않는다.
         ...(participantText.trim() ? { lastParticipantText: participantText } : {}),
+        ...(participantText.trim() && previousParticipantText ? { previousParticipantText } : {}),
         latched: handlersRef.current.isHangupLatched(),
         participantHasSpoken: handlersRef.current.getSessionUserTurns() > 0,
       });
       previousScammerTurnText = scammerText;
+      if (participantText.trim()) previousParticipantText = participantText;
       if (kind && injectContext(LIVE_REPEAT_BREAK_TEXT[kind], "repeatBreak")) {
         console.info(LIVE_TURN_LOG_PREFIX, formatLiveRepeatBreakLog(kind));
       }

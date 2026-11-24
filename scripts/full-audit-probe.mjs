@@ -133,9 +133,11 @@ function probeIsStallLine(text) {
 const PROBE_SMS_SENT_CLAIM =
   /문자(?:로)?\s*(?:를\s*)?(?:보내\s*드렸|보내드렸|보냈|보내\s*드린|보내드린|보낸|발송(?:해\s*드렸|해\s*드린|했|됐|한|된))|(?:보내\s*드린|보내드린|보낸|발송한|발송된|발송해\s*드린)\s*(?:문자|링크|안내|주소|인증\s*번호)/;
 const probeIsWaitTurn = (t) => probeIsStallLine(t) || PROBE_WAIT_REQUEST_LINE.test(t);
-function probeLiveRepeatBreak(prev, cur, participantHasSpoken, lastParticipantText) {
+function probeLiveRepeatBreak(prev, cur, participantHasSpoken, lastParticipantText, previousParticipantText) {
   if (!repeatBreakLib || !participantHasSpoken) return null;
   if (lastParticipantText !== undefined && repeatBreakLib.EXHAUSTED_DECLARATION?.test(lastParticipantText)) return { kind: "exhausted", text: repeatBreakLib.REPEAT_BREAK_EXHAUSTED_INSTRUCTION };
+  // 2-c(적대 지속) — 서버 lib 1-c행과 같은 정규식 · 문면(수정 전 lib에는 없어 주입 0).
+  if (lastParticipantText !== undefined && previousParticipantText !== undefined && repeatBreakLib.HOSTILE_PARTICIPANT?.test(lastParticipantText) && repeatBreakLib.HOSTILE_PARTICIPANT.test(previousParticipantText)) return { kind: "hostile", text: repeatBreakLib.REPEAT_BREAK_HOSTILE_INSTRUCTION };
   if (!prev || !prev.trim()) return null;
   if (probeIsWaitTurn(prev) && probeIsWaitTurn(cur)) return { kind: "stall", text: PROBE_LIVE_STALL_TEXT };
   const kind = repeatBreakLib.decideRepeatBreak([prev, cur]);
@@ -499,8 +501,9 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
     const lastScammer = [...turns].reverse().find((t) => t.role === "scammer")?.text ?? "";
     // §104 — 앱 클라처럼 직전 두 사기범 턴으로 반복 · 대기 정체를 판정해 맥락 주입(다음 응답에 실린다).
     const scammerTexts = turns.filter((t) => t.role === "scammer" && t.kind !== "interrupted").map((t) => t.text);
-    const lastUserText = [...turns].reverse().find((t) => t.role === "user")?.text;
-    const rb = probeLiveRepeatBreak(scammerTexts[scammerTexts.length - 2], scammerTexts[scammerTexts.length - 1] ?? "", userTurns > 0, lastUserText);
+    const userTexts = turns.filter((t) => t.role === "user").map((t) => t.text);
+    const lastUserText = userTexts.at(-1);
+    const rb = probeLiveRepeatBreak(scammerTexts[scammerTexts.length - 2], scammerTexts[scammerTexts.length - 1] ?? "", userTurns > 0, lastUserText, userTexts.at(-2));
     if (rb) { sendText(rb.text, false, "repeat_ctx"); events.push({ t: now(), ev: "repeatBreak", kind: rb.kind, scammerTurns, userTurns }); }
     const u = leg?.firstLine && i === (job.startIndex ?? 0) ? leg.firstLine : respond(lastScammer, i);
     userTurns += 1;
@@ -761,7 +764,7 @@ async function runMessenger(scenarioId, level, persona, tag, job = {}) {
       : undefined;
     // §104 — 앱 `sendMessage`처럼 앱 진행 지시가 없는 턴에만 반복 차단 1줄(새 lib에만 있음).
     const rbKind = repeatBreakLib && choice === "none" && !confirmPlan?.instruction
-      ? repeatBreakLib.decideRepeatBreak(stored.filter((m) => m.role === "scammer").map((m) => m.textMasked), u)
+      ? repeatBreakLib.decideRepeatBreak(stored.filter((m) => m.role === "scammer").map((m) => m.textMasked), u, stored.filter((m) => m.role === "user").at(-1)?.textMasked)
       : null;
     if (rbKind) events.push({ ev: "repeatBreak", kind: rbKind, userTurns: userTurnsNow });
     const rbLine = rbKind ? repeatBreakLib.repeatBreakInstruction(rbKind) : undefined;
@@ -948,7 +951,7 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
       : undefined;
     const escalatedInstr = escalated && choice === "none" && escalatedCallLib ? escalatedCallLib.ESCALATED_CALL_CONTEXT_INSTRUCTION : undefined;
     const rbKind = repeatBreakLib && choice === "none" && !otpInstr && !confirmPlan?.instruction
-      ? repeatBreakLib.decideRepeatBreak(storedHistory.filter((m) => m.role === "scammer").map((m) => m.textMasked), u)
+      ? repeatBreakLib.decideRepeatBreak(storedHistory.filter((m) => m.role === "scammer").map((m) => m.textMasked), u, storedHistory.filter((m) => m.role === "user").at(-1)?.textMasked)
       : null;
     if (rbKind) events.push({ ev: "repeatBreak", kind: rbKind, userTurns: userTurnsNow });
     const tiAll = [ti, otpInstr, screenStatus, screenPlan?.instruction, confirmPlan?.instruction, transferReported ? ackLib.TRANSFER_REPORTED_INSTRUCTION : undefined, escalatedInstr, rbKind ? repeatBreakLib.repeatBreakInstruction(rbKind) : undefined, nudge, offer].filter(Boolean).join("\n") || undefined;
