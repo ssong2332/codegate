@@ -56,6 +56,13 @@ export const FALLBACK_GOAL_WRAP_UP_INSTRUCTION =
 export const SCAMMER_HANGUP_DECISION_PENDING_GUIDANCE =
   "(상대가 아직 안내한 화면의 마지막 단계를 마치지 않았다. 원하던 것을 얻었다고 보고 끝내지 마라. 끝내겠다는 말을 하지 말고, 방금 한 안내를 같은 말로 되풀이하지 마라. 아직 그 화면을 안내하지 않았으면 지금 단계를 이어가고, 이미 안내했으면 화면에서 어디까지 했는지 짧게 한 번만 묻고 답을 기다려라. 상대가 끝내 거절하면 그때는 reason을 give_up으로 해서 끝내도 된다.)";
 
+/**
+ * 판정표 VD(2026-11-24 페르소나 점검 N3) — 말로 계좌를 부르는 송금 루트에서 참가자가 보냈다고 말하기 전 `goal`로 끊으려 했다(4-c행).
+ * 이 루트에는 화면이 없어 위 문면의 '화면'을 쓸 수 없다. ⛔ 횟수 · 턴 번호 0 · 화면 밖 행동 예시 0.
+ */
+export const SCAMMER_HANGUP_VERBAL_TRANSFER_PENDING_GUIDANCE =
+  "(상대는 아직 돈을 보냈다고 말하지 않았다. 받은 것처럼 고맙다고 하거나 끝내겠다는 말을 하지 말고, 방금 한 요구를 같은 말로 되풀이하지 마라. 보냈는지 짧게 한 번만 묻고 답을 기다려라. 상대가 끝내 거절하면 그때는 reason을 give_up으로 해서 끝내도 된다.)";
+
 /** 실패(콜러블 미도달) — `createRealtimeCall.liveTools.endCallFailureInstruction`의 원천(배선은 C3). */
 export const SCAMMER_HANGUP_FAILURE_INSTRUCTION =
   "(지금은 통화를 끝낼 수 없다. 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어가라.)";
@@ -63,7 +70,7 @@ export const SCAMMER_HANGUP_FAILURE_INSTRUCTION =
 /** 판정 결과 → 모델에게 돌려줄 문면. */
 export function scammerHangupGuidance(
   status: ScammerHangupStatus,
-  options: { followUpPending?: boolean; goalActionDone?: boolean } = {},
+  options: { followUpPending?: boolean; goalActionDone?: boolean; verbalTransferPending?: boolean } = {},
 ): string {
   if (status === "accepted" || status === "already_accepted") return SCAMMER_HANGUP_ACCEPTED_GUIDANCE;
   // §127 — 할 일을 마친 뒤 6행에 막히면 다시 끊게 한다(그 밖 6행 · 다른 status는 종전 문면).
@@ -72,6 +79,8 @@ export function scammerHangupGuidance(
   // §132.13 — 4-b행(후속 단계가 남음)도 같은 문면.
   if (status === "blocked_follow_up") return SCAMMER_HANGUP_FOLLOW_UP_PENDING_GUIDANCE;
   // P1 M1 — 4-c행(결정 화면 전 goal 끊기).
+  // 판정표 VD — 화면 없는 송금 루트는 화면을 말하지 않는 문면.
+  if (status === "blocked_decision" && options.verbalTransferPending === true) return SCAMMER_HANGUP_VERBAL_TRANSFER_PENDING_GUIDANCE;
   if (status === "blocked_decision") return SCAMMER_HANGUP_DECISION_PENDING_GUIDANCE;
   if (status === "blocked_transfer" && options.followUpPending === true) return SCAMMER_HANGUP_FOLLOW_UP_PENDING_GUIDANCE;
   if (status === "blocked_transfer") return SCAMMER_HANGUP_BLOCKED_TRANSFER_GUIDANCE;

@@ -71,7 +71,7 @@ import {
 } from "../inCallSms/smsGate";
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms, readMockScreenRecords } from "../inCallSms/smsDelivery";
-import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, isLegScreenHoldPending, readMockScreenCompletion } from "../scammerHangup/goalAction";
+import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, isLegScreenHoldPending, isVerbalTransferPending, readMockScreenCompletion, saidTransferDone } from "../scammerHangup/goalAction";
 import { FALLBACK_GOAL_WRAP_UP_INSTRUCTION } from "../scammerHangup/guidance";
 import type { SmsDeliveryInput } from "../inCallSms/smsDelivery";
 import { findVerifyInterceptItem } from "../scenarios/verifyIntercept";
@@ -533,6 +533,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       messengerTransferChipPending = transferChips.length > 0 && (!transferChips.some((f) => f.done) || latestTransferAmount(chipFacts) === "less");
       if (messengerTransferChipPending) decisionScreenPending = true;
     }
+    // 판정표 VD(2026-11-24 페르소나 점검 N3) — 말로 계좌를 부르는 송금 루트는 참가자가 보냈다고 말하기 전 goal 끊기를 막는다(4-c · give_up 통과).
+    const saidSent = saidTransferDone([...storedHistory.filter((m) => m.role === "user").map((m) => m.textMasked), maskedUserText]);
+    if (isVerbalTransferPending(session.flowVariantId, saidSent)) decisionScreenPending = true;
     const callEntryTurns = userTurnsSinceCallEntry(session.channel, session.channelHistory, storedHistory);
     // §142(PR-3) — 다통화 변형의 마지막이 아닌 레그: 끊기 승인 = 레그 끝(`relay.legEnded` · 세션 계속). 이 레그에는 결정 화면 · 후속 단계가 없고
     // 5행 하한은 레그 시작 뒤 발화 수다(실시간 `scammerHangup/index.ts`와 같은 입력).

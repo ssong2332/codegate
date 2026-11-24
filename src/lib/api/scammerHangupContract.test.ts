@@ -120,7 +120,7 @@ test("[G557] 서버 · 클라 계약 리터럴 4종이 양방향으로 같다(�
   // 공허 통과 방지 — 각 집합이 실제로 채워져 있다(스캔이 0을 0과 비교하지 않게).
   assert.equal(c.statusServer.length, 12, "ⓐ 판정 status는 12종(§132.13 blocked_follow_up +1 · P1 M1 blocked_decision +1)");
   assert.deepEqual(c.endReasonServer, ["limit_reached", "scammer_ended", "user_ended"]);
-  assert.deepEqual(c.requestKeysServer, ["kind", "pendingInstruction", "sessionId", "userTurns"]);
+  assert.deepEqual(c.requestKeysServer, ["kind", "participantSaidSent", "pendingInstruction", "sessionId", "userTurns"]); // 2026-11-24 판정표 VD +1
   assert.deepEqual(c.sendEndServer, ["limit_reached", "scammer_ended"]);
   t.diagnostic(`[G557] status ${c.statusServer.length} · 종료 사유 ${c.endReasonServer.join("/")} · 요청 키 ${c.requestKeysServer.join("/")}`);
 });

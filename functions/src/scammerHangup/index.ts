@@ -22,7 +22,7 @@ import { findFlowVariant } from "../scenarios/flowVariants";
 import { currentLegHoldsScreens, currentLegIndex, legHangupAdjustments } from "../callLegs/legPlan";
 import { LEG_DIAL_SMS_PENDING_GUIDANCE, isLegDialSmsPending } from "../callLegs/legHandoff";
 import { deliverLoanDisbursedSmsIfDue } from "../callLegs/loanReviewOrder";
-import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, isLegScreenHoldPending, readMockScreenCompletion } from "./goalAction";
+import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, isLegScreenHoldPending, isVerbalTransferPending, readMockScreenCompletion } from "./goalAction";
 import { scammerHangupGuidance } from "./guidance";
 import { readScammerHangupRequest } from "./readRequest";
 import type { RequestScammerHangupRequest, RequestScammerHangupResponse } from "./types";
@@ -50,7 +50,7 @@ export const requestScammerHangup = onCall<
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
   // T192 C3(§79.19 (6) ② ③ · G558) — 판독은 순수 함수 하나 · 세션 read **앞**(무효 요청이 read 비용을 태우지 않는다).
-  const { sessionId, userTurns, pendingInstruction, kind } = readScammerHangupRequest(request.data);
+  const { sessionId, userTurns, pendingInstruction, kind, participantSaidSent } = readScammerHangupRequest(request.data);
 
   const session = await loadOwnedSession(sessionId, request.auth.uid);
   assertAnonymousChallengeScope(request.auth, session);
@@ -97,6 +97,9 @@ export const requestScammerHangup = onCall<
   } catch {
     goalActionDone = false;
   }
+  // 판정표 VD(2026-11-24 페르소나 점검 N3) — 말로 계좌를 부르는 송금 루트는 참가자가 보냈다고 말하기 전 goal 끊기를 막는다(4-c · give_up 통과 · 클라 값 부재 = 종전).
+  const verbalTransferPending = isVerbalTransferPending(session.flowVariantId, participantSaidSent);
+  if (verbalTransferPending) decisionScreenPending = true;
   // §142 — 다통화 변형의 마지막이 아닌 레그(레그 끝 끊기). 이 레그에는 결정 화면 · 후속 단계가 없다(4-c · 4-b 입력 거짓).
   const variant = findFlowVariant(session.flowVariantId);
   const legAdj = variant && variant.scenarioId === session.scenarioId ? legHangupAdjustments(variant, session.relay, userTurns) : undefined;
@@ -157,6 +160,6 @@ export const requestScammerHangup = onCall<
   const guidance =
     legScope?.dialSmsPending && decision.status === "blocked_follow_up"
       ? LEG_DIAL_SMS_PENDING_GUIDANCE
-      : scammerHangupGuidance(decision.status, { followUpPending, goalActionDone });
+      : scammerHangupGuidance(decision.status, { followUpPending, goalActionDone, verbalTransferPending });
   return { status: decision.status, guidance, ...legEnd };
 });

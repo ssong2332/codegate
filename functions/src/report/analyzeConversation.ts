@@ -31,6 +31,7 @@ import { resolveTacticCategory, type TacticCategory } from "./tacticCategory";
 import { CODE_DIGITS_WITH_ENDING, CODE_HANGUL_DIGITS, extractSpokenCodes, otpCandidatesForLength } from "../shared/spokenDigits";
 import { PHOTO_DEMAND } from "../roleplay/photoTurn";
 import { resolveAttemptedTacticLabels, resolveSecretCodeLabel } from "./attemptedTactics";
+import { TRANSFER_DONE_REPORT } from "../shared/transferClaim";
 
 /** 대처법·예방 조언 문구를 고르는 채널. 부재는 "voice"다(`MessageDoc.channel` 하위호환 규칙과 같다). */
 export type AdviceChannel = MessengerChannel;
@@ -334,7 +335,8 @@ function isHandoffPromiseReply(scammerText: string, replyText: string): boolean 
 // ⚠️ 한계(투명 고지): 되감기 규칙 폴백은 공유 패턴만 쓰므로 V1~V4 답변이 되감기에서는 다르게(중립 · 잘 대응함) 나올 수 있다(J-2와 같은 비대칭).
 const ECHOED_OR_NEGATED_RESISTANCE =
   /(?:본인\s*확인|경찰[가-힣]{0,2}|신고)\s*(?:이요|요|이라고요|라고요|이라구요|라구요)\s*\?|(?:신고|의심|경찰에\s*연락|경찰에\s*말)\s*(?:은|는|도)?\s*(?:안\s*(?:할|하|해|합)|하지\s*않|않|못\s*(?:할|하|해))/g;
-const BIRTH_DATE_DEMAND = /생년\s*월일|생일|태어나/;
+// 판정표 RN(2026-11-24 페르소나 점검 N6 — 자녀 사칭 카톡 "560312 2 이거면 되냐"가 속은 순간에서 빠짐) — 주민번호(앞자리) 요구도 생년월일 요구와 같게 본다(V2: 답의 6자리 날짜 = 순응).
+const BIRTH_DATE_DEMAND = /생년\s*월일|생일|태어나|주민(?:등록)?\s*번호/;
 const DATE_IN_ANSWER =
   /\d{1,2}\s*월\s*\d{1,2}\s*일(?!\s*(?:에|까지|부터|쯤|날|정도|이후|전|후|마다))|(?<!\d)\d{6}(?!\d)/;
 const SECRET_CODE_DEMAND = /보안\s*코드|CVC|cvc|뒷면[^.?!]{0,8}(?:번호|숫자|자리)|인증\s*번호|비밀\s*번호/;
@@ -392,8 +394,7 @@ function resolvePhotoProvidedTactic(demandText: string, weakenedTactics: readonl
 // - 바로 앞 대사가 아니어도 되는 이유: 통화 중 카톡은 통화 쪽 요구(다른 채널)에 대한 이행 보고라 turnIndex 순 바로 앞 대사가 요구가 아닐 수 있다(H3과 같은 방식).
 // §129.13 (e)(메인 라이브 2026-10-25 · 안전계좌 이체형 — 화면 제출 직후 "이체 완료했어요"가 이행 보고로 안 잡혀 대표 라벨 · 화면 순간과 안 합쳐짐) —
 // "이체 · 송금 · 입금 완료했 · 완료됐"도 이행 보고다.
-const TRANSFER_DONE_REPORT =
-  /(?<!(?:안|못)\s?)(?:보냈|송금했|이체했|입금했|부쳤)(?:어|습|다|는데|고|지)|(?:이체|송금|입금)\s*(?:를\s*|은\s*|는\s*)?(?:다\s*)?완료\s*(?:했|됐|되었|하였)/;
+// 2026-11-24 — 정규식 원문은 `shared/transferClaim.ts`로 옮겼다(끊기 판정표 VD와 공유 · 바이트 무변경).
 
 function isTransferDemand(scammerText: string): boolean {
   return scammerText.split(/[.?!\n]+/).some((s) => MONEY_CONTEXT.test(s) && TRANSFER_REQUEST.test(s));
@@ -421,9 +422,15 @@ const NOUN_ONLY_COMPLIANCE =
  * C1 — 부인 · 모름 답에서 명사 단독 항목만 순응으로 걸렸는가.
  * §129.8 C2(사용자 승인 판정표 · 에뮬 재점검 2026-10-24b N2 — "제 명의 계좌요? 무슨 일이에요?"가 속음 · 신원정보 직접 요구) — 되묻기 · 질문만인 답(모든 문장이 `?`로 끝남)도 같다.
  */
-function isNounOnlyDenial(replyText: string): boolean {
-  if (!DENIAL_OR_UNKNOWN.test(replyText) && !isQuestionOnly(replyText)) return false;
-  return !COMPLIANCE_PATTERN.test(replyText.replace(NOUN_ONLY_COMPLIANCE, " "));
+function isNounOnlyDenial(replyText: string, negatedAction = false): boolean {
+  // 2026-11-24 페르소나 점검 판정표 NQ(docs/research/persona-audit-report-fixes-2026-11-24.md):
+  // NQ1 — 행동을 부정한 답("계좌번호 같은 거 하나도 안 불러요")의 명사도 순응 근거가 아니다(C1과 같게 명사를 걷어 낸다).
+  // NQ2 — 물음 문장 안의 명사("지원금이 얼마고 언제 들어오는 거예요?")는 순응 근거가 아니다(물음 문장에서만 명사를 걷어 낸다).
+  if (DENIAL_OR_UNKNOWN.test(replyText) || isQuestionOnly(replyText) || negatedAction) {
+    return !COMPLIANCE_PATTERN.test(replyText.replace(NOUN_ONLY_COMPLIANCE, " "));
+  }
+  const withoutQuestionNouns = replyText.replace(/[^.?!\n]+\?/g, (question) => question.replace(NOUN_ONLY_COMPLIANCE, " "));
+  return withoutQuestionNouns !== replyText && !COMPLIANCE_PATTERN.test(withoutQuestionNouns);
 }
 
 /** C2 — 답의 모든 문장이 물음표로 끝나는 되묻기 · 질문인가. */
@@ -893,7 +900,10 @@ const TRANSFER_REQUEST = new RegExp(
     // SL14(2026-11-09 재시험 22 ⑩ (a) "…안전 계좌로 이관하셔야 합니다") — '이관'(피해금 이관)도 옮기라는 요구다. 같은 문장의 돈 · 계좌 문맥 조건은 그대로.
     `|이관하(?:세요|십시오|셔야)|이관해\\s*(?:${SHORT_REQUEST_ENDING})` +
     // §129.8 D4 — 평서 해요체 요구 "…계좌로 돈 보내요"(자녀 납치 초급 · 중급) · "입금 부탁드릴게요"(대환대출 초급).
-    `|(?:보내|입금해|이체해|송금해|넣어)요(?![가-힣])|(?:입금|이체|송금|납부)\\s*(?:을|를|좀)?\\s*(?:꼭\\s*|바로\\s*)?부탁`,
+    `|(?:보내|입금해|이체해|송금해|넣어)요(?![가-힣])|(?:입금|이체|송금|납부)\\s*(?:을|를|좀)?\\s*(?:꼭\\s*|바로\\s*)?부탁` +
+    // 판정표 CR(2026-11-24 페르소나 점검 N7 — 평판 협박 중급 fv-kwph "오늘 안으로 삼백 만 원을 보내시면 기록 처리해 드립니다." → "네, 보냈어요"가 속은 순간 0) —
+    // 조건형 요구 "…보내시면 · 입금하시면 · 이체하시면 … 해 드립니다". 같은 문장의 돈 · 계좌 문맥 조건은 그대로 · 바로 뒤 부정(안 · 못 · 절대)은 경고라 뺀다.
+    `|(?:보내|입금하|이체하|송금하|납부하|넣으)시면(?!\\s*(?:안|못|절대))`,
 );
 const AMOUNT_OR_ACCOUNT = /\d[\d,]*\s*(?:만|천|백)?\s*원|\d{2,6}-\d{2,6}-\d{2,}/;
 const FAVOR_REQUEST = /부탁\s*(?:할게|해|드려|드릴게|드립니다|하면|좀)/;
@@ -1109,9 +1119,18 @@ export function analyzeConversation(
     }
     // §128(2) T-1 — 문구 키가 빈 대사도 요구 어형 표(`resolveDemandFallbackTactic` — 세션 목록 안 라벨만)로 "시도된 수법"에 올린다.
     // 종전에는 속은 순간으로 판정된 짝에서만 보정해, 거절한 요구(추가 송금 · 비밀번호 등)가 목록에서 빠졌다. 속은 순간 판정 · 라벨은 무변경.
-    if (matchedTactics.length === 0) {
-      const demandLabel = resolveDemandFallbackTactic(msg.textMasked, msgScope.tactics);
-      if (demandLabel) tacticLabelsUsed.add(demandLabel);
+    // 판정표 TL(2026-11-24 페르소나 점검 N-B6 — 자녀 납치 초급 "아이는 저희 쪽에 있으니 지금 천만 원 … 바로 입금하세요"가 '자녀 인질 협박' 키만 맞아
+    // '즉시 송금 요구'가 빠짐) — 키가 맞았어도 표 라벨이 **송금 범주**이고 같은 범주 키가 없으면 표 라벨도 올린다(같은 범주 키가 있으면 종전 — 키 라벨이 더 정확하다).
+    // 송금 범주만인 이유: 개인정보 범주까지 열면 '확인질문 재촉' 키가 맞은 본인 확인 대사에 말하지 않은 '본인확인 빙자 정보 수집'이 오른다(interleavedDemandPairing (2)).
+    const demandLabel = resolveDemandFallbackTactic(msg.textMasked, msgScope.tactics);
+    const demandCategory = demandLabel ? resolveTacticCategory(demandLabel) : undefined;
+    if (
+      demandLabel &&
+      (matchedTactics.length === 0 ||
+        (demandCategory === "payment_demand" &&
+          !matchedTactics.some((t) => resolveTacticCategory(extractTacticLabel(t)) === demandCategory)))
+    ) {
+      tacticLabelsUsed.add(demandLabel);
     }
     // 2026-11-07 Edge 시험 — 확인 차단 · 인증번호 · 비밀번호 · 명의 도용을 바꿔 말한 대사도 목록에 올린다(`attemptedTactics.ts` 표 A1~A5 · 목록 전용).
     for (const label of resolveAttemptedTacticLabels(msg.textMasked, msgScope.tactics)) tacticLabelsUsed.add(label);
@@ -1139,7 +1158,7 @@ export function analyzeConversation(
         // §129 C4 · C5 — 요구 없는 대사 뒤의 방법 질문 · 따름 약속만으로는 순응이 아니다.
         (!questionedNotComplied &&
           COMPLIANCE_PATTERN.test(affirmText) &&
-          !isNounOnlyDenial(affirmText) &&
+          !isNounOnlyDenial(affirmText, affirmText !== reply.textMasked) &&
           !isHowToOrFollowOnlyWithoutDemand(pair.textMasked, affirmText)) ||
         isHandoffPromiseReply(pair.textMasked, reply.textMasked) ||
         isContextualCompliance(pair.textMasked, reply.textMasked);
