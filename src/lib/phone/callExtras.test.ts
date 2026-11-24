@@ -71,5 +71,6 @@ test("[재시험 25 CC] 새 통화 연결 = 앞 통화 자막 비움 · 넘김 =
   const code = strip(play);
   const leg = code.slice(code.indexOf("const connectLeg = ("), code.indexOf("const openNextLeg = "));
   assert.match(leg, /if \(legConnectClearsCaption\(via\)\) \{\s*setLiveScammerCaption\(null\);\s*setLegCaptionFrom\(messages\.length\);\s*\}/);
-  assert.match(code, /const latestScammerLine = latestScammerLineFrom\(messages, legCaptionFrom\);/);
+  // 2026-11-24 N-B2 — 실시간은 낭독 안 한 서버 오프닝(turnIndex 0)을 건너뛴다(시작 위치 = max(legCaptionFrom, 1)) · 그 밖은 legCaptionFrom 그대로.
+  assert.match(code, /const latestScammerLine = latestScammerLineFrom\(\s*messages,\s*callMode === "realtime" && messages\[0\]\?\.turnIndex === 0 \? Math\.max\(legCaptionFrom, 1\) : legCaptionFrom,\s*\);/);
 });

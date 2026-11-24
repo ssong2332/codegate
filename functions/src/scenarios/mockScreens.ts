@@ -309,6 +309,7 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `asset-gold-buy` | `scenarios/inCallSms.ts` ASSET_PROTECTION_NOTICE_CALL(문자 본문·칩 — 2026-11-07 금형) | "보관 대상 자산은 아래 지정 거래소에서 금 실물로 주문해 주세요." | 지정 거래소에서 금 실물 주문 | "해담골드 금 실물 주문" | "금 실물 주문하기" |
 // | `cash-withdraw` | `scenarios/inCallSms.ts` INSTITUTIONAL_IMPERSONATION(문자 본문·칩 — 2026-11-07 현금 예탁형) | "예탁 대상 예금은 아래에서 거래 은행 출금 예약을 해 주세요." | 거래 은행 출금 예약 | "예탁금 현금 · 수표 출금 예약" | "예탁금 출금 예약하기" |
 // | `asset-cash-withdraw` | `scenarios/inCallSms.ts` ASSET_PROTECTION_NOTICE_CALL(문자 본문·칩 — 2026-11-07 현금형) | "보관 대상 예금은 아래에서 거래 은행 출금 예약을 해 주세요." | 거래 은행 출금 예약 | "보관 자산 현금 · 수표 출금 예약" | "보관 자산 출금 예약하기" |
+// | `loan-cash-withdraw` | `scenarios/inCallSms.ts` LOAN_SCAM(문자 본문·칩 — 2026-11-24 대출 고급 현금 상환형) | "대환 전 기존 대출 상환금은 아래에서 거래 은행 출금 예약을 해 주세요." | 거래 은행 출금 예약 | "기존 대출 상환금 현금 · 수표 출금 예약" | "상환금 출금 예약하기" |
 // | `loan-check-app-install` | `scenarios/inCallSms.ts` LOAN_SCAM(문자 본문·칩 — T194-c-1 Q2) | "아래에서 심사용 보안 점검 앱을 설치해 주세요." | 심사용 보안 점검 앱 설치 | "심사용 보안 점검 앱을 설치해야 대출 심사가 진행됩니다" | "권한 허용하고 계속하기" |
 //
 // ⚠️ **이 표가 조용히 낡지 않게 하는 장치(주석은 강제가 아니다).** 위 **줄 번호는 스냅샷일 뿐이며
@@ -448,7 +449,7 @@ export const GOLD_HELD_INSTRUCTION =
 // 끝까지 = `landing_submitted`. 금액 · 형태 · 답은 서버로 가지 않는다(G138). ⛔ 지점명 · 주소 · 시각 0(AC-102 (d)) · 실존 은행명 0(가상 내 은행).
 // ⚠️ 현실과 다름: 실제 피해자는 문자 링크가 아니라 자기 은행 앱 · 창구로 간다 — 앱 밖으로 나가지 않게 하는 대가(사용자 결정 E1-b).
 /** 출금 예약 화면 landingId. 클라 `CASH_LANDINGS`와 같은 목록(드리프트 테스트). */
-export const CASH_LANDINGS: readonly string[] = ["cash-withdraw", "asset-cash-withdraw"];
+export const CASH_LANDINGS: readonly string[] = ["cash-withdraw", "asset-cash-withdraw", "loan-cash-withdraw"];
 
 /** 이 랜딩이 출금 예약 화면인가(예약 · 보류 뒤 실시간 지시 · 화면 행동 판정의 단일 판별자). */
 export function isCashLanding(landingId: string | undefined): boolean {
@@ -457,7 +458,7 @@ export function isCashLanding(landingId: string | undefined): boolean {
 
 /** 출금 예약 기록 순간의 실시간 맥락 1줄(판정표 A3 — 예약 확인 · 담당 직원 연락 · 비밀 당부 · 끊기). ⛔ 횟수 · 턴 번호 0 · 따옴표 대사 예시 0. */
 export const CASH_RESERVED_INSTRUCTION =
-  "(앱 확인: 상대가 방금 문자 링크의 은행 화면에서 예금 출금 예약을 마쳤다. 예약이 끝난 것으로 받아들이고, 다시 예약하라는 말이나 다른 곳에서 더 하라는 말은 하지 마라. 이번 대답에서 예약이 확인됐다고 짧게 말하고, 보관 절차는 담당 직원이 따로 연락드려 안내한다고만 하라. 만날 장소 · 시간 · 주소는 정하지도 묻지도 마라. 외부에 알리지 말라고 한 번 당부한 뒤 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
+  "(앱 확인: 상대가 방금 문자 링크의 은행 화면에서 예금 출금 예약을 마쳤다. 예약이 끝난 것으로 받아들이고, 다시 예약하라는 말이나 다른 곳에서 더 하라는 말은 하지 마라. 이번 대답에서 예약이 확인됐다고 짧게 말하고, 남은 절차는 담당 직원이 따로 연락드려 안내한다고만 하라. 만날 장소 · 시간 · 주소는 정하지도 묻지도 마라. 외부에 알리지 말라고 한 번 당부한 뒤 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
 
 /** 문진표에 사실대로 답해 출금 예약이 보류된 순간의 실시간 맥락 1줄(판정표 A4 — 압박 1회 · 재요구 1회 · 그래도 거절이면 포기).
  * 2026-11-08(§15.5 관찰 ① · 판정표 H1 · H2) — 금 보류 지시와 같게 보류 직후 대답에서는 끊지 않고 상대 대답을 기다린다(모델 행동 완화). */
@@ -540,6 +541,23 @@ const LOAN_REFINANCE_SCAM: MockScreenItem[] = [
     momentTactic: "저금리 대환 승인을 빌미로 한 상환금 선입금 이체 유도",
     correctAction:
       "대출을 해 주겠다며 먼저 돈을 넣으라고 하면 그 자리에서 멈추세요 — 정상 금융회사는 대출 전에 상환금 · 수수료 · 보증금을 입금하라고 하지 않습니다. ① 통화를 끊고 그 금융회사 대표번호로 직접 확인하기 ② 문자 속 링크로 이체하지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 이체했다면 바로 112(경찰)나 그 은행 대표번호로 지급정지를 요청하고 1332(금융감독원)에도 알리기.",
+  },
+  // ⭐ 2026-11-24(페르소나 점검 N1 · 묶음 ①) — 대환대출 고급 현금 상환형(fv-r4hc) 결말. 종전 말 약속("예금을 현금으로 찾아 직원에게 직접 상환")을
+  // 앱 안 출금 예약 화면으로 바꿨다(기관 · 자산 보호 현금형과 같은 화면 · 다른 문구 — 사용자 결정 D-G2 E1-b 선례). 위 `CASH_LANDINGS` 주석.
+  {
+    landingId: "loan-cash-withdraw",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "기존 대출 상환금 현금 · 수표 출금 예약",
+    bodyLines: ["예약하신 상환금은 고르신 형태로 미리 준비해 드립니다."],
+    issuerLabel: "ⓒ 모바일뱅킹 출금 예약 · 상환",
+    mockHost: "repay-reserve.invalid",
+    fields: ["상환할 금액", "받으실 형태"],
+    submitLabel: "상환금 출금 예약하기",
+    successHeadline: "상환금 출금 예약이 접수되었습니다.",
+    momentTactic: "대환 상환 명목의 현금 · 수표 출금 예약 유도",
+    correctAction:
+      "정상 금융회사는 대환대출을 이유로 기존 대출을 현금 · 수표로 직원에게 직접 갚게 하지 않습니다. ① 출금 예약을 하지 말고 전화를 끊기 ② 이미 알고 있는 금융회사 대표번호로 직접 확인하기 ③ 은행 문진표 · 직원 질문에 사실대로 답하고 도움을 청하기 ④ 이미 찾았거나 건넸다면 바로 112(경찰)에 신고하기.",
   },
 ];
 
@@ -1112,7 +1130,8 @@ const REPUTATION_BLACKMAIL_SCAM: MockScreenItem[] = [
     fields: ["받는 분 계좌", "보낼 금액"],
     submitLabel: "바로 이체하기",
     successHeadline: "이체가 완료되었습니다.",
-    momentTactic: "영상 유포 협박을 무마해 주겠다는 명목의 입금 유도",
+    // 2026-11-24 페르소나 점검 N-B5 — 이 시나리오는 업소 출입 기록 유포 협박이라 '영상'을 뺐다(대화에 영상 0회 · 3/3).
+    momentTactic: "유포 협박을 무마해 주겠다는 명목의 입금 유도",
     correctAction:
       "유포하겠다며 돈을 보내라고 하면 보내지 마세요 — 돈을 보내도 협박은 끝나지 않고 더 큰 요구로 이어지는 경우가 많습니다. ① 입금하지 말고 대화를 멈추기 ② 협박 메시지 · 번호를 지우지 말고 남겨 두기 ③ 혼자 감당하지 말고 가족이나 믿을 수 있는 사람과 112(경찰)에 함께 알리기 ④ 이미 이체했다면 바로 112(경찰)나 그 은행 대표번호로 지급정지를 요청하고 1332(금융감독원)에도 알리기.",
   },

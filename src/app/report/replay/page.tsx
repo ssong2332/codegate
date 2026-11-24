@@ -42,6 +42,7 @@ import { readReplayCallLegs, replayCallerFor, type ReplayCallLeg } from "@/lib/r
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { cleanStoredLine } from "@/lib/realtime/thoughtLeak";
 import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
+import { mockScreenDeclinedText, mockScreenSubmittedText, mockScreenWhat } from "@/lib/report/reportAccuracy";
 import { displayTactic, formatMomentLabel, replayMomentNote } from "@/lib/report/reportSummaryCopy";
 import { readRiskSignals, riskSignalCopy, RISK_SIGNAL_HEADING, type RiskSignalView } from "@/lib/report/riskSignalCopy";
 import {
@@ -984,12 +985,19 @@ function ReplayMockScreenItem({
   mockScreen: ReplayMockScreenSource;
   deceivedMoments: readonly ReplayDeceivedMomentSource[];
 }) {
-  const what =
-    mockScreen.kind === "app-install"
-      ? "앱 설치 안내 화면이 표시됐습니다."
-      : "본인확인 입력 화면이 표시됐습니다.";
+  // 2026-11-24 페르소나 점검 browser-c N4(2/2) — 리포트(`report/page.tsx` · `reportAccuracy.ts` M1~M7)와 같은 함수로 화면 종류 · 제출 사실을 쓴다.
+  // 종전에는 이체 화면도 "본인확인 입력 화면 · 이 화면을 열었습니다."였다.
+  const what = mockScreenWhat(mockScreen);
   // D-51 ③의 칭찬 문구는 **분기 "다"에서만** 나온다 — 살아 있되 제출 항목으로 새지 않는다.
-  const copy = resolveMockScreenCopy(mockScreen, deceivedMoments, "replay");
+  const branchCopy = resolveMockScreenCopy(mockScreen, deceivedMoments, "replay");
+  const submittedText = mockScreenSubmittedText(mockScreen);
+  const declinedText = branchCopy.branch === "declined" ? mockScreenDeclinedText(mockScreen) : null;
+  // 리플레이 주석 상자는 소제목(`heading`)도 그린다 — 제출 사실은 사실 1줄(소제목 없음) · 응하지 않음은 분기 소제목을 그대로 둔다.
+  const copy: { tone: "caution" | "neutral" | "praise"; heading?: string; text: string } = submittedText
+    ? { tone: "neutral", text: submittedText }
+    : declinedText
+      ? { tone: "praise", heading: branchCopy.heading, text: declinedText }
+      : branchCopy;
   return (
     <li className="outline-none">
       <div className="flex max-w-[85%] items-end gap-2">

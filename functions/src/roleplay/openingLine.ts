@@ -17,6 +17,7 @@ import { extractEscalationSignal } from "./escalationSignal";
 import { extractLinkMarker, finalizeBankTransferChips, linkChipFor } from "./linkMarker";
 import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt } from "./promptAssembly";
+import { pinSessionAccountNumber } from "./accountPin";
 import { limitReplySentences } from "./replyLength";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
@@ -43,8 +44,10 @@ import { applyFamilyAddressText, resolveFamilyAddressPrompt, type FamilyAddressT
 // ⚠️ **export인 이유(T113)**: 이 문자열은 `turnInstruction`으로 조립 산출물에 들어가므로
 // **T109 요구몰림 게이트의 스캔 대상**이다(`scenarios.test.ts`의 `turnInstructionSources()`).
 // 모듈 지역 상수로 두면 게이트가 이 자리를 볼 수 없다 — 그것이 T113이 없앤 사각의 형태다.
+// ⭐ 2026-11-24(페르소나 점검 N-B1 · 판정표 OP — `docs/research/persona-consistency-2026-11-24.md`) — 신원을 밝히지 않는 인물(평판 협박 등)은
+// 소속 · 이름을 지어내지 않고 연락한 이유만(OP2). 화면 Live 트리거(`GeminiVoiceSession.tsx` OPENING_TRIGGER_TURN)와 같은 조건.
 export const OPENING_TURN_INSTRUCTION =
-  "[오프닝 지침] 지금이 이 통화/대화의 첫 마디다. 다짜고짜 요구나 압박부터 하지 말고, 먼저 신분(사칭 기관·관계)과 연락한 이유(어떤 사건·문제 때문인지)를 1~2문장으로 밝혀 상황을 설명한 뒤에 이어간다.";
+  "[오프닝 지침] 지금이 이 통화/대화의 첫 마디다. 다짜고짜 요구나 압박부터 하지 말고, 먼저 신분(사칭 기관·관계)과 연락한 이유(어떤 사건·문제 때문인지)를 1~2문장으로 밝혀 상황을 설명한 뒤에 이어간다. 캐릭터가 신원을 밝히지 않는 인물이면 소속·기관·이름을 지어내지 말고 연락한 이유만 밝힌다.";
 
 /**
  * §131(4)(메인 세션 라이브 확인 2026-10-24 — 자녀 사칭 카톡 고급) — 카톡 첫 메시지가 *"여보세요? 엄마, 나야. …"* 였다. 오프닝 지시가 통화 · 메신저 공통
@@ -269,7 +272,12 @@ export async function generateOpeningLine(
   const { text: markupFreeText } = tidyScammerReplyMarkup(signalFreeText);
   const { text: realNameReplacedText, replacedCount } = replaceRealFinancialNames(markupFreeText);
   // §81 — 실존명 치환 결과("OO은행")와 모델이 그대로 말한 자리표시자를 세션 가상 은행명으로 맞춘다.
-  const realNameFreeText = fictionalBankName ? applyFictionalBank(realNameReplacedText, fictionalBankName) : realNameReplacedText;
+  // 판정표 AP(2026-11-24 페르소나 점검 N11) — 지어낸 계좌번호는 세션 계좌로(`accountPin.ts` · sendMessage와 같은 자리).
+  const realNameFreeText = pinSessionAccountNumber(
+    fictionalBankName ? applyFictionalBank(realNameReplacedText, fictionalBankName) : realNameReplacedText,
+    scenarioId,
+    resolveRouteAccountNumber(scenarioId, flowVariantId),
+  );
   // §131(4) O1 — 메신저 첫 메시지의 맨 앞 전화 인사말은 문장 상한 앞에서 지운다(지운 뒤 문장 수로 자른다).
   // §131(11) 판정표 W — 메신저 첫 메시지는 본문 전체의 통화 표현도 고친다(맨 앞 "여보세요"는 위 O1).
   const lengthLimited = limitReplySentences(isMessengerOpening ? fixMessengerCallWording(stripPhoneGreeting(realNameFreeText)) : realNameFreeText);

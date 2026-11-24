@@ -414,6 +414,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     messages,
     deceivedMoments: mock.deceivedMoments,
     baseMs: reportTimeBaseMs,
+    // P2b(2026-11-24 페르소나 점검 N7) — 단일 통화의 끊은 시각 = 서버 종료 시각.
+    ...(session.endedAt ? { endedAtMs: session.endedAt.toMillis() } : {}),
   });
   const callLegs = replayCallLegs(multiCallVariant);
   const reportDoc: ReportDoc = {

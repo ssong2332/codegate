@@ -15,11 +15,13 @@ export type ScammerHangupRequestClaims = {
   userTurns: number;
   pendingInstruction: boolean;
   kind: ScammerHangupKind;
+  /** 판정표 VD(2026-11-24) — 참가자가 송금 이행 보고를 했는가(클라가 `transferClaim` 어형으로 센 값). 부재 · 비불리언 = 모름(VD1 · 종전). */
+  participantSaidSent?: boolean;
 };
 
 export function readScammerHangupRequest(data: unknown): ScammerHangupRequestClaims {
   const raw = (typeof data === "object" && data !== null ? data : {}) as Record<string, unknown>;
-  const { sessionId, userTurns, pendingInstruction, kind } = raw;
+  const { sessionId, userTurns, pendingInstruction, kind, participantSaidSent } = raw;
   // C1 Minor ② — `!sessionId`는 숫자 · 객체 같은 비문자열을 통과시켰다.
   // SEC-07 — `"a/b"` 같은 경로 모양도 문서 ID가 아니다.
   if (!isDocId(sessionId)) {
@@ -33,5 +35,11 @@ export function readScammerHangupRequest(data: unknown): ScammerHangupRequestCla
     throw new HttpsError("invalid-argument", "pendingInstruction은 true 또는 false여야 합니다.");
   }
   // 누락 · 오기입은 `unspecified`(거절하지 않는다 — §79.2).
-  return { sessionId, userTurns, pendingInstruction, kind: normalizeScammerHangupKind(kind) };
+  return {
+    sessionId,
+    userTurns,
+    pendingInstruction,
+    kind: normalizeScammerHangupKind(kind),
+    ...(typeof participantSaidSent === "boolean" ? { participantSaidSent } : {}),
+  };
 }

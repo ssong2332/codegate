@@ -180,7 +180,7 @@ function targetTexts(item: CatalogItem): Array<{ field: string; text: string }> 
 // ── ① 존재 대조(R-B) + 건수 단언(R-D) ────────────────────────────────────────────────
 
 test("[T116/렌더-존재] 카탈로그 **도달 가능 전수**의 초기 렌더 대상 문구가 실제 렌더 결과에 등장한다", (t) => {
-  assert.equal(catalogItems.length, 35, "도달 가능 랜딩은 35종이다(credential-form 28 + app-install 7, 2026-11-07 출금 예약 화면 2 · 2026-11-07 금 거래소 화면 2 · PR-B 기관 고급 대출 신청 · 대출금 보관 이체 · 2026-11-07 앱 안 결말 납치 이체 · 상품권 구매 · §142 카드사 고급 재구성 안전계좌 이체 · 원격 지원 설치 · P2-d 환급 수수료 · P2-c 메신저 이체 화면 2종 · P2 훈련용 이체 화면 5종 · §53/§51 커밋 D · T194-a parcel-install · T194-c-1 Q2 3종 · §110.2 자녀 보험 접수 앱 · §92.3 고급 전용 2종 · §98 검찰 보관 지갑 · §101 검찰 자산 검수 사이트)");
+  assert.equal(catalogItems.length, 36, "도달 가능 랜딩은 36종이다(2026-11-24 대출 고급 출금 예약 화면 +1 · credential-form 29 + app-install 7, 2026-11-07 출금 예약 화면 2 · 2026-11-07 금 거래소 화면 2 · PR-B 기관 고급 대출 신청 · 대출금 보관 이체 · 2026-11-07 앱 안 결말 납치 이체 · 상품권 구매 · §142 카드사 고급 재구성 안전계좌 이체 · 원격 지원 설치 · P2-d 환급 수수료 · P2-c 메신저 이체 화면 2종 · P2 훈련용 이체 화면 5종 · §53/§51 커밋 D · T194-a parcel-install · T194-c-1 Q2 3종 · §110.2 자녀 보험 접수 앱 · §92.3 고급 전용 2종 · §98 검찰 보관 지갑 · §101 검찰 자산 검수 사이트)");
 
   let compared = 0;
   const perItem: string[] = [];
@@ -632,7 +632,7 @@ test("[T194-a §84.13.3 ③] 설치 항목마다 자기 문구만 그린다(교�
 // ⚠️ 한계: 정적 렌더라 첫 화면만 본다(주문 확인 · 완료 · 보류 화면은 버튼 전이 뒤라 이 하네스가 닿지 않는다 — 그 구간은 `goldBuy.test.ts` GB5 ·
 // `cashWithdraw.test.ts` CW5의 렌더 소스 구간 스캔이 맡는다).
 test("[§15.7 · §15.4 (c) 렌더] 금 거래소 · 출금 예약 첫 화면 렌더에 매장 방문 수령 · 영업점 방문 · 신분증 안내가 없다", (t) => {
-  const ids = ["gold-buy", "asset-gold-buy", "cash-withdraw", "asset-cash-withdraw"];
+  const ids = ["gold-buy", "asset-gold-buy", "cash-withdraw", "asset-cash-withdraw", "loan-cash-withdraw"];
   const lines: string[] = [];
   for (const id of ids) {
     const item = catalogItems.find((candidate) => candidate.landingId === id);

@@ -66,6 +66,7 @@ import { INITIAL_UNHEARD_REPLY_STATE, UNHEARD_REPLY_TEXT, stepUnheardReply } fro
 import { appendScammerChunk, claimedScammerTranscriptTurns, shouldMarkToolBoundary } from "./toolTurnTranscript";
 import { INITIAL_THOUGHT_LEAK_GATE_STATE, pickLiveAudioData, stepThoughtLeakGate, stripLeakedThought, type LiveContentPart } from "./thoughtLeak";
 import { guardLiveScammerLine, guardLiveUserLine } from "./liveTranscriptGuard";
+import { participantSaidSent } from "./transferClaim";
 import {
   AWAIT_RESPONSE_TIMEOUT_MS,
   INITIAL_CLIENT_TURN_QUEUE_STATE,
@@ -359,8 +360,10 @@ const CAPTURE_BUFFER_SIZE = 2048;
 // 취지를 트리거 문구에도 반영 — 신분·연락 이유를 먼저 밝히게 한다.
 // ⭐ 2026-10-21(라이브 실측 첫 턴 12.3초 · 기준 한 턴 6초 이하 P-H H2) — "설명한 뒤에 이어가라"가 첫 턴을 길게 늘였다.
 // 첫 마디는 짧게 하고 **멈춰서 상대 대답을 기다리게** 한다(설명은 다음 턴). 받은 사람이 첫마디를 놓쳐도 곧 되물을 수 있다.
+// ⭐ 2026-11-24(페르소나 점검 N-B1 · 판정표 OP — `docs/research/persona-consistency-2026-11-24.md`) — 평판 협박 첫 대사 4/4가 "보담은행 고객보호팀" · "보담경찰서 수사관"처럼
+// 소속을 지어냈다(페르소나 = 신원을 밝히지 않는 협박범). "신분(사칭 기관·관계)"만 적힌 이 트리거가 페르소나를 이겼다 → 신원을 숨기는 인물은 이유만(OP2).
 const OPENING_TRIGGER_TURN =
-  "(전화가 방금 연결됐다. 지금 막 전화를 받은 상대에게 캐릭터로서 자연스럽게 첫 마디를 건네라. 첫 마디는 짧게 — 신분(사칭 기관·관계)과 전화를 건 이유를 짧은 한두 문장(5초 안팎)으로만 밝히고, 멈춰서 상대의 대답을 기다려라. 다짜고짜 요구나 압박부터 하지 말고, 자세한 설명은 상대가 반응한 뒤 다음 턴에 이어가라.)";
+  "(전화가 방금 연결됐다. 지금 막 전화를 받은 상대에게 캐릭터로서 자연스럽게 첫 마디를 건네라. 첫 마디는 짧게 — 신분(사칭 기관·관계)과 전화를 건 이유를 짧은 한두 문장(5초 안팎)으로만 밝히고(캐릭터가 신원을 밝히지 않는 인물이면 소속·기관·이름을 지어내지 말고 전화를 건 이유만 밝힌다), 멈춰서 상대의 대답을 기다려라. 다짜고짜 요구나 압박부터 하지 말고, 자세한 설명은 상대가 반응한 뒤 다음 턴에 이어가라.)";
 
 // 이름 있는 타입으로 분리한 이유 — `let session: T | null` 선언부에서 `T`를 인라인으로 쓰면
 // `session = (...) as unknown as typeof session`처럼 자기참조 캐스트를 할 때, 같은 표현식 안의
@@ -756,6 +759,8 @@ export default function GeminiVoiceSession({
             userTurns: claimedUserTurns(),
             pendingInstruction,
             kind: readEndCallReasonArg(call.args),
+            // 판정표 VD(2026-11-24) — 말로 계좌를 부르는 송금 루트에서 보냈다는 말 없이 goal로 끊지 않게.
+            participantSaidSent: participantSaidSent(userTextsForGuard()),
           });
           if (result.status === "accepted" || result.status === "already_accepted") {
             // R2 — 응답 전송 **전에** 부모 래치를 건다(마이크 · 클라 텍스트 턴 · 침묵 넛지가 즉시 멈춘다 — G510).

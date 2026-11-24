@@ -271,7 +271,8 @@ const ROUTE_LEDGER: Readonly<Record<string, number>> = {
   // 2026-11-23 — 카드 배송 · 검찰 고급 대출금형이 앱 안 대출로 바뀌어 "은행 직원이 용도를 물으면 생활비" 2문장(J11 4 → 2) · "대출금을 현금으로 찾아" 4문장
   // (단계 2 · 수법 2 — J2 7 → 3)이 빠졌다.
   "functions/src/scenarios/flowVariants.ts#J11_COVER_STORY": 2, // P5
-  "functions/src/scenarios/flowVariants.ts#J2_CASH": 3, // P5
+  // ⭐ 2026-11-24(페르소나 점검 N1 · 묶음 ①) — 대환대출 고급 현금 상환형 fv-r4hc가 앱 안 출금 예약 화면(`loan-cash-withdraw`)으로 바뀌어 "예금을 현금으로 찾아"
+  // 단계 · 수법 · 결정 순간 3문장이 빠졌다(3 → 0 — 이 키는 장부에서 빠진다). 새 출금 예약 문면은 J2 패턴에 걸리지 않는다.
   // 2026-11-07(Edge 시험 판 12 · 사용자 결정 "앱 안 화면 추가") — 검찰 상품권형 fv-v2mk의 상품권 문면은 이제 앱 안 구매 화면(`voucher-purchase`)을 가리킨다
   // (문자 속 구매 화면에서 사고 화면에 뜬 핀을 불러 달라 — J12 통화 안 말 요구 · O4). 패턴은 표기만 봐서 계속 센다(5 → 6 · 문자 · 화면 · 화면 문구 · 결제 뒤 지시 새 항목).
   "functions/src/scenarios/flowVariants.ts#J4_VOUCHER": 6, // O4 확인(상품권 구매 화면 안)
@@ -312,7 +313,7 @@ const ACCOUNT_SMS_WITHOUT_SCREEN_LEDGER: readonly string[] = [];
  * (`ACCOUNT_READOUT`)가 있고 선언 문자 중 이체 화면(`fakeLandingId`)이 있는 `transfer` 문자가 없음. 남은 행마다 이유가 있다(사용자 결정 "권고대로" · 2026-10-31):
  * | 행 | 이유 |
  * |---|---|
- * | 납치 초 · 중급 2 | 2026-11-07 — 고급 2(fv-k268 · fv-w7tb)는 계좌 문자 + 이체 화면을 선언해 빠졌다(Edge 시험 판 7 · 사용자 결정 "앱 안 화면 추가"). 초 · 중급은 이번 범위 밖(시험에서 앱 밖 유도가 관측된 것은 고급) |
+ * | (납치 0) | 2026-11-07 고급 2 · 2026-11-24 초 · 중급 2(사용자 결정 (A) — 페르소나 점검 판단 요청 1)가 계좌 문자 + 이체 화면을 선언해 모두 빠졌다 |
  * | 가족 사고 4 · 손주 3 | 보류 — clone 시나리오는 Gemini Live를 타지 않아(ElevenLabs = 고정 에이전트 프롬프트 · 문자 도구 0 / 폴백 = 변형 적용) 운영 경로 확인 전 |
  * | 카드사 `fv-akj5` | #192 — 2인 챌린지 수신자 고급 조립 바이트 고정 |
  * ⛔ 늘리지 않는다. P2-d에서 환급 3이 빠졌다(수수료 계좌 문자 · 이체 화면 — 메인 "권고대로"). P2-b에서 카드사 자가 고급 `fv-x7ue` · `fv-w3dq`가 빠졌다(피해금 이관 문자 · 화면 선언) · P2-c에서 메신저 6이 빠졌다(칩).
@@ -326,8 +327,6 @@ const VERBAL_ACCOUNT_WITHOUT_SCREEN_LEDGER: readonly string[] = [
   "grandchild-impersonation#fv-brcb",
   "grandchild-impersonation#fv-cx5y",
   "grandchild-impersonation#fv-mabg",
-  "kidnapping-threat#fv-c5ih",
-  "kidnapping-threat#fv-dxwu",
 ];
 /** smsDeclarationConsistency.test.ts의 계좌 낭독 지시 패턴 + "부른다"(완성형 음절이라 "부르"에 안 걸린다 — 환급 문면) + "불러주는 계좌"(납치 · 손주 문면). */
 const ACCOUNT_READOUT = /계좌\s*불러\s*(?:줄게|드릴게)|계좌는\s*'[^']+'\s*(?:같은|처럼)[^.]*(?:부르|부른)|불러주는 계좌/;

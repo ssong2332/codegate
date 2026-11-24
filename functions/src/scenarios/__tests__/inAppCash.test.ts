@@ -94,7 +94,7 @@ test("[C3] 끊기 4-c — 예약 전 · 보류 뒤 대기 · 예약 뒤 완료 �
 });
 
 test("[C4] 화면 카탈로그 · 화면 행동 · 예약 · 보류 실시간 지시 · 보류 이벤트 배선", () => {
-  assert.deepEqual([...CASH_LANDINGS], ["cash-withdraw", "asset-cash-withdraw"]);
+  assert.deepEqual([...CASH_LANDINGS], ["cash-withdraw", "asset-cash-withdraw", "loan-cash-withdraw"]); // 2026-11-24 대출 고급 현금 상환형(fv-r4hc)
   for (const route of CASH_ROUTES) {
     assert.equal(isCashLanding(route.landingId), true);
     assert.equal(isGoldLanding(route.landingId), false);
@@ -121,7 +121,7 @@ test("[C4] 화면 카탈로그 · 화면 행동 · 예약 · 보류 실시간 �
     assert.doesNotMatch(shown, /[가-힣]+지점|[가-힣]+본점|주소|\d+\s?시/, "AC-102 (d) 지점명 · 주소 · 시각 0");
   }
 
-  assert.ok(CASH_RESERVED_INSTRUCTION.includes("보관 절차는 담당 직원이 따로 연락드려 안내한다고만"));
+  assert.ok(CASH_RESERVED_INSTRUCTION.includes("남은 절차는 담당 직원이 따로 연락드려 안내한다고만"));
   assert.ok(CASH_RESERVED_INSTRUCTION.includes("만날 장소 · 시간 · 주소는 정하지도 묻지도 마라"));
   assert.ok(CASH_HELD_INSTRUCTION.includes("한 번만 압박"));
   assert.ok(CASH_HELD_INSTRUCTION.includes("포기 신호"));

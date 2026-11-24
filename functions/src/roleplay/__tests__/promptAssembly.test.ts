@@ -1731,7 +1731,8 @@ const ACCOUNT_SMS_VARIANT_ONLY: Record<string, string[]> = {
   // 2026-11-07(사용자 결정 D-G1) — 자산 보호 고급 금형 fv-t8ga(지정 거래소 문자 — 계좌 줄 없는 `account`)가 더해졌다.
   // 같은 날(사용자 결정 D-G2 E1-b) — 자산 보호 고급 현금형 fv-k9ra(출금 예약 안내 문자 — 계좌 줄 없는 `account`)가 더해졌다.
   "asset-protection-notice-call": ["fv-k9ra", "fv-p3jx", "fv-t8ga"],
-  "kidnapping-threat": ["fv-k268", "fv-w7tb"],
+  // 2026-11-24(사용자 결정 (A)) — 납치 초 · 중급도 계좌 문자를 선언한다(원본 수법 · 옛 세션만 선언 0).
+  "kidnapping-threat": ["fv-c5ih", "fv-dxwu", "fv-k268", "fv-w7tb"],
 };
 
 test("[2026-10-17 계좌 문자 역검증] 옛 institutional 수법 문구를 끼운 오염본은 같은 판정식이 실패시킨다", () => {

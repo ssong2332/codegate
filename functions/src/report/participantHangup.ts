@@ -13,6 +13,7 @@
 // | S2 | 단일 통화 세션 ∧ `participantHangupButton === true` ∧ 세션 채널이 메신저가 아님 ∧ 참가자 발화 ≥ 1 | P2 · P3 · P4(끊은 통화 = 레그 0 · 끊은 시각 = 마지막 메시지) |
 // | S3 | 그 밖(표식 없음 — 사기범 끊기 · 한도 · 원격 끊김 · 오류 · 훈련 종료 버튼 · 옛 세션 · 메신저 종료 · 0턴) | 없음 |
 // | P2 | 끊은 시각 = 끊은 레그의 마지막 메시지 시각(그 레그 메시지가 없으면 마지막 메시지 · 메시지 0이면 시각 없음) | — |
+// | P2b | 2026-11-24 페르소나 점검 N7(3/3 — 마지막 대사 시각이 종료 버튼보다 40~45초 이르다) — 단일 통화(S2)이고 세션 `endedAt`(서버 `endSession` 시각)이 마지막 메시지 이후 | 끊은 시각 = `endedAt`(전사 제출을 기다린 몇 초만큼 늦을 수 있다 · 다통화는 P2 그대로) |
 // | P3 | 끊은 시각 이하의 속은 순간이 있다(시각을 읽을 수 없는 순간은 끊기 전으로 본다 · 끊은 시각이 없으면 순간이 하나라도 있으면) | 없음 — 속음 판정 그대로 |
 // | P4 | 그 밖 | `{ legIndex, timeLabel? }` — 리포트 "잘 대처함 · 먼저 전화를 끊음" |
 import type { SessionDoc } from "../shared/types";
@@ -44,8 +45,10 @@ export function resolveParticipantHangup(input: {
   messages: readonly (HangupMessage & { role?: "scammer" | "user" })[];
   deceivedMoments: readonly { timeLabel: string }[];
   baseMs: number;
+  /** P2b — 세션 `endedAt`(ms). 부재 = P2(종전). */
+  endedAtMs?: number;
 }): { legIndex: number; timeLabel?: string } | undefined {
-  const { session, isMultiCall, messages, deceivedMoments, baseMs } = input;
+  const { session, isMultiCall, messages, deceivedMoments, baseMs, endedAtMs } = input;
   const userTurnCount = messages.filter((m) => m.role === "user").length;
   const legIndex = hungUpLeg(session, isMultiCall, userTurnCount);
   if (legIndex === undefined) return undefined;
@@ -55,7 +58,8 @@ export function resolveParticipantHangup(input: {
   if (lastMs === undefined) {
     return deceivedMoments.length > 0 ? undefined : { legIndex }; // P3 · P4(시각 없음)
   }
-  const hangupSec = Math.max(0, Math.round((lastMs - baseMs) / 1000));
+  const hangupMs = !isMultiCall && endedAtMs !== undefined && endedAtMs >= lastMs ? endedAtMs : lastMs; // P2b
+  const hangupSec = Math.max(0, Math.round((hangupMs - baseMs) / 1000));
   const deceivedBefore = deceivedMoments.some((moment) => {
     const sec = parseSeconds(moment.timeLabel);
     return sec === null || sec <= hangupSec;

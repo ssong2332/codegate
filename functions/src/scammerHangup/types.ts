@@ -10,6 +10,8 @@ export type RequestScammerHangupRequest = {
   pendingInstruction: boolean;
   /** 모델의 `end_call` 인자 `reason`. 누락 · 오기입은 `unspecified`(거절하지 않는다). */
   kind?: string;
+  /** 판정표 VD(2026-11-24) — 참가자가 송금 이행 보고를 했는가(클라 주장값). 부재 = 모름(종전 판정). */
+  participantSaidSent?: boolean;
 };
 
 export type RequestScammerHangupResponse = {
