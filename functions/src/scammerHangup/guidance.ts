@@ -3,9 +3,9 @@
 // 잎 모듈(값 import 0) — C3의 `liveTools.ts`가 실패 문면을 여기서 가져갈 수 있게 분리했다.
 import type { ScammerHangupStatus } from "./decide";
 
-/** 승인(`accepted` · `already_accepted`). */
+/** 승인(`accepted` · `already_accepted`). 재측정 R-3(2026-11-24 · 가족 사고 fv-krq3 자녀 역이 "수고하셨습니다. 이제 전화를 마치겠습니다."로 끝냄) — "네 인물 말투 그대로"를 더했다. */
 export const SCAMMER_HANGUP_ACCEPTED_GUIDANCE =
-  "(통화가 곧 끊긴다. 작별 인사를 아직 하지 않았다면 상황에 맞는 짧은 마무리 한마디만 하고 더는 말하지 마라. 이미 했다면 아무 말도 하지 마라.)";
+  "(통화가 곧 끊긴다. 작별 인사를 아직 하지 않았다면 네 인물 말투 그대로 상황에 맞는 짧은 마무리 한마디만 하고 더는 말하지 마라. 이미 했다면 아무 말도 하지 마라.)";
 
 /** 거절(공통). */
 export const SCAMMER_HANGUP_DECLINED_GUIDANCE =
