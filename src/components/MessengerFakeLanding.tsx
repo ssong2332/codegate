@@ -96,7 +96,7 @@ import {
 } from "../lib/bankapp/withdrawAccounts";
 import { LOAN_PURPOSES, loanApplyError, loanOfferFor } from "../lib/bankapp/loanFlow";
 // ⭐ PR-3 — 대출 진행 칩 이름(위 줄은 `loanScreens.test.ts` S6의 치환 앵커라 그대로 두고 따로 가져온다).
-import { LOAN_SITE_STEPS } from "../lib/bankapp/loanFlow";
+import { LOAN_SAFE_TRANSFER_LANDING_ID, LOAN_SITE_STEPS } from "../lib/bankapp/loanFlow";
 import BankAuthSheet from "./BankAuthSheet";
 // ⭐ 2026-11-07(Edge 시험 판 12) — 상품권 구매 화면(잎 모듈 · 상대 경로).
 import {
@@ -3190,6 +3190,8 @@ function CredentialFormMockup({
   const [bankStage, setBankStage] = useState<"form" | "confirm" | "auth">("form");
   // 2026-11-07 — 출금 계좌(가상 3개 · 기본 = 머리띠 은행 입출금 · 잔액은 내 은행 송금 화면과 같은 세션 값) · 계좌 선택 시트.
   const ledger = prefilledTransfer?.ledgerKey ?? "";
+  // ⭐ 2026-11-23 판정표 Z4 · Z5 · Z6 — 잔액을 모르면 이 화면의 요구액보다 적게(대출금 보관 이체는 입금된 대출금이 따로 더해져 제외).
+  const demand = landingId === LOAN_SAFE_TRANSFER_LANDING_ID ? undefined : (prefilledTransfer?.requestedAmount ?? prefilledTransfer?.amount);
   // ⭐ 2026-11-08 판정표 A · C — 카드 값 → 말한 값 → 고정 값 · 참가자 쪽 값이 있으면 그 계좌 하나만(이체 화면이 아니면 쓰이지 않는다).
   const [mine] = useState(() =>
     resolveMyAccount({
@@ -3197,11 +3199,12 @@ function CredentialFormMockup({
       spoken: bankTransfer ? spokenAccountNow?.() : undefined,
       fixedBankName: prefilledTransfer?.myBankName ?? myBankNameFor(ledger, prefilledTransfer?.bankName),
       fixedBalance: fictionalBalanceFor(ledger),
+      demand,
     }),
   );
   const appBankName = mine.bankName;
   const [accounts] = useState(() =>
-    withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: mine.balance, avoidBankName: prefilledTransfer?.bankName, single: mine.single }),
+    withdrawAccountsFor({ seed: ledger, appBankName, primaryBalance: mine.balance, avoidBankName: prefilledTransfer?.bankName, single: mine.single, demand }),
   );
   const [accountId, setAccountId] = useState<WithdrawAccount["id"]>("main");
   const account = accounts.find((item) => item.id === accountId) ?? accounts[0]!;

@@ -106,6 +106,22 @@ export const INSTITUTION_LOAN_SMS_SENDER: Readonly<Record<string, string>> = {
   "institution-loan-disbursed": "02-0719-3300",
 };
 
+/**
+ * ⭐ PR-B — 가상 캐피탈 대출금 입금 안내(서버가 보낸다 — 게이트 밖 · 선언 밖). 2026-11-23 — 한 통화 앱 안 대출(카드 배송 고급 fv-e5mv · 검찰 고급
+ * fv-a6lq)도 같은 항목을 쓴다(같은 smsId — 화면 `disburseLoan` · 서버 `LOAN_DISBURSED_SMS_ID`가 id 하나로 안다). 시나리오 목록 셋이 **같은 객체**를 공유한다.
+ */
+const LOAN_DISBURSED_SMS: InCallSmsItem = {
+  smsId: "institution-loan-disbursed",
+  kind: "callback",
+  senderLabel: INSTITUTION_LOAN_SMS_SENDER["institution-loan-disbursed"]!,
+  body: "[○○캐피탈] 신청하신 비대면 신용대출금이 고객님 명의 입출금 계좌로 입금되었습니다.\n대출 계약은 14일 안에 철회를 신청할 수 있습니다.\n문의 02-0719-3300",
+  afterScammerTurns: 11,
+  // 본문 속 번호 = 가상 캐피탈 대출센터(번호부 — 참가자가 걸면 진짜 안내 · 방어 종료).
+  dialNumberId: "loan-capital-center",
+  announceInstruction:
+    "(참가자 휴대전화로 방금 금융회사의 대출금 입금 안내 문자가 도착했다. 이 문자는 네가 보낸 것이 아니다. 상대가 이 문자 이야기를 꺼내면, 상대의 말에 대답할 때 그 대답 안에서 한두 문장으로 받고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 금액 · 계좌번호를 새로 지어내 말하지 마라.)",
+};
+
 const LOAN_SCAM: InCallSmsItem[] = [
   {
     smsId: "loan-account",
@@ -182,6 +198,33 @@ const CARD_DELIVERY_CALL: InCallSmsItem[] = [
     afterScammerTurns: 2,
     announceInstruction:
       "(참가자 휴대전화로 방금 보안 점검 앱 설치 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 앱 설치를 진행해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 실제 주소를 읽어 주지 말고, 설치 방법·권한 설정은 설명하지 마라.)",
+  },
+  // ⭐ 2026-11-23(사용자 결정 "앱 안 대출로 바꾸기") — 한 통화 앱 안 대출 체험(`flowVariants.ts` `IN_APP_LOAN_*` 표). 화면은 기관 고급과 같은 `loan-apply` ·
+  // `loan-safe-transfer`(카탈로그 항목 공유 — `mockScreens.ts` `IN_APP_LOAN_LANDINGS`) · 입금 안내는 `LOAN_DISBURSED_SMS`(신청 제출 즉시 서버가 보낸다).
+  {
+    smsId: "card-delivery-loan-guide",
+    kind: "link",
+    senderLabel: `${SMS_SENDER_NUMBER["card-delivery-call"]} (명의도용 입증 안내)`,
+    body: "[명의도용 입증 절차] 비대면 대출 신청 안내\n○○캐피탈 비대면 신용대출로 정상 거래 여부를 확인합니다.\n아래 링크에서 본인 확인 후 신청해 주세요.\n신청 후 담당자에게 바로 알려 주세요.",
+    linkDisplayText: "비대면 대출 신청하기",
+    fakeLandingId: "loan-apply",
+    linkAddress: "credit-loan-apply.invalid/apply/Cd7m",
+    afterScammerTurns: 9,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 대출 신청 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크에서 비대면 대출을 신청해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 금융회사 이름 · 금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
+  },
+  LOAN_DISBURSED_SMS,
+  {
+    smsId: "card-delivery-loan-safe-account",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["card-delivery-call"]} (명의도용 입증 안내)`,
+    body: "[명의도용 입증 절차] 대출금 보관 계좌 안내\n예금주: 윤서경\nOO은행 342-1187-0956-02\n입금된 대출금 전액을 아래에서 이체해 주세요.\n이체 후 담당자에게 바로 알려 주세요.",
+    linkDisplayText: "대출금 보관 이체 진행하기",
+    fakeLandingId: "loan-safe-transfer",
+    linkAddress: "loan-keep-account.invalid/transfer/Cd2x",
+    afterScammerTurns: 12,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 대출금 보관 계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 입금된 대출금을 그대로 옮겨 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호를 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
   },
 ];
 
@@ -308,6 +351,33 @@ const PROSECUTION_COOPERATION_CALL: InCallSmsItem[] = [
     announceInstruction:
       "(참가자 휴대전화로 방금 자금 검수용 상품권 구매 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크의 판매처 화면에서 상품권을 사고 화면에 뜬 핀 번호를 불러 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 핀 번호 · 금액을 지어내 말하지 말고, 편의점이나 다른 곳에서 사라고 하지 말고, 실제 주소를 읽어 주지도 마라.)",
   },
+  // ⭐ 2026-11-23(사용자 결정 "앱 안 대출로 바꾸기") — 한 통화 앱 안 대출 체험(`flowVariants.ts` `IN_APP_LOAN_*` 표). 화면은 기관 고급과 같은 `loan-apply` ·
+  // `loan-safe-transfer`(카탈로그 항목 공유 — `mockScreens.ts` `IN_APP_LOAN_LANDINGS`) · 입금 안내는 `LOAN_DISBURSED_SMS`(신청 제출 즉시 서버가 보낸다).
+  {
+    smsId: "prosecution-loan-guide",
+    kind: "link",
+    senderLabel: `${SMS_SENDER_NUMBER["prosecution-cooperation-call"]} (명의도용 입증 안내)`,
+    body: "[명의도용 입증 절차] 비대면 대출 신청 안내\n○○캐피탈 비대면 신용대출로 정상 거래 여부를 확인합니다.\n아래 링크에서 본인 확인 후 신청해 주세요.\n신청 후 담당자에게 바로 알려 주세요.",
+    linkDisplayText: "비대면 대출 신청하기",
+    fakeLandingId: "loan-apply",
+    linkAddress: "credit-loan-apply.invalid/apply/Pq6n",
+    afterScammerTurns: 9,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 대출 신청 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크에서 비대면 대출을 신청해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 금융회사 이름 · 금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
+  },
+  LOAN_DISBURSED_SMS,
+  {
+    smsId: "prosecution-loan-safe-account",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["prosecution-cooperation-call"]} (명의도용 입증 안내)`,
+    body: "[명의도용 입증 절차] 대출금 보관 계좌 안내\n예금주: 차지안\nOO은행 307-5521-8043-06\n입금된 대출금 전액을 아래에서 이체해 주세요.\n이체 후 담당자에게 바로 알려 주세요.",
+    linkDisplayText: "대출금 보관 이체 진행하기",
+    fakeLandingId: "loan-safe-transfer",
+    linkAddress: "loan-keep-account.invalid/transfer/Pq9w",
+    afterScammerTurns: 12,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 대출금 보관 계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 입금된 대출금을 그대로 옮겨 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호를 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
+  },
 ];
 
 const INSTITUTIONAL_IMPERSONATION: InCallSmsItem[] = [
@@ -403,17 +473,7 @@ const INSTITUTIONAL_IMPERSONATION: InCallSmsItem[] = [
     announceInstruction:
       "(참가자 휴대전화로 방금 대출 신청 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크에서 비대면 대출을 신청해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 금융회사 이름 · 금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
   },
-  {
-    smsId: "institution-loan-disbursed",
-    kind: "callback",
-    senderLabel: INSTITUTION_LOAN_SMS_SENDER["institution-loan-disbursed"]!,
-    body: "[○○캐피탈] 신청하신 비대면 신용대출금이 고객님 명의 입출금 계좌로 입금되었습니다.\n대출 계약은 14일 안에 철회를 신청할 수 있습니다.\n문의 02-0719-3300",
-    afterScammerTurns: 11,
-    // 본문 속 번호 = 가상 캐피탈 대출센터(번호부 — 참가자가 걸면 진짜 안내 · 방어 종료).
-    dialNumberId: "loan-capital-center",
-    announceInstruction:
-      "(참가자 휴대전화로 방금 금융회사의 대출금 입금 안내 문자가 도착했다. 이 문자는 네가 보낸 것이 아니다. 상대가 이 문자 이야기를 꺼내면, 상대의 말에 대답할 때 그 대답 안에서 한두 문장으로 받고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 금액 · 계좌번호를 새로 지어내 말하지 마라.)",
-  },
+  LOAN_DISBURSED_SMS,
   {
     smsId: "institution-loan-safe-account",
     kind: "account",

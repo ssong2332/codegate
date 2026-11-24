@@ -81,8 +81,8 @@ export const JUDGEMENT_TABLE: readonly JudgementRow[] = [
  * ⛔ 접두사로 넓히지 않는다 — 은퇴 `fv-pgqt`의 `INSTITUTION_LOAN_DEMAND`("금융회사에서 대출을 받아" = 밖 대출)는 계속 센다(아래 역검증).
  * | 종류 | 무엇 |
  * |---|---|
- * | 변수 | 기관 고급 3통화(fv-c5fj) 수법 · 단계 · 레그 · 상담원 페르소나 · 결정 순간 · 교육점 · 대출 신청 제출 맥락 지시 |
- * | 문자 | `smsId` = 대출 안내(앱 안 신청 화면 링크) · 입금 안내(가상 캐피탈) · 대출금 보관 계좌(앱 안 이체 화면 링크) |
+ * | 변수 | 기관 고급 3통화(fv-c5fj) 수법 · 단계 · 레그 · 상담원 페르소나 · 결정 순간 · 교육점 · 대출 신청 제출 맥락 지시 · 2026-11-23 한 통화 앱 안 대출(fv-e5mv · fv-a6lq) 단계 · 결정 순간 · 검찰 페르소나 |
+ * | 문자 | `smsId` = 대출 안내(앱 안 신청 화면 링크) · 입금 안내(가상 캐피탈) · 대출금 보관 계좌(앱 안 이체 화면 링크) — 기관 · 카드 배송 · 검찰 각 시나리오 |
  * | 화면 | `landingId` · 화면 문구 표 키 = `loan-apply` · `loan-safe-transfer` · 클라 서브 컴포넌트 `LoanApplyMockup` |
  */
 const IN_APP_LOAN_SURFACES = {
@@ -100,8 +100,26 @@ const IN_APP_LOAN_SURFACES = {
     "INSTITUTION_LOAN_DECISION_MOMENT",
     "INSTITUTION_LOAN_REPORT_LESSONS",
     "LOAN_APPLY_SUBMITTED_INSTRUCTION",
+    // 2026-11-23 — 한 통화 앱 안 대출(카드 배송 고급 fv-e5mv · 검찰 고급 fv-a6lq — 사용자 결정 "앱 안 대출로 바꾸기").
+    // 공유 대출 이유 — 이제 앱 안 대출 세 흐름(fv-c5fj · fv-e5mv · fv-a6lq)만 쓴다(앱 밖 대출 흐름 0).
+    "LOAN_PROOF_REASON",
+    "IN_APP_LOAN_APPLY_STEPS",
+    "CARD_DELIVERY_LOAN_APPLY_STAGE",
+    "PROSECUTION_LOAN_APPLY_STAGE",
+    "IN_APP_LOAN_TRANSFER_STAGE",
+    "IN_APP_LOAN_TRANSFER_DEMAND",
+    "IN_APP_LOAN_ONE_CALL_DECISION_MOMENT",
+    "PROSECUTION_LOAN_PERSONA",
   ],
-  smsIds: ["institution-loan-guide", "institution-loan-disbursed", "institution-loan-safe-account"],
+  smsIds: [
+    "institution-loan-guide",
+    "institution-loan-disbursed",
+    "institution-loan-safe-account",
+    "card-delivery-loan-guide",
+    "card-delivery-loan-safe-account",
+    "prosecution-loan-guide",
+    "prosecution-loan-safe-account",
+  ],
   landingIds: ["loan-apply", "loan-safe-transfer"],
   functions: ["LoanApplyMockup"],
 } as const;
@@ -241,15 +259,20 @@ const rel = (abs: string) => path.relative(path.resolve(FN_SRC, "../.."), abs).r
 const ROUTE_LEDGER: Readonly<Record<string, number>> = {
   // PR-B(2026-11-07) — 기관 고급 fv-c5fj가 3통화 앱 안 대출 체험으로 바뀌어 밖 대출 유도 2문장(통화 중 "금융회사에서 대출을 받아" · 은행 직원 둘러대기)이
   // 빠졌다(16 → 14 · J11 8 → 6). 새 대출 문면은 J15 등록 영역이라 세지 않는다. 은퇴 fv-pgqt 원문은 그대로 센다.
-  "functions/src/scenarios/flowVariants.ts#J1_LOAN": 14, // P4
+  // ⭐ 2026-11-23(사용자 결정 "앱 안 대출로 바꾸기") — 카드 배송 고급 fv-e5mv · 검찰 고급 fv-a6lq도 한 통화 앱 안 대출 체험으로 바뀌어 밖 대출 유도
+  // (단계 2 · 수법 2 — "금융회사에서 대출을 받아 · 대출금을 현금으로 찾아 직원에게") · 결정 순간 2 · 현금 인출(J2 4) · 은행 직원 둘러대기(J11 2)가 빠졌다.
+  // 공유 대출 이유 `LOAN_PROOF_REASON`은 이제 앱 안 대출 세 흐름만 써서 J15 등록 영역이다(14 → 6). 남은 6 = 루트 이름표 '대출금 전달형' 1 · 은퇴 fv-pgqt 원문 2
+  // · 검찰 코인 · 사이트 루트의 추가 검수 '대출 가능액 · 대출 한도' 3(앱 안 자산 검수 사이트 항목 — 이번 범위 밖).
+  "functions/src/scenarios/flowVariants.ts#J1_LOAN": 6, // P4
   // ⭐ 2026-11-07(Edge 재시험 2 S7 · 사용자 결정 D-G1 ~ D-G6) — 금 구매형 결말(기관 고급 fv-g2ld · 자산 보호 고급 fv-t8ga)이 앱 안 금 거래소 화면 구매로 바뀌었다.
   // 금 문면은 J16 등록 영역이라 세지 않고(J3 5 → 0), 종전 "예금 · 적금을 찾아" 2문장(J2 9 → 7) · "판매점 직원이 용도를 물으면" 코칭 1문장(J11 6 → 5)이 빠졌다.
   // 같은 날(사용자 결정 D-G2 E1-b) — 현금 예탁형 fv-q7cn이 앱 안 출금 예약 화면으로 바뀌어 "은행 직원이 이유를 물으면 개인 용도" 코칭 1문장이 빠졌다(J11 5 → 4 —
   // 문진표 코칭으로 대체). 새 출금 예약 문면은 J2 패턴(현금으로 찾 · 인출)에 걸리지 않아 J2는 그대로(7).
-  "functions/src/scenarios/flowVariants.ts#J11_COVER_STORY": 4, // P5
+  // 2026-11-23 — 카드 배송 · 검찰 고급 대출금형이 앱 안 대출로 바뀌어 "은행 직원이 용도를 물으면 생활비" 2문장(J11 4 → 2) · "대출금을 현금으로 찾아" 4문장
+  // (단계 2 · 수법 2 — J2 7 → 3)이 빠졌다.
+  "functions/src/scenarios/flowVariants.ts#J11_COVER_STORY": 2, // P5
   // ⭐ 2026-11-24(페르소나 점검 N1 · 묶음 ①) — 대환대출 고급 현금 상환형 fv-r4hc가 앱 안 출금 예약 화면(`loan-cash-withdraw`)으로 바뀌어 "예금을 현금으로 찾아"
-  // 단계 · 수법 · 결정 순간 3문장이 빠졌다(7 → 4). 새 출금 예약 문면은 J2 패턴에 걸리지 않는다.
-  "functions/src/scenarios/flowVariants.ts#J2_CASH": 4, // P5
+  // 단계 · 수법 · 결정 순간 3문장이 빠졌다(3 → 0 — 이 키는 장부에서 빠진다). 새 출금 예약 문면은 J2 패턴에 걸리지 않는다.
   // 2026-11-07(Edge 시험 판 12 · 사용자 결정 "앱 안 화면 추가") — 검찰 상품권형 fv-v2mk의 상품권 문면은 이제 앱 안 구매 화면(`voucher-purchase`)을 가리킨다
   // (문자 속 구매 화면에서 사고 화면에 뜬 핀을 불러 달라 — J12 통화 안 말 요구 · O4). 패턴은 표기만 봐서 계속 센다(5 → 6 · 문자 · 화면 · 화면 문구 · 결제 뒤 지시 새 항목).
   "functions/src/scenarios/flowVariants.ts#J4_VOUCHER": 6, // O4 확인(상품권 구매 화면 안)
@@ -343,7 +366,7 @@ describe("P0 서비스 밖 행동 유도 — J15 서비스 안 대출 예외(D-L
     const fv = readFileSync(fvPath, "utf8");
     const confirm = readFileSync(path.join(FN_SRC, "inCallSms", "confirmResult.ts"), "utf8");
     for (const name of IN_APP_LOAN_SURFACES.variables) assert.ok(new RegExp(`const ${name}\\b`).test(fv + confirm), name);
-    for (const smsId of IN_APP_LOAN_SURFACES.smsIds) assert.ok(findInCallSmsItem("institutional-impersonation", smsId), smsId);
+    for (const smsId of IN_APP_LOAN_SURFACES.smsIds) assert.ok(Object.values(IN_CALL_SMS).flat().some((item) => item.smsId === smsId), smsId);
     const landing = readFileSync(path.join(ROOT_SRC, "components", "MessengerFakeLanding.tsx"), "utf8");
     assert.ok(landing.includes("function LoanApplyMockup("));
   });

@@ -18,9 +18,10 @@ test("[§132.7 N4] 이체 화면 제출을 처음 기록하면 실시간 맥락 
   // 최초 기록 분기 안에서만(이미 기록됨 = 없음 · 중복 주입 0).
   assert.match(
     src,
+    // 2026-11-23 — 대출 신청 화면(L0) 분기는 한 통화 앱 안 대출의 입금 안내 문자(판정표 LD5)를 먼저 부른다.
     // 2026-11-08(§15.5 관찰 ③) — 화면 id를 넘긴다(돈을 옮기지 않는 입력 화면 = 입력 제출 문면 L-F).
     // N1(2026-11-01) — 요구액 대비 비교로 문면을 고른다(같음 · 많음 · 모름 = 종전 `LANDING_SUBMITTED_INSTRUCTION` — `landingSubmittedInstructionFor` L3).
-    /if \(!snap\.get\(field\)\) \{\n\s*await smsRef\.update\(\{ \[field\]: Timestamp\.now\(\), \.\.\.comparisonUpdate \}\);\n(?:\s*\/\/[^\n]*\n)*(?:\s*if \(event === "landing_submitted" && snap\.get\("fakeLandingId"\) === LOAN_APPLY_LANDING_ID\) return \{ recorded: true, contextInstruction: LOAN_APPLY_SUBMITTED_INSTRUCTION \};\n)?(?:\s*\/\/[^\n]*\n)*\s*if \(event === "landing_submitted"\) return \{ recorded: true, contextInstruction: landingSubmittedInstructionFor\(amountComparison, false, snap\.get\("fakeLandingId"\) as string \| undefined\) \};\n\s*\}/,
+    /if \(!snap\.get\(field\)\) \{\n\s*await smsRef\.update\(\{ \[field\]: Timestamp\.now\(\), \.\.\.comparisonUpdate \}\);\n(?:\s*\/\/[^\n]*\n)*(?:\s*if \(event === "landing_submitted" && snap\.get\("fakeLandingId"\) === LOAN_APPLY_LANDING_ID\) \{\n(?:\s*\/\/[^\n]*\n)*\s*await deliverLoanDisbursedSmsIfDue\([^\n]*\);\n\s*return \{ recorded: true, contextInstruction: LOAN_APPLY_SUBMITTED_INSTRUCTION \};\n\s*\}\n)?(?:\s*\/\/[^\n]*\n)*\s*if \(event === "landing_submitted"\) return \{ recorded: true, contextInstruction: landingSubmittedInstructionFor\(amountComparison, false, snap\.get\("fakeLandingId"\) as string \| undefined\) \};\n\s*\}/,
   );
 });
 

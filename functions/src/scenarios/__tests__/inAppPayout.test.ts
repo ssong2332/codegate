@@ -102,7 +102,8 @@ test("[V1] 검찰 상품권형 — 사건 조회 문자 뒤 상품권 구매 문
   assert.ok(v.sms[0]!.notBeforeUserTurns < v.sms[1]!.notBeforeUserTurns, "선언 순서 = 단계 순서");
   assert.ok(v.sms.length <= 3, "AC-096 (b) 고급 문자 0~3");
   assert.ok(!VERBAL_DECISION_VARIANTS.includes("fv-v2mk"), "결정 순간이 화면으로 바뀌어 말로 끝나는 결말 목록에서 뺐다");
-  assert.ok(VERBAL_DECISION_VARIANTS.includes("fv-a6lq"), "대출금형은 그대로");
+  // 2026-11-23 — 대출금형 fv-a6lq도 앱 안 대출 화면이 생겨 이 목록에서 빠졌다(`inAppLoanOneCall.test.ts`).
+  assert.ok(!VERBAL_DECISION_VARIANTS.includes("fv-a6lq"));
   const voucherSms = findInCallSmsItem(PROSECUTION, "prosecution-voucher-link")!;
   assert.equal(voucherSms.fakeLandingId, "voucher-purchase");
   assert.ok(voucherSms.linkAddress?.startsWith(`${findMockScreenItem(PROSECUTION, "voucher-purchase")!.mockHost}/`));
@@ -118,8 +119,8 @@ test("[V1] 검찰 상품권형 — 사건 조회 문자 뒤 상품권 구매 문
   assert.ok(prompt.personaPrompt.includes("편의점 · 다른 매장 · 다른 앱에서 사라고 하지 않는다"));
   assert.ok(prompt.personaPrompt.includes("문자 속 링크의 구매 화면에서 문화상품권을 사게 한다"));
   assert.ok(!prompt.personaPrompt.includes("살 곳을 정해 주지도 않는다"), "종전 '살 곳을 정하지 않는다'(= 앱 밖 구매) 문면 0");
-  // 대출금형 페르소나는 여전히 사건 조회 문자 하나뿐.
-  assert.ok(resolveSessionScenarioPrompt(PROSECUTION, "fv-a6lq")!.personaPrompt.includes("사건 조회 안내 문자 말고는"));
+  // 2026-11-23 — 대출금형 페르소나는 사건 조회 · 대출 안내 · 대출금 보관 계좌 문자 셋(`inAppLoanOneCall.test.ts`).
+  assert.ok(resolveSessionScenarioPrompt(PROSECUTION, "fv-a6lq")!.personaPrompt.includes("사건 조회 안내 문자 · 대출 안내 문자 · 대출금 보관 계좌 안내 문자 말고는"));
 });
 
 test("[V2] 상품권 구매 화면 카탈로그 · 구매 완료 주장 · 결제 뒤 실시간 지시", () => {

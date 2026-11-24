@@ -17,6 +17,7 @@
 // | LD2 | approved ∧ 확인 전화 통화가 아직 연결 중 | 문자 보류(기록만) |
 // | LD3 | approved ∧ 확인 전화 통화가 끝났다(`relay.legEnded` = 그 레그 — 상담원 `end_call` 승인 · 참가자 끊기 · 기록 시점에 이미 끝남) | 입금 문자 도착(이미 있으면 0) |
 // | LD4 | approved ∧ 다음 통화로 넘어갔다(`relay.legIndex` > 그 레그) | 입금 문자 도착(안전망 · 이미 있으면 0) |
+// | LD5 | ⭐ 2026-11-23 — 확인 전화 레그가 없는 변형(한 통화 앱 안 대출 — 카드 배송 고급 fv-e5mv · 검찰 고급 fv-a6lq)이 대출 신청 화면을 제출했다(`loanDisbursedOnApply`) | 입금 문자 즉시 도착(비대면 자동 실행으로 본다 · 이미 있으면 0) |
 // 근거: 종전에는 기록과 같은 요청에서 문자를 보냈고 도구는 "결과를 말하기 전에" 부르게 돼 있어, 질문만 해 놓고 답을 듣기 전 입금 문자("입금되었습니다")가
 // 먼저 왔고 이어 상담원이 "입금될 예정입니다"라고 해 서로 어긋났다(재시험 23 · `loanReviewOrder.test.ts` 재현).
 import { logger } from "firebase-functions";
@@ -74,6 +75,13 @@ export function loanDisbursedSmsDue(session: Pick<SessionDoc, "flowVariantId" | 
   return currentLegIndex(variant, relay) > genuine; // LD4 · 그 밖 LD2
 }
 
+/** 판정표 LD5(순수) — 대출 신청 화면 제출 직후 부른다. 확인 전화 레그가 없는 변형(다통화 아님)이고 이 시나리오에 입금 안내 문자가 있으면 참. */
+export function loanDisbursedOnApply(session: Pick<SessionDoc, "flowVariantId" | "scenarioId">): boolean {
+  const variant = findFlowVariant(session.flowVariantId);
+  if (!variant || variant.multiCall || variant.scenarioId !== session.scenarioId) return false;
+  return findInCallSmsItem(session.scenarioId, LOAN_DISBURSED_SMS_ID) !== undefined;
+}
+
 /**
  * LD3 · LD4 — 때가 되면 입금 안내 문자를 1회 도착시킨다(이미 있으면 0 · 실패는 통화를 막지 않는다).
  * 호출부: `recordLoanReview`(기록 시점에 이미 끝남) · `requestScammerHangup`(상담원 `end_call` 승인 뒤) · `startCallLeg`(참가자 끊기 · 다음 통화 연결 뒤).
@@ -81,11 +89,13 @@ export function loanDisbursedSmsDue(session: Pick<SessionDoc, "flowVariantId" | 
 export async function deliverLoanDisbursedSmsIfDue(
   sessionRef: FirebaseFirestore.DocumentReference,
   sessionId: string,
+  /** LD5 — 한 통화 앱 안 대출은 `loanDisbursedOnApply`를 넘긴다(부재 = LD1 ~ LD4). */
+  due: (session: SessionDoc) => boolean = loanDisbursedSmsDue,
 ): Promise<boolean> {
   try {
     const snap = await sessionRef.get();
     const session = snap.data() as SessionDoc | undefined;
-    if (!session || !loanDisbursedSmsDue(session)) return false;
+    if (!session || !due(session)) return false;
     const item = findInCallSmsItem(session.scenarioId, LOAN_DISBURSED_SMS_ID);
     if (!item) return false;
     const existing = await sessionRef.collection("inCallSms").doc(LOAN_DISBURSED_SMS_ID).get();

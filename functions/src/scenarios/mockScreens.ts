@@ -655,37 +655,12 @@ const COURIER_CUSTOMS_SCAM: MockScreenItem[] = [
   },
 ];
 
-// ── §51 이체형 가짜 랜딩 (§45 ⓐ 집행 · UX-023 v1.25 (2)/(17-a) 정본 — 문면 그대로 복사, 의역 금지) ──
-//
-// UF-008 — `institution-safe-account` 문자에 병기된 링크 칩(`institution-safe-account-transfer`가
-// 아니라 `safe-account-transfer`)에서 열린다. §51.6 R10 — 기존 account 항목에 링크만 병기했고
-// 신규 `InCallSmsKind`·`MockScreenKind`는 0건이다.
-//
-// ⚠️ **UX v1.25 정정 — bodyLines 둘째 줄만.** v1.24 원안 "문자로 안내된 안전계좌 번호와 이체
-// 금액을 입력해 주세요."는 `fields` 라벨을 문자 그대로 반복해 렌더 텍스트에 그 라벨이 2회
-// 등장했다(T116 게이트 G194 — `renderGate.test.ts:191-199`). `fields`·헤드라인·CTA 등 나머지는
-// 무변경.
-const INSTITUTIONAL_IMPERSONATION: MockScreenItem[] = [
-  {
-    landingId: "safe-account-transfer",
-    kind: "credential-form",
-    entrySurface: "in-call-sms",
-    headline: "안전계좌 이체가 아직 완료되지 않았습니다",
-    bodyLines: [
-      "범죄 연루가 확인된 자금은 임시 안전계좌로 옮겨야 보호 조치가 적용됩니다.",
-      "이체하실 금액만 입력하시면 보호 조치가 바로 적용됩니다.",
-    ],
-    // 문자 발신 라벨(`inCallSms.ts` INSTITUTIONAL_IMPERSONATION `institution-safe-account`
-    // "(자산보호 안내)")과 일관되게 맞춘다(P-28 (6)).
-    issuerLabel: "ⓒ 자산보호 이체 안내센터",
-    mockHost: "jasan-boho-center.invalid",
-    fields: ["안전계좌 번호", "이체 금액"],
-    submitLabel: "안전계좌로 이체하기",
-    successHeadline: "안전계좌로 이체가 완료되었습니다.",
-    momentTactic: "범죄 연루 자금 보호를 빌미로 한 안전계좌 이체 유도",
-    correctAction:
-      "'안전계좌로 옮기라'며 계좌번호와 금액을 입력하라고 하면 그 자리에서 멈추세요 — 어떤 수사·금융기관도 돈을 다른 계좌로 옮기라고 하지 않습니다. ① 통화를 끊고 이미 알고 있는 은행 대표번호로 직접 확인하기 ② 계좌번호·금액을 문자 링크에 넣지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
-  },
+/**
+ * ⭐ PR-B — 앱 안 대출 화면 2종(대출 신청 · 대출금 보관 이체). 2026-11-23(사용자 결정 "앱 안 대출로 바꾸기") — 기관 사칭 고급 fv-c5fj에 더해 카드 배송 고급
+ * fv-e5mv · 검찰 고급 fv-a6lq(한 통화 앱 안 대출)도 같은 화면을 연다. 세 시나리오 카탈로그가 **같은 객체**를 공유한다(같은 landingId = 같은 화면 · 클라 렌더 ·
+ * 제출 판정 L0 · 이체 화면 목록이 id 하나로 안다). 문서 id는 세션(시나리오 하나) 안에서만 쓰이므로 시나리오 사이 공유는 충돌이 없다.
+ */
+const IN_APP_LOAN_LANDINGS: MockScreenItem[] = [
   // ⭐ PR-B(2026-11-07 — 설계 docs/research/institution-advanced-loan-design-2026-11-07.md §6) — 앱 안 비대면 대출 신청(`institution-loan-guide` 문자).
   // 렌더 정본 = 클라 `src/components/MessengerFakeLanding.tsx` `LoanApplyMockup`(본인 확인 → 한도 조회 → 금액 · 용도 → 약정 확인 → 전자서명 → 신청 완료).
   // 기록은 마지막 신청 버튼을 눌렀다는 사실 하나(`landing_submitted`) — 금액 · 용도 · 인증 값은 서버로 가지 않는다(AC-045 · G138).
@@ -727,6 +702,40 @@ const INSTITUTIONAL_IMPERSONATION: MockScreenItem[] = [
     correctAction:
       "'대출금을 보관 계좌로 옮기라'고 하면 100% 사기입니다 — 어떤 수사 · 금융기관도 대출금을 다른 계좌로 옮기라고 하지 않습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 문자 속 링크로 이체하지 않기 ③ 이미 보냈다면 112(경찰)와 그 은행 · 대출 금융회사에 바로 지급정지를 요청하기 ④ 대출 14일 안이면 대출계약 철회를 신청하기.",
   },
+];
+
+// ── §51 이체형 가짜 랜딩 (§45 ⓐ 집행 · UX-023 v1.25 (2)/(17-a) 정본 — 문면 그대로 복사, 의역 금지) ──
+//
+// UF-008 — `institution-safe-account` 문자에 병기된 링크 칩(`institution-safe-account-transfer`가
+// 아니라 `safe-account-transfer`)에서 열린다. §51.6 R10 — 기존 account 항목에 링크만 병기했고
+// 신규 `InCallSmsKind`·`MockScreenKind`는 0건이다.
+//
+// ⚠️ **UX v1.25 정정 — bodyLines 둘째 줄만.** v1.24 원안 "문자로 안내된 안전계좌 번호와 이체
+// 금액을 입력해 주세요."는 `fields` 라벨을 문자 그대로 반복해 렌더 텍스트에 그 라벨이 2회
+// 등장했다(T116 게이트 G194 — `renderGate.test.ts:191-199`). `fields`·헤드라인·CTA 등 나머지는
+// 무변경.
+const INSTITUTIONAL_IMPERSONATION: MockScreenItem[] = [
+  {
+    landingId: "safe-account-transfer",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "안전계좌 이체가 아직 완료되지 않았습니다",
+    bodyLines: [
+      "범죄 연루가 확인된 자금은 임시 안전계좌로 옮겨야 보호 조치가 적용됩니다.",
+      "이체하실 금액만 입력하시면 보호 조치가 바로 적용됩니다.",
+    ],
+    // 문자 발신 라벨(`inCallSms.ts` INSTITUTIONAL_IMPERSONATION `institution-safe-account`
+    // "(자산보호 안내)")과 일관되게 맞춘다(P-28 (6)).
+    issuerLabel: "ⓒ 자산보호 이체 안내센터",
+    mockHost: "jasan-boho-center.invalid",
+    fields: ["안전계좌 번호", "이체 금액"],
+    submitLabel: "안전계좌로 이체하기",
+    successHeadline: "안전계좌로 이체가 완료되었습니다.",
+    momentTactic: "범죄 연루 자금 보호를 빌미로 한 안전계좌 이체 유도",
+    correctAction:
+      "'안전계좌로 옮기라'며 계좌번호와 금액을 입력하라고 하면 그 자리에서 멈추세요 — 어떤 수사·금융기관도 돈을 다른 계좌로 옮기라고 하지 않습니다. ① 통화를 끊고 이미 알고 있는 은행 대표번호로 직접 확인하기 ② 계좌번호·금액을 문자 링크에 넣지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+  ...IN_APP_LOAN_LANDINGS,
   // ⭐ 2026-11-07 — 기관 고급 금 구매형(`institution-gold-shop` 문자 · 위 `GOLD_LANDINGS` 주석).
   {
     landingId: "gold-buy",
@@ -865,6 +874,8 @@ const CARD_DELIVERY_CALL: MockScreenItem[] = [
     correctAction:
       "카드 사고 접수를 이유로 앱 설치나 권한 허용을 요구받으면 그 자리에서 허용하지 말고 화면을 닫으세요. ① 통화를 끊고 카드 뒷면이나 카드사 공식 경로에서 찾은 번호로 직접 확인하기 ② 문자 속 링크로 앱을 설치하지 않기 ③ 가족이나 가까운 사람에게 화면을 보여 주고 함께 확인하기 ④ 이미 허용했다면 가족 휴대폰이나 집 전화로 경찰이나 금융감독원에 신고하기.",
   },
+  // ⭐ 2026-11-23 — 한 통화 앱 안 대출 체험(`flowVariants.ts` `IN_APP_LOAN_*` 표 · 위 `IN_APP_LOAN_LANDINGS`).
+  ...IN_APP_LOAN_LANDINGS,
 ];
 
 // ⭐ §92.3(docs/Architecture.md · DECISIONS #206) — 고급 전용 2종의 통화 중 문자에서 열리는 `credential-form` 각 1건(도달 가능 랜딩
@@ -1096,6 +1107,8 @@ const PROSECUTION_COOPERATION_CALL: MockScreenItem[] = [
     correctAction:
       "수사기관 · 금융기관은 수사나 검수를 이유로 상품권을 사라고 하거나 핀 번호를 불러 달라고 하지 않습니다 — 핀 번호를 알려 주는 순간 그 금액은 바로 빠져나갑니다. ① 상품권을 사지 말고 전화를 끊기 ② 이미 샀다면 핀 번호를 누구에게도 알려 주지 않기 ③ 이미 알려 줬다면 바로 그 상품권 발행사 고객센터에 사용 정지를 요청하고 112(경찰) · 1332(금융감독원)에 알리기.",
   },
+  // ⭐ 2026-11-23 — 한 통화 앱 안 대출 체험(`flowVariants.ts` `IN_APP_LOAN_*` 표 · 위 `IN_APP_LOAN_LANDINGS`).
+  ...IN_APP_LOAN_LANDINGS,
 ];
 
 // UF-008 — `bank-protect-account` 문자(§53/§51 커밋 D)에서 열린다. §51.6 R10 — 신규

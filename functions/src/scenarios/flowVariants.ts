@@ -61,7 +61,7 @@ import {
   PROSECUTION_SITE_COIN_TACTIC,
   PROSECUTION_SITE_EXTRA_TACTICS,
   PROSECUTION_SITE_PERSONA,
-  prosecutionRoutePersona,
+  prosecutionLoanRoutePersona,
   prosecutionVoucherRoutePersona,
 } from "./prosecutionCooperationCall.prompt";
 import { extractTacticLabel } from "./tacticFlavor";
@@ -650,13 +650,37 @@ const CARD_DELIVERY_IDENTITY_DEMAND =
 //    숙박업소 격리 부분은 넣지 않는다 — §115.2) · 금감원 소비자경보 2024-35호(카드 배송원 → 카드사 → 금감원 역할 분담 · 정상 대출 입증 명목).
 // ③ 유출 사고 빌미 배송 지연형 — 근거 경찰청 통합대응단(정책브리핑 2025-12-08 · 유출을 빌미로 배송 지연 문자 → "신청하지 않은 카드가 발급됐을 수 있다" →
 //    가짜 고객센터 → 보안 환경 명목 원격제어 앱). 결말(자산 보호 이체)은 fv-tvnj와 같고 진입만 다르다(§119 루트 표 규칙 — 다른 키).
+// ⭐ 2026-11-23(사용자 실기 시험 · 결정 "앱 안 대출로 바꾸기") — 결말을 앱 밖 "금융회사에서 대출 → 대출금 현금 인출 → 직원 대면 전달"에서
+// 한 통화 안 앱 안 대출 체험(대출 안내 문자 → 비대면 대출 신청 화면 `loan-apply` → 입금 안내 문자(서버) → 대출금 보관 이체 화면 `loan-safe-transfer`)으로
+// 바꿨다(검찰 고급 fv-a6lq와 같은 꼴 · 아래 `IN_APP_LOAN_*` 주석). 수법은 기관 고급 fv-c5fj의 대출 신청 · 대출금 이체 수법을 그대로 쓴다.
 const CARD_DELIVERY_LOAN_STAGES = [
   ...CARD_DELIVERY_STAGES.slice(0, 3),
   "금융당국 조사가 시작됐다며 불안을 키우고, 확인하겠다는 상대를 막지 않는다. 검사가 구속 수사를 검토 중이라는 말을 전해 들은 것처럼 전한다.",
-  `${LOAN_PROOF_REASON}. 그다음 금융회사에서 대출을 받아 그 대출금을 현금으로 찾아 담당 직원에게 맡기겠다는 약속을 받아 내려 한다. 은행 직원이 용도를 물으면 생활비라고만 하라고 시킨다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 불이익을 한 번 암시한 뒤 더 조르지 않고 마무리한다.`,
 ] as const;
-const CARD_DELIVERY_LOAN_CASH_DEMAND =
-  "대출금 현금 인출 요구 — '명의 도용 대출이 아닌지 입증하려면 정상 절차로 대출을 받으셔야 합니다, 받으신 대출금은 확인이 끝날 때까지 현금으로 찾아 담당 직원에게 맡겨 주세요' 처럼 입증을 이유로 대출을 받게 하고 대출금을 현금으로 찾아 직원에게 맡기게 한다. 만날 곳 · 시간은 정하지 않는다.";
+// ── ⭐ 2026-11-23 한 통화 앱 안 대출 체험(카드 배송 고급 fv-e5mv · 검찰 고급 fv-a6lq — 사용자 결정 "앱 안 대출로 바꾸기") ──────────────
+// | 차례 | 누가 · 무엇 | 화면 |
+// |---|---|---|
+// | 1 | 사기범이 대출 이유(`LOAN_PROOF_REASON`)를 말하고 대출 안내 문자를 보낸다 | `loan-apply` — 앱 안 비대면 대출 신청 |
+// | 2 | 신청 제출 즉시 서버가 가상 캐피탈 입금 안내 문자를 보낸다(`callLegs/loanReviewOrder.ts` 판정표 LD5 — 확인 전화 레그 없는 변형) | 없음(입금 안내) |
+// | 3 | 사기범이 대출금 보관 계좌 문자를 보낸다 — 결정 화면(끊기 4-c) | `loan-safe-transfer` — 대출금 보관 이체 |
+// 3통화(fv-c5fj — 확인 상담원 레그)를 붙이지 않은 이유: 입금 문자 id · 확인 상담원 번호가 기관 사칭 한 시나리오에 묶여 있어 레그 장치 전체를 시나리오 일반화해야 한다
+// (화면 · 문자 · 다이얼 · 클라 `LOAN_DISBURSED_SMS_ID`). 한 통화는 화면 · 입금 문자 항목을 그대로 공유한다. ⛔ 앱 밖 행동 0 · 실제 금융회사 이름 0.
+// ⚠️ 현실과 다름: 확인 전화 없이 신청 즉시 입금된다(비대면 자동 실행으로 본다 — 실제로는 금융회사마다 확인 절차가 다르다, 추정).
+const IN_APP_LOAN_APPLY_STEPS =
+  "그다음 대출 안내 문자를 보내고, 그 문자 속 링크의 비대면 대출 신청 화면에서 본인 확인 · 한도 조회 · 신청까지 마치게 한다. 대출 용도는 '생활비'로 고르라고 미리 일러 준다. 은행 · 금융회사 창구나 다른 앱에서 따로 대출을 받으라고 하지 않는다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다.";
+const CARD_DELIVERY_LOAN_APPLY_STAGE = withSmsFirst(
+  `${LOAN_PROOF_REASON}. ${IN_APP_LOAN_APPLY_STEPS} 상대가 거절하거나 망설이면 불이익을 한 번 암시한 뒤 더 조르지 않고 마무리한다.`,
+);
+const PROSECUTION_LOAN_APPLY_STAGE = withSmsFirst(
+  `${LOAN_PROOF_REASON}. ${IN_APP_LOAN_APPLY_STEPS} 상대가 거절하거나 망설이면 구속 가능성을 한 번 더 비춘 뒤 더 조르지 않고 마무리한다.`,
+);
+const IN_APP_LOAN_TRANSFER_STAGE = withSmsFirst(
+  `상대가 대출 신청을 마쳤다고 하면 곧 대출금 입금 안내 문자가 갈 거라고 알리고, 입증이 끝날 때까지 대출금을 보관해야 한다며 대출금 보관 계좌 안내 문자를 보낸 뒤 그 문자 속 링크의 이체 화면에서 들어온 대출금을 그대로 옮기게 한다. 금액은 상대에게 입금된 금액을 물어 그 금액 그대로 말한다(지어내지 않는다). 은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다. 이체 화면에서 보낸 기록이 오기 전에는 원하던 것을 얻은 것처럼 통화를 끝내지 않는다. 이체가 끝나면 입증이 끝나는 대로 대출은 상환 처리된다고 안심시키고 비밀을 다시 당부한 뒤 통화를 끝낸다. 상대가 이체를 거절하거나 망설이면 불이익을 한 번 암시한 뒤 더 조르지 않고 마무리한다.`,
+);
+// 한 통화 대출금 이체 수법 — 기관 고급 `INSTITUTION_LOAN_TRANSFER_DEMAND`와 라벨 · 뜻이 같고, 계좌 문자 세션 규칙(보관 계좌번호를 부르지 않고 문자로 확인)을 더했다.
+const IN_APP_LOAN_TRANSFER_DEMAND =
+  "대출금 이체 요구 — '대출금은 입증이 끝날 때까지 보관 계좌에 두셔야 합니다, 문자로 보내 드린 보관 계좌 링크에서 들어온 대출금 그대로 옮기시면 됩니다' 처럼 문자 속 링크의 이체 화면에서 대출금을 옮기게 한다. 보관 계좌번호는 네가 부르지 않고 문자로 보낸 것을 확인하게 한다. 은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다. 금액은 상대가 말한 입금액 그대로 쓰고 지어내지 않는다.";
+const IN_APP_LOAN_ONE_CALL_DECISION_MOMENT = "문자 링크의 대출 신청 화면에서 대출을 신청하고, 대출금 보관 이체 화면에서 들어온 대출금을 보내는 순간";
 const CARD_DELIVERY_LEAK_STAGES = [
   "최근 개인정보 유출 사고로 배송 정보 확인이 늦어졌다며, 고객님 명의로 신청하지 않은 카드가 발급됐을 수 있다고 알린다.",
   "카드를 신청하지 않았다면 명의 도용 사고라며 사고 접수로 넘긴다.",
@@ -750,13 +774,11 @@ const PROSECUTION_VOUCHER_SMS: FlowVariantSms = {
 };
 // 검찰 고급 ③ 대출금 전달형 — 근거 전북일보 2025-08-21(검사 · 금감원 사칭 → 대출 실행 → 대출금 현금 전달 직전 저지 · S40) · C07(교사 · 6,000만 원 대출 지시)
 // · 금감원 소비자경보 2024-35호(정상 대출 입증 명목 · S42). 숙박업소 격리 부분은 넣지 않는다(§115.2).
-const PROSECUTION_LOAN_PERSONA = prosecutionRoutePersona(
-  "명의 도용 대출 여부를 입증한다는 명목으로 대출을 받게 하고 그 대출금을 담당 직원에게 맡기라고 요구하는 상황을 연기한다.",
-  "- 실제 금융회사 이름 · 대출 상품 · 금액은 지어내 말하지 않는다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다.",
+// ⭐ 2026-11-23 — 결말을 앱 안 대출 체험으로 바꿨다(위 `IN_APP_LOAN_*` 표 — 대출 신청 화면 → 입금 안내 → 대출금 보관 이체 화면).
+const PROSECUTION_LOAN_PERSONA = prosecutionLoanRoutePersona(
+  "명의 도용 대출 여부를 입증한다는 명목으로 문자 속 화면에서 비대면 대출을 신청하게 하고, 들어온 대출금을 보관 계좌로 옮기라고 요구하는 상황을 연기한다.",
+  "- 실제 금융회사 이름 · 대출 상품 · 금액은 지어내 말하지 않는다. 대출 신청과 대출금 이체는 네가 보낸 문자 속 화면에서만 하게 한다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다.",
 );
-const PROSECUTION_LOAN_STAGE = `${LOAN_PROOF_REASON}. 그다음 금융회사에서 대출을 받아 그 대출금을 현금으로 찾아 담당 직원에게 맡기겠다는 약속을 받아 내려 한다. 은행 직원이 용도를 물으면 생활비라고만 하라고 시킨다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 구속 가능성을 한 번 더 비춘 뒤 더 조르지 않고 마무리한다. ${VERBAL_ENDING_WRAP}`;
-const PROSECUTION_LOAN_DEMAND =
-  "대출금 현금 인출 요구 — '고객님 계좌가 부정 사기 대출에 연루돼 있어서 정상 절차로 대출을 받으셔야 명의 도용 여부가 입증됩니다, 받으신 대출금은 현금으로 찾아 담당 직원에게 맡겨 주세요' 처럼 입증을 이유로 대출을 받게 하고 대출금을 직원에게 맡기게 한다. 만날 곳 · 시간은 정하지 않는다.";
 const PROSECUTION_ROUTE_HEAD = [
   PROSECUTION_OPENING_V2,
   withSmsFirst(PROSECUTION_CASE_LINK_STAGE),
@@ -2253,17 +2275,35 @@ const SPECS: VariantSpec[] = [
     scenarioId: "card-delivery-call",
     level: "advanced",
     authoring: "authored",
-    stages: st(...CARD_DELIVERY_LOAN_STAGES.slice(0, 2), withSmsFirst(CARD_DELIVERY_LOAN_STAGES[2]), CARD_DELIVERY_LOAN_STAGES[3], `${CARD_DELIVERY_LOAN_STAGES[4]} ${VERBAL_ENDING_WRAP}`),
+    // ⭐ 2026-11-23 — 결말 = 한 통화 앱 안 대출 체험(`IN_APP_LOAN_*` 표). 종전 후속 단계 판정(`goalFollowUpUserTurns` 4 · C-5)은 쓰지 않는다 — 결정 화면(4-c)이 맡는다.
+    stages: st(
+      ...CARD_DELIVERY_LOAN_STAGES.slice(0, 2),
+      withSmsFirst(CARD_DELIVERY_LOAN_STAGES[2]),
+      CARD_DELIVERY_LOAN_STAGES[3],
+      CARD_DELIVERY_LOAN_APPLY_STAGE,
+      IN_APP_LOAN_TRANSFER_STAGE,
+    ),
     keepLabels: ["안심 유도", "부인 시 명의 도용 암시", "본인확인 정보 직접 요구", "보안 점검 앱 설치 요구", "확인 시도 무력화", "기관 조사 언급", "긴급성 조성"],
-    extraTactics: [CARD_DELIVERY_LOAN_CASH_DEMAND],
+    extraTactics: [INSTITUTION_LOAN_APPLY_DEMAND, IN_APP_LOAN_TRANSFER_DEMAND],
     exitBlock: ["D3_verification_hijack", "D4_procedural_legitimacy"],
-    sms: [{ purpose: "link", smsId: "card-delivery-app-link", required: true, notBeforeUserTurns: 2, ...FAST_BACKSTOP }],
+    sms: [
+      { purpose: "link", smsId: "card-delivery-app-link", required: true, notBeforeUserTurns: 2, ...FAST_BACKSTOP },
+      { purpose: "link", smsId: "card-delivery-loan-guide", required: true, notBeforeUserTurns: 6, ...FAST_BACKSTOP },
+      {
+        purpose: "transfer",
+        smsId: "card-delivery-loan-safe-account",
+        required: true,
+        notBeforeUserTurns: 12,
+        explicitNotBeforeUserTurns: 8,
+        explicitAfterScreenOf: "card-delivery-loan-guide",
+        ...FAST_BACKSTOP,
+      },
+    ],
     legs: ONE_LEG("카드 배송 안내", "female"),
     ...ADVANCED,
     channels: ["voice", "sms"],
     demandStages: 3,
-    decisionMoment: "대출을 받아 대출금을 찾아 직원에게 맡기겠다고 약속하는 순간",
-    goalFollowUpUserTurns: 4,
+    decisionMoment: IN_APP_LOAN_ONE_CALL_DECISION_MOMENT,
     sources: ["S40", "S42", "C03"],
   },
   {
@@ -2508,16 +2548,36 @@ const SPECS: VariantSpec[] = [
     scenarioId: "prosecution-cooperation-call",
     level: "advanced",
     authoring: "authored",
-    stages: st(...PROSECUTION_ROUTE_HEAD, PROSECUTION_LOAN_STAGE),
+    // ⭐ 2026-11-23 — 결말 = 한 통화 앱 안 대출 체험(`IN_APP_LOAN_*` 표). 결정 화면이 생겨 끊기 4-c 대상이 된다(`goalAction.ts` `VERBAL_DECISION_VARIANTS`에서 뺐다).
+    stages: st(...PROSECUTION_ROUTE_HEAD, PROSECUTION_LOAN_APPLY_STAGE, IN_APP_LOAN_TRANSFER_STAGE),
     dropLabels: ["권위 암시", "수사 서류 언급", "코인 구매·송금 요구"],
-    extraTactics: [PROSECUTION_CASE_RECORD_AUTHORITY_TACTIC, PROSECUTION_CASE_RECORD_TACTIC, ASSET_INFO, PROSECUTION_LOAN_DEMAND, PROSECUTION_SITE_EXTRA_TACTICS[0]!],
+    extraTactics: [
+      PROSECUTION_CASE_RECORD_AUTHORITY_TACTIC,
+      PROSECUTION_CASE_RECORD_TACTIC,
+      ASSET_INFO,
+      INSTITUTION_LOAN_APPLY_DEMAND,
+      IN_APP_LOAN_TRANSFER_DEMAND,
+      PROSECUTION_SITE_EXTRA_TACTICS[0]!,
+    ],
     exitBlock: ["D2_secrecy", "D4_procedural_legitimacy", "D5_call_retention"],
-    sms: [{ ...PROSECUTION_CASE_LINK_SMS }],
+    sms: [
+      { ...PROSECUTION_CASE_LINK_SMS },
+      { purpose: "link", smsId: "prosecution-loan-guide", required: true, notBeforeUserTurns: 6, ...FAST_BACKSTOP },
+      {
+        purpose: "transfer",
+        smsId: "prosecution-loan-safe-account",
+        required: true,
+        notBeforeUserTurns: 12,
+        explicitNotBeforeUserTurns: 8,
+        explicitAfterScreenOf: "prosecution-loan-guide",
+        ...FAST_BACKSTOP,
+      },
+    ],
     legs: [{ callerLabel: "검찰 수사관", personaPrompt: PROSECUTION_LOAN_PERSONA, speakerGender: "male", minUserTurns: 0, maxUserTurns: 20 }],
     ...ADVANCED,
     channels: ["voice", "sms"],
     demandStages: 3,
-    decisionMoment: "대출을 받아 대출금을 찾아 직원에게 맡기겠다고 약속하는 순간",
+    decisionMoment: IN_APP_LOAN_ONE_CALL_DECISION_MOMENT,
     sources: ["S40", "S42", "C07"],
   },
 ];

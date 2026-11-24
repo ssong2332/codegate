@@ -56,7 +56,8 @@ function linkAddressViolations(address: string, landingHost: string | undefined)
   return out;
 }
 
-const allScreens = Object.values(MOCK_SCREENS).flat();
+// 2026-11-23 — 여러 시나리오 카탈로그가 **같은 객체**를 공유할 수 있다(앱 안 대출 화면 · 입금 안내 — `mockScreens.ts` `IN_APP_LOAN_LANDINGS` · `inCallSms.ts` `LOAN_DISBURSED_SMS`). 전역 목록은 객체 단위로 한 번만 센다.
+const allScreens = [...new Set(Object.values(MOCK_SCREENS).flat())];
 const hostByLanding = new Map(allScreens.map((item) => [item.landingId, item.mockHost]));
 const linkedSms = Object.values(IN_CALL_SMS)
   .flat()
