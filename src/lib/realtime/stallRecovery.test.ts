@@ -26,6 +26,7 @@ import {
   formatStallNudgeLog,
   isStallLine,
   judgeStallLine,
+  participantHostileStreak,
   planConfirmResultInjection,
   planVerifyReconnectFailure,
   releaseConfirmResultOnDispatch,
@@ -627,4 +628,24 @@ test("[2-c 짝 · 배선] 클라 2-c행 = 서버 1-c행(정규식 · 문면 글�
   const src = codeOnly(readFileSync("src/lib/realtime/GeminiVoiceSession.tsx", "utf8"));
   assert.ok(src.includes("...(participantText.trim() && previousParticipantText ? { previousParticipantText } : {}),"));
   assert.ok(src.includes("if (participantText.trim()) previousParticipantText = participantText;"));
+});
+
+// ⭐ 2026-11-24 판정표 HB(서버 `smsGate.ts`) — 브라우저 A 라이브 A2 검찰 고급: 본인 확인을 모두 거부한 참가자에게 대출 안내 문자가 자동 백스톱으로 왔다.
+test("[HB 클라] 직전 두 참가자 발화가 둘 다 적대면 백스톱 요청에 participantHostile — A2 대사 재현 · 사기범 줄은 건너뜀 · 배선", () => {
+  const scammer = (text: string) => ({ role: "scammer", text });
+  const user = (text: string) => ({ role: "user", text });
+  // A2 실측 흐름(참가자 줄) — 의심 → 계좌 · 잔액 거부.
+  const a2 = [
+    scammer("본인 확인을 위해 성함과 생년월일을 말씀해 주십시오."),
+    user("보이스피싱이죠? 대표번호로 확인할게요."),
+    scammer("증거 인멸로 오인될 수 있습니다."),
+    user("돈 얘기는 안 해요. 계좌도 잔액도 안 알려 줘요."),
+  ];
+  assert.equal(participantHostileStreak(a2), true);
+  assert.equal(participantHostileStreak([...a2, user("네, 알겠어요.")]), false, "적대가 끊기면 종전");
+  assert.equal(participantHostileStreak([user("사기죠?")]), false, "참가자 발화 하나뿐");
+  assert.equal(participantHostileStreak([user("사기죠?"), user("  "), scammer("아닙니다.")]), false, "빈 발화는 세지 않는다");
+  // 배선 — 백스톱 요청에 같은 대사 원천으로 싣는다.
+  assert.match(pageCode, /participantHostileStreak\(\[\.\.\.messages, \.\.\.unsubmittedTurns\(\)\]\)/);
+  assert.match(pageCode, /participantHostileNowRef\.current\(\) \? \{ participantHostile: true \} : \{\}/);
 });

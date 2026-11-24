@@ -341,6 +341,15 @@ export const HOSTILE_PARTICIPANT =
   /사기|피싱|신고|경찰|거짓말|꺼져|그만\s*(?:해|하)|싫(?:어|습|다)|못\s*(?:믿|알려|주|해요?(?=[\s.?!~,]|$))|어떻게\s*믿|내가\s*왜|너\s*누구|누구(?:냐|야)|누구한테\s*전화|끊(?:을|는다|겠|어요)|안\s*(?:믿|속|알려|불러|줘|한다|해요?(?=[\s.?!~,]|$)|할(?:래|게|\s*거))/;
 
 /**
+ * ⭐ 2026-11-24 판정표 HB(서버 `smsGate.ts` `planSmsBackstop`) — 대사(말한 순서)의 마지막 두 참가자 발화가 둘 다 적대(2-c행과 같은 기준)인가.
+ * 문자 백스톱 요청에 `participantHostile`로 싣는다(자동 백스톱 보류 · 주장 · 모델 도구는 무관).
+ */
+export function participantHostileStreak(turns: readonly { role: string; text: string }[]): boolean {
+  const users = turns.filter((turn) => turn.role === "user" && turn.text.trim().length > 0).slice(-2);
+  return users.length === 2 && users.every((turn) => HOSTILE_PARTICIPANT.test(turn.text));
+}
+
+/**
  * 사기범 턴이 끝날 때마다 1회 — 판정표(⛔ 이 순서 그대로 · 새 유형은 행을 추가할지 먼저 묻는다).
  *
  * | # | If(A = 직전 사기범 턴, B = 방금 끝난 사기범 턴) | Then |

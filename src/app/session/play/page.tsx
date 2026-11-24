@@ -180,6 +180,7 @@ import { claimedScammerTranscriptTurns } from "@/lib/realtime/toolTurnTranscript
 import {
   INITIAL_CONFIRM_RESULT_INJECTION_STATE,
   VERIFY_RECONNECT_MAX_ATTEMPTS,
+  participantHostileStreak,
   planConfirmResultInjection,
   planVerifyReconnectFailure,
   releaseConfirmResultOnDispatch,
@@ -808,6 +809,11 @@ export default function SessionCallPage() {
     spokenBalanceNowRef.current = () => spokenAccountFrom([...messages, ...unsubmittedTurns()]).balance;
   });
   const getSpokenBalanceWon = useCallback(() => spokenBalanceNowRef.current(), []);
+  // ⭐ 2026-11-24 판정표 HB — 직전 두 참가자 발화 적대 연속(백스톱 effect가 ref로 읽는다 · 같은 대사 원천).
+  const participantHostileNowRef = useRef<() => boolean>(() => false);
+  useEffect(() => {
+    participantHostileNowRef.current = () => participantHostileStreak([...messages, ...unsubmittedTurns()]);
+  });
   // §140 판정표 4 — 조용한 재연결 뒤 대화 맥락으로 다시 넣을 전사(지금까지 전부 · 세션 컴포넌트가 읽기만 한다).
   const readTranscriptForResume = useCallback(() => transcriptRef.current, []);
   // §57.2 (6) 처방 D1 — 참가자가 "받기"를 누른 시각(클라 타임스탬프, `handleAnswer`에서 1회
@@ -1344,6 +1350,7 @@ export default function SessionCallPage() {
           trigger: "backstop",
           ...(smsClaimPendingRef.current ? { smsClaimed: true } : {}),
           ...(smsClaimPendingRef.current && smsClaimPurposesRef.current.length > 0 ? { smsClaimedPurposes: [...smsClaimPurposesRef.current] } : {}),
+          ...(participantHostileNowRef.current() ? { participantHostile: true } : {}),
           ...spokenBalanceField(spokenBalanceNowRef.current()),
         });
         setSmsError(null);

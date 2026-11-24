@@ -250,6 +250,8 @@ export const deliverInCallSms = onCall<
       explicitFloor: smsClaimed,
       ...(claimedPurposes ? { claimedPurposes } : {}),
       ...(installPending !== undefined ? { installPendingSince: installPending } : {}),
+      // 판정표 HB — 직전 두 참가자 발화 적대 연속이면 자동 백스톱 보류(`true`만 인정).
+      participantHostile: request.data?.participantHostile === true,
     });
     // §132.9 — "보냈다" 주장이 하한 전에 나왔으면 정정 1줄을 함께 돌려준다(클라 1회 주입 · 하한은 그대로).
     if (plan.action === "wait") {

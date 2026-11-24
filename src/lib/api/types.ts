@@ -233,6 +233,8 @@ export type DeliverInCallSmsRequest = {
   smsClaimed?: boolean;
   /** 판정표 CL(2026-11-08 · B1) — `smsClaimed`일 때만: 주장 문장이 가리키는 문자 목적(`smsClaimPurposes`). 서버 계약 `functions/src/inCallSms/types.ts`와 1:1. */
   smsClaimedPurposes?: ("identity" | "transfer" | "link")[];
+  /** ⭐ 2026-11-24 판정표 HB — 직전 두 참가자 발화가 둘 다 적대(`participantHostileStreak`). 자동 백스톱만 보류한다. 부재 = 종전. */
+  participantHostile?: boolean;
   /** 2026-11-23 판정표 BL3′ — 참가자가 통화에서 말한 통장 잔액(원 · `spokenAccountFrom`). 서버 계약 `functions/src/inCallSms/types.ts`와 1:1. 부재 = 종전. */
   spokenBalanceWon?: number;
 };
