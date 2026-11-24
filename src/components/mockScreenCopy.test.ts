@@ -756,6 +756,8 @@ const NUMERIC_FIELD_LABELS = [
   // §142 — 카드사 고급 재구성 안전계좌 이체(card-safe-transfer) 2칸.
   "안전계좌 번호",
   "보호 금액",
+  // 2026-11-24 — 대출 고급 현금 상환형 출금 예약 화면(loan-cash-withdraw).
+  "상환할 금액",
   "계좌번호",
   "안전계좌 번호",
   "이체 금액",
@@ -995,7 +997,7 @@ test("[§101 ③④⑤] 금액 칸은 필드별 명시 · 검증 실패면 콜�
   // §142 — 카드사 고급 재구성 안전계좌 이체 "보호 금액" +1.
   // PR-B — 기관 고급 3통화 "대출 신청 금액" · 대출금 보관 이체 "이체 금액" +2.
   // 2026-11-07(사용자 결정 D-G2 E1-b) — 출금 예약 화면 "출금 금액" · "보관할 금액" +2.
-  assert.deepEqual(amounts.sort(), ["보호 금액", "보관 신청 금액", "전송 금액", "전환 금액", "이체 금액", "이체 금액", "대출 신청 금액", "이관 금액", "옮길 금액", "출금 금액", "보관할 금액", ...Array<string>(9).fill("보낼 금액")].sort());
+  assert.deepEqual(amounts.sort(), ["보호 금액", "보관 신청 금액", "전송 금액", "전환 금액", "이체 금액", "이체 금액", "대출 신청 금액", "이관 금액", "옮길 금액", "출금 금액", "보관할 금액", "상환할 금액", ...Array<string>(9).fill("보낼 금액")].sort());
   const submit = componentCode.slice(componentCode.indexOf("const handleSubmit"), componentCode.indexOf("const issuerBar"));
   const guard = submit.indexOf("if (Object.keys(found).length > 0) return;");
   assert.ok(guard > 0, "검증 실패 시 되돌아가는 줄");
