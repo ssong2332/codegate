@@ -64,13 +64,14 @@ function declaredNames(
 
 // R1 ① — 카탈로그·게이트 둘 다 없는 시나리오 ⇒ tools가 빈 배열이다(회귀 0, G388의 유일한 레버).
 // 2026-11-07 — 납치 협박(kidnapping-threat)에 고급 계좌 문자 카탈로그가 생겨(Edge 시험 판 7) "카탈로그 · 게이트 둘 다 없는 시나리오" 예를 가족 사고(clone · 카탈로그 0 · 확인 무력화 0)로 바꿨다.
-test("[§59.9 R1①] 카탈로그·확인 무력화 둘 다 없는 시나리오(family-accident-deepvoice) — tools는 빈 배열", () => {
+// 2026-11-24(사용자 결정 (B)) — 가족 사고 · 손주 사칭에 계좌 문자 카탈로그가 생겨 카탈로그 0인 음성 시나리오가 없어졌다. 예를 "문자 선언 0 변형"(손주 고급 fv-cx5y · 확인 무력화 0)으로 바꿨다.
+test("[§59.9 R1①] 문자 선언 · 확인 무력화 둘 다 없는 세션(grandchild-impersonation · fv-cx5y) — tools는 빈 배열", () => {
   for (const difficultyLevel of ["beginner", "intermediate", "advanced"] as const) {
-    const tools = buildLiveToolDeclarations("family-accident-deepvoice", difficultyLevel, undefined, NO_END_CALL);
+    const tools = buildLiveToolDeclarations("grandchild-impersonation", difficultyLevel, "fv-cx5y", NO_END_CALL);
     assert.deepEqual(tools, [], `difficulty=${difficultyLevel}에서도 빈 배열이어야 한다`);
   }
   // difficultyLevel 부재(폴백 강등 등)에서도 동일하다.
-  assert.deepEqual(buildLiveToolDeclarations("family-accident-deepvoice", undefined, undefined, NO_END_CALL), []);
+  assert.deepEqual(buildLiveToolDeclarations("grandchild-impersonation", undefined, "fv-cx5y", NO_END_CALL), []);
 });
 
 // R1 ② — 문자 카탈로그만 있는 시나리오 ⇒ 이름 집합이 정확히 {send_prepared_sms}다.
@@ -387,7 +388,7 @@ test("[§59.6 liveTools 배선] realtime/index.ts의 두 반환 경로 모두 cr
   );
   // withSmsTriggers/withVerifyOffer 자신도 `<T extends object>(x: T): T` 형태의 스프레드/항등
   // 래퍼여야 한다(필드를 나열해 재구성하면 같은 위험이 생긴다).
-  assert.match(src, /const withSmsTriggers = <T extends object>\(credentials: T\): T =>/);
+  assert.match(src, /const withSmsTriggers = <T extends \{ provider: RealtimeProviderName \}>\(credentials: T\): T =>/);
   assert.match(src, /const withVerifyOffer = <T extends \{ provider: RealtimeProviderName \}>\(credentials: T\): T =>/);
   // §142(PR-3) — 다통화 레그 응답 래퍼(`callLeg` 추가)도 같은 스프레드 항등 형태다.
   assert.match(src, /const withCallLeg = <T extends object>\(credentials: T\): T =>/);

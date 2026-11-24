@@ -191,7 +191,9 @@ test("[§15.6 G12] findInCallSmsItem은 다른 시나리오의 smsId를 거부�
 // 는 폐기했다(AC-099 (d)(f)). 그 2건의 테스트도 함께 지웠고, 대체 판정은 `inCallSms/__tests__/smsGate.test.ts`가 고정한다.
 test("hasInCallSms — 카탈로그 유무 판정(도구 선언 · 프롬프트 조건의 원천)은 그대로다", () => {
   assert.equal(hasInCallSms("loan-refinance-scam"), true);
-  assert.equal(hasInCallSms("family-accident-deepvoice"), false);
+  // 2026-11-24(사용자 결정 (B)) — 가족 사고 · 손주에도 계좌 문자 카탈로그가 생겼다. 카탈로그 없는 예는 메신저 시나리오.
+  assert.equal(hasInCallSms("family-accident-deepvoice"), true);
+  assert.equal(hasInCallSms("messenger-friend-loan-kakao"), false);
 });
 
 test("buildInCallSmsDoc은 announceInstruction(모델용 지시)을 문서에 넣지 않는다(AC-024 계승)", () => {

@@ -143,8 +143,10 @@ function hangupInput(over: Partial<ScammerHangupInput>): ScammerHangupInput {
 
 test("[VD · probe N3 재현] fv-krq3 — 보냈다는 말 없이 goal 끊기 = blocked_decision · give_up은 통과", () => {
   assert.equal(saidTransferDone(KRQ3_USER_TEXTS), false);
-  const pending = isVerbalTransferPending("fv-krq3", saidTransferDone(KRQ3_USER_TEXTS));
-  assert.equal(pending, true);
+  // 2026-11-24(사용자 결정 (B)) — fv-krq3은 계좌 문자 → 이체 화면 루트가 돼 VD 목록에서 빠졌다. 끊기 대기는 이제 4-c(화면 제출 전)가 맡는다
+  // (`scenarios/__tests__/verbalTransferToScreen.test.ts` [TS 4-c]). 아래는 대기 입력이 참일 때의 끊기 판정 · 문면만 고정한다.
+  assert.equal(isVerbalTransferPending("fv-krq3", saidTransferDone(KRQ3_USER_TEXTS)), false);
+  const pending = true;
   assert.equal(decideScammerHangup(hangupInput({ decisionScreenPending: pending })).status, "blocked_decision");
   assert.equal(decideScammerHangup(hangupInput({ decisionScreenPending: pending, hangupKind: "give_up" })).status, "accepted");
   // 종전(입력 없음) = accepted — 재현.

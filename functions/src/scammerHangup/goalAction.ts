@@ -216,9 +216,9 @@ export function isLegScreenHoldPending(input: {
  * 장부에서 뺀 것: 카드사 `fv-akj5`(결말 = 앱 설치 또는 피해금 이관 — 송금만이 아니다) · 손주 `fv-cx5y`(어려우면 상품권 사진으로 바꾼다 — 사진 턴은 '보냈' 어형이 없을 수 있다).
  */
 export const VERBAL_TRANSFER_VARIANTS: readonly string[] = [
-  "fv-4dy4", "fv-krq3", "fv-66hh", "fv-h5sz", // 가족 사고
-  "fv-brcb", "fv-mabg", // 손주 사칭
   // 자녀 납치 초 · 중급(fv-c5ih · fv-dxwu)은 #608에서 계좌 문자 → 이체 화면 루트가 됐다 → 4-c(화면 결정)가 맡는다.
+  // 2026-11-24(재측정 R-3 · 사용자 결정 (B)) — 가족 사고(fv-4dy4 · fv-krq3 · fv-66hh · fv-h5sz) · 손주(fv-brcb · fv-mabg)도 계좌 문자 → 이체 화면이 됐다
+  // → 4-c가 맡는다(말로 "보냈어요" = 미완료). 지금은 빈 목록 — 판정 함수는 화면 없는 말 송금 루트가 다시 생길 때를 위해 남긴다.
 ];
 
 export function isVerbalTransferPending(flowVariantId: string | undefined, participantSaidSent: boolean | undefined): boolean {

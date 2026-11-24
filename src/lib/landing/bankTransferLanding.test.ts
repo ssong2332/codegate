@@ -26,7 +26,8 @@ test("[P2 C1] 클라 · 서버 훈련용 이체 화면 목록이 같다(통화 �
   assert.deepEqual(listOf(component), listOf(catalog));
   // PR-B — 기관 고급 3통화 대출금 보관 이체 화면 +1.
   // 2026-11-07 앱 안 결말 — 납치 협박 고급 이체 화면 +1.
-  assert.equal(listOf(component).length, 14);
+  // 2026-11-24(사용자 결정 (B)) — 가족 사고 · 손주 송금 화면 +1.
+  assert.equal(listOf(component).length, 15);
 });
 
 test("[P2 C2] 폼 → 확인 → 인증 → 완료 · 제출 콜백은 인증 버튼에서만(입력값 0 · N1 비교 결과만)", () => {

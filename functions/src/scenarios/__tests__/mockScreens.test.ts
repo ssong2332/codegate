@@ -681,6 +681,9 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
       // T194-c-1(§84.5.2) — card-delivery-call 카탈로그 신설(통화 중 설치 화면 1건).
       "card-delivery-call",
       "courier-customs-scam",
+      // 2026-11-24(사용자 결정 (B)) — 가족 사고 · 손주 계좌 문자가 여는 송금 화면 1건(공유).
+      "family-accident-deepvoice",
+      "grandchild-impersonation",
       "institutional-impersonation",
       // 2026-11-07 앱 안 결말 — 납치 협박 고급 계좌 문자가 여는 이체 화면 1건.
       "kidnapping-threat",
@@ -712,6 +715,8 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
     // 추가됐다. §53(§51 커밋 D) — bank-security-verify-scam의 이체형 랜딩(in-call-sms)이 추가됐다.
     // §92.3 — 고급 전용 2종 credential-form(in-call-sms) 2건.
     // 2026-11-24 — 대출 고급 현금 상환형 출금 예약 화면(in-call-sms) 1건.
+    // 2026-11-24(사용자 결정 (B)) — 가족 사고 · 손주 송금 화면(in-call-sms · 공유 객체) 1건.
+    "in-call-sms",
     "in-call-sms",
     "in-call-sms",
     "in-call-sms",
@@ -1007,7 +1012,7 @@ test("[AC-078 (a)] 콘텐츠 카탈로그 ↔ 도달 가능 랜딩 집합이 **�
     false,
     "어떤 프롬프트도 내지 않는 라벨이 도달 가능 집합에 들어왔다",
   );
-  assert.equal(reachableLandingKeysAllUnits().length, 40, "도달 가능 랜딩은 (시나리오 × 랜딩) 40건이다(2026-11-24 — 대출 고급 출금 예약 화면 +1 · 2026-11-23 — 앱 안 대출 신청 · 대출금 보관 이체 화면을 카드 배송 · 검찰 시나리오가 함께 연다 +4 · 서로 다른 화면 수는 35 그대로 · 2026-11-07 — 기관 · 자산 보호 고급 출금 예약 화면 2종 추가 · 2026-11-07 — 기관 · 자산 보호 고급 금 거래소 화면 2종 추가 · PR-B — 기관 사칭 고급 앱 안 대출 신청 · 대출금 보관 이체 2종 추가 · 2026-11-07 앱 안 결말 — 납치 이체 · 상품권 구매 2종 추가 · §142 — 카드사 고급 재구성 원격 지원 설치 · 안전계좌 이체 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(reachableLandingKeysAllUnits().length, 42, "도달 가능 랜딩은 (시나리오 × 랜딩) 42건이다(2026-11-24 — 가족 사고 · 손주가 같은 송금 화면을 연다 +2 · 2026-11-24 — 대출 고급 출금 예약 화면 +1 · 2026-11-23 — 앱 안 대출 신청 · 대출금 보관 이체 화면을 카드 배송 · 검찰 시나리오가 함께 연다 +4 · 서로 다른 화면 수는 35 그대로 · 2026-11-07 — 기관 · 자산 보호 고급 출금 예약 화면 2종 추가 · 2026-11-07 — 기관 · 자산 보호 고급 금 거래소 화면 2종 추가 · PR-B — 기관 사칭 고급 앱 안 대출 신청 · 대출금 보관 이체 2종 추가 · 2026-11-07 앱 안 결말 — 납치 이체 · 상품권 구매 2종 추가 · §142 — 카드사 고급 재구성 원격 지원 설치 · 안전계좌 이체 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
 });
 
 test("[AC-078 (a) 역검증] 한쪽에서 1건을 빼면 실제로 실패한다", () => {
@@ -1381,7 +1386,7 @@ function findFieldConvergence(
 
 test("[AC-079] bodyLines·fields·successHeadline·issuerLabel이 **각각 단독으로** 수렴하지 않는다", (t) => {
   const items = [...new Set(Object.values(MOCK_SCREENS).flat())];
-  assert.equal(items.length, 36, "현행 비교 대상은 도달 가능 랜딩 36종이다(2026-11-24 — 대출 고급 출금 예약 화면 추가 · 2026-11-07 — 출금 예약 화면 2종 추가 · 2026-11-07 — 금 거래소 화면 2종 추가 · PR-B — 기관 사칭 고급 앱 안 대출 신청 · 대출금 보관 이체 2종 추가 · 2026-11-07 앱 안 결말 2종 추가 · §142 — 카드사 고급 재구성 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(items.length, 37, "현행 비교 대상은 도달 가능 랜딩 37종이다(2026-11-24 — 가족 사고 · 손주 송금 화면 추가 · 2026-11-24 — 대출 고급 출금 예약 화면 추가 · 2026-11-07 — 출금 예약 화면 2종 추가 · 2026-11-07 — 금 거래소 화면 2종 추가 · PR-B — 기관 사칭 고급 앱 안 대출 신청 · 대출금 보관 이체 2종 추가 · 2026-11-07 앱 안 결말 2종 추가 · §142 — 카드사 고급 재구성 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
   const stats = fieldDivergenceStats(items);
   for (const { field, compared, excluded, converged } of stats) {
     t.diagnostic(
@@ -1666,6 +1671,14 @@ const BAIT_TO_LANDING: {
     ctaAnchors: ["이체"],
   },
   // 2026-11-07 앱 안 결말 — 납치 협박 고급 계좌 문자 · 검찰 고급 상품권 문자가 여는 화면 2종.
+  // 2026-11-24(사용자 결정 (B)) — 가족 사고 · 손주 계좌 문자가 여는 송금 화면(두 카탈로그 공유).
+  {
+    landingId: "family-send-transfer",
+    baitSource: "scenarios/inCallSms.ts:FAMILY_ACCIDENT_DEEPVOICE · GRANDCHILD_IMPERSONATION (문자 본문·칩 — 2026-11-24)",
+    baitExcerpt: "아래 링크 누르면 바로 보내져",
+    headlineAnchors: ["보내"],
+    ctaAnchors: ["보내"],
+  },
   {
     landingId: "kidnap-ransom-transfer",
     baitSource: "scenarios/inCallSms.ts:KIDNAPPING_THREAT (문자 본문·칩 — 2026-11-07)",

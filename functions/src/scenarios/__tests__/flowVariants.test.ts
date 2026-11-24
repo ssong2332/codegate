@@ -89,9 +89,8 @@ const INTERMEDIATE_EXISTING_TACTIC_EXEMPT: Readonly<Record<string, readonly Axis
   "kidnapping-threat": ["D6_report_blocking"], // "신고 차단 지시"
   "loan-refinance-scam": ["D4_procedural_legitimacy"], // "절차·서류 정당화"
 };
+// 2026-11-24(사용자 결정 (B)) — 가족 사고 · 손주 사칭에 계좌 문자 카탈로그가 생겨 이 예외에서 빠졌다(중급 fv-krq3 · fv-mabg = 문자 1).
 const INTERMEDIATE_SMS_EXEMPT = [
-  "family-accident-deepvoice",
-  "grandchild-impersonation",
   "messenger-child-impersonation-kakao",
   "messenger-friend-loan-kakao",
   "messenger-parcel-smishing-sms",

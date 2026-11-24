@@ -81,6 +81,11 @@ export const TURN_INSTRUCTION_CAPABLE_PROVIDERS: readonly RealtimeProviderName[]
  * 테스트 안에 같은 모양의 사본을 만들어 재면 **정작 이 함수가 목록을 안 봐도 초록**이 난다.
  * 호출부는 인자를 넘기지 않는다(정본은 위 상수 하나뿐).
  */
+/** 판정표 EP(2026-11-24) — 이 프로바이더 · 세션에 통화 중 문자 백스톱 표시를 붙이는가(EP1 선언 ∧ 지시 주입 자격 · EP2 ElevenLabs = 붙이지 않음). */
+export function attachesSmsBackstop(provider: RealtimeProviderName, smsDeclared: boolean): boolean {
+  return smsDeclared && isTurnInstructionCapable(provider);
+}
+
 export function isTurnInstructionCapable(
   provider: RealtimeProviderName,
   allowlist: readonly RealtimeProviderName[] = TURN_INSTRUCTION_CAPABLE_PROVIDERS,
@@ -255,8 +260,11 @@ export const createRealtimeCall = onCall<
   // 세션의 흐름 변형이 문자를 선언하지 않으면 필드 자체를 붙이지 않는다.
   // ⭐ 리뷰 M2 — 도구 선언 · 프롬프트와 같은 단일 술어.
   const smsDeclared = sessionDeclaresInCallSms(session.scenarioId, session.flowVariantId);
-  const withSmsTriggers = <T extends object>(credentials: T): T =>
-    smsDeclared ? { ...credentials, inCallSmsBackstop: true as const } : credentials;
+  // ⭐ 2026-11-24(재측정 R-3 · 사용자 결정 (B) · 판정표 EP — `docs/research/verbal-transfer-to-screen-2026-11-24.md`) — 문자는 지시 주입 자격이 있는
+  // 프로바이더에만 붙인다(아래 확인 오퍼와 같은 허용목록). ElevenLabs 에이전트는 프롬프트가 에이전트 쪽에 고정돼 문자를 알릴 수 없고 말로 계좌를 부른다 —
+  // 그 경로의 가족 사고 · 손주 세션은 종전 말 송금 그대로(문자 0 · 끊기 4-c는 Live 전용 콜러블이라 해당 없음).
+  const withSmsTriggers = <T extends { provider: RealtimeProviderName }>(credentials: T): T =>
+    attachesSmsBackstop(credentials.provider, smsDeclared) ? { ...credentials, inCallSmsBackstop: true as const } : credentials;
   // T83(§16.1.5) — 확인 시도 무력화의 **가용 게이트만** 내려준다(창구명·번호·모델 지시는 오퍼
   // 시점에 deliverVerifyOffer가 서버 카탈로그에서 렌더 — `withSmsTriggers`와 같은 자리·같은 원칙).
   //

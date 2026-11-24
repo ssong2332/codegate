@@ -480,6 +480,19 @@ const KIDNAP_ACCOUNT_SMS: FlowVariantSms = {
 const KIDNAP_SCREEN_LEG: FlowVariantLeg[] = [
   { callerLabel: "신원 불상", personaPrompt: KIDNAPPING_SCREEN_TRANSFER_PERSONA, speakerGender: "male", minUserTurns: 0, maxUserTurns: 20 },
 ];
+// ⭐ 2026-11-24(재측정 R-3 · 사용자 결정 (B) — `docs/research/verbal-transfer-to-screen-2026-11-24.md` 판정표 TS) — 가족 사고 · 손주 말 송금 6변형의 계좌 문자 ·
+// 이체 화면 결말(납치 협박 위 상수와 같은 꼴). 송금 라벨은 같은 이름의 화면판으로 바꾼다(판정 · 축 커버리지 라벨 유지).
+const FAMILY_TRANSFER_STAGE_TAIL = withSmsFirst(
+  "문자 보내기 도구로 계좌 · 금액 안내 문자를 보낸 뒤 문자 속 링크의 이체 화면에서 지금 바로 보내 달라고 한다. 은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다. 망설이면 한 번 더 매달리고, 그래도 보내지 않으면 더 조르지 않고 마무리한다. 상대가 말로만 보냈다고 하면 아직 안 들어왔다며 그 링크 화면에서 보내 달라고 하고, 이체 화면에서 보낸 기록이 오기 전에는 보내 줘서 고맙다며 원하던 것을 얻은 것처럼 통화를 끝내지 않는다.",
+);
+const SCREEN_TRANSFER_RULE =
+  "계좌번호 · 금액은 문자로 보낸 것을 확인하게 하고 다른 값을 지어내 부르지 않으며, 은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다. 상대가 말로만 보냈다고 하면 아직 안 들어왔다며 그 링크 화면에서 보내 달라고 한다.";
+const FAMILY_SETTLEMENT_SCREEN_TACTIC = `합의금 송금 요구 — '합의 안 하면 일이 커진대, 문자로 계좌 보냈어, 문자 속 링크 누르면 바로 보내져, 지금 300만 원만 보내줘' 처럼 문자로 보낸 계좌로 문자 속 링크의 이체 화면에서 지금 보내 달라고 한다. 상대가 관계를 부인해도 호칭·관계를 특정하지 않은 채 같은 요구를 그대로 유지한다. ${SCREEN_TRANSFER_RULE}`;
+const FAMILY_REPAIR_SCREEN_TACTIC = `소액 즉시 송금 요구 — '큰돈 아니야, 수리비만 지금 물어 주면 끝나, 문자로 계좌 보냈어, 링크 누르면 바로 보내져' 처럼 부담 없는 금액이라며 문자 속 링크의 이체 화면에서 지금 바로 보내게 한다. ${SCREEN_TRANSFER_RULE}`;
+const GRANDCHILD_SCREEN_TACTIC = `송금 직접 요구 — '할머니, 문자로 계좌 보내드렸어요, 문자 속 링크 누르시면 바로 보내져요, 50만 원만 좀 보내주세요' 처럼 문자로 보낸 계좌로 문자 속 링크의 이체 화면에서 보내 달라고 한다. ${SCREEN_TRANSFER_RULE}`;
+const FAMILY_SETTLEMENT_SMS: FlowVariantSms = { purpose: "transfer", smsId: "family-settlement-account", required: true, notBeforeUserTurns: 2, backstopUserTurns: 1 };
+const FAMILY_REPAIR_SMS: FlowVariantSms = { purpose: "transfer", smsId: "family-repair-account", required: true, notBeforeUserTurns: 2, backstopUserTurns: 1 };
+const GRANDCHILD_MONEY_SMS: FlowVariantSms = { purpose: "transfer", smsId: "grandchild-money-account", required: true, notBeforeUserTurns: 2, backstopUserTurns: 1 };
 const FAST_BACKSTOP = { backstopUserTurns: 1 } as const;
 // §127(메인 세션 라이브 확인 2026-10-24 · 텍스트 폴백) — 백스톱 간격을 1로 줄이자 인증번호 문자가 흐름의 인증번호 단계(4단계 — 자산 질문 뒤)보다 먼저
 // 발화 4에 도착했고, 사기범은 흐름 순서대로 자산 질문을 이어 가 문자를 언급하지도 번호를 묻지도 않았다. 인증번호 하한을 3 → 5로 올려 강제 도착을
@@ -1880,13 +1893,16 @@ const SPECS: VariantSpec[] = [
     scenarioId: "family-accident-deepvoice",
     level: "beginner",
     authoring: "authored",
-    stages: st("사고가 났다고 다급하게 알린다.", "합의금이 급하다며 곧바로 송금을 부탁한다."),
-    keepLabels: ["다급함 조성", "가족애·죄책감 이용", "권위·긴급상황 암시", "합의금 송금 요구", "부인 시 애정 호소"],
+    // ⭐ 2026-11-24(재측정 R-3 · 사용자 결정 (B)) — 가족 사고 · 손주 말 송금 6변형은 계좌 문자 → 앱 안 이체 화면(위 FAMILY_* 상수 · 판정표 TS).
+    // 말로 "보냈어요" = 미완료(4-c). 초급은 문자 1통(AC-096 (b) 초급 0~1).
+    stages: st("사고가 났다고 다급하게 알린다.", `합의금이 급하다며 곧바로 ${FAMILY_TRANSFER_STAGE_TAIL}`),
+    keepLabels: ["다급함 조성", "가족애·죄책감 이용", "권위·긴급상황 암시", "부인 시 애정 호소"],
+    extraTactics: [FAMILY_SETTLEMENT_SCREEN_TACTIC],
     exitBlock: ["D0_none"],
-    sms: [],
+    sms: [FAMILY_SETTLEMENT_SMS],
     legs: ONE_LEG("가족", "female"),
     ...BEGINNER,
-    channels: ["voice"],
+    channels: ["voice", "sms"],
     demandStages: 1,
   },
   {
@@ -1896,10 +1912,12 @@ const SPECS: VariantSpec[] = [
     authoring: "current",
     stages: [],
     exitBlock: ["D2_secrecy", "D5_call_retention"],
-    sms: [],
+    dropLabels: ["합의금 송금 요구"],
+    extraTactics: [FAMILY_SETTLEMENT_SCREEN_TACTIC],
+    sms: [FAMILY_SETTLEMENT_SMS],
     legs: ONE_LEG("가족", "female"),
     ...INTERMEDIATE,
-    channels: ["voice"],
+    channels: ["voice", "sms"],
     demandStages: 2,
   },
   {
@@ -1910,14 +1928,15 @@ const SPECS: VariantSpec[] = [
     stages: st(
       "사고가 났다고 알리며 다른 번호로 연락한 이유를 댄다.",
       "원래 번호로는 연락이 안 된다며 확인을 막는다.",
-      "합의금 송금을 요구한다.",
+      `합의금이 급하다며 ${FAMILY_TRANSFER_STAGE_TAIL}`,
     ),
-    extraTactics: [OTHER_NUMBER_PRETEXT],
+    dropLabels: ["합의금 송금 요구"],
+    extraTactics: [OTHER_NUMBER_PRETEXT, FAMILY_SETTLEMENT_SCREEN_TACTIC],
     exitBlock: ["D2_secrecy", "D5_call_retention"],
-    sms: [],
+    sms: [FAMILY_SETTLEMENT_SMS],
     legs: ONE_LEG("가족", "female"),
     ...ADVANCED,
-    channels: ["voice"],
+    channels: ["voice", "sms"],
     demandStages: 2,
     sources: ["S9", "C18"],
   },
@@ -1931,17 +1950,16 @@ const SPECS: VariantSpec[] = [
     stages: st(
       "작은 사고를 쳤다며 다른 번호로 연락한 이유를 댄다.",
       "원래 번호로는 연락이 안 된다며 확인을 막는다.",
-      "큰돈은 아니고 술자리에서 남의 물건을 깨서 지금 수리비만 물어 주면 된다며, 바로 보낼 수 있는 소액을 지금 당장 보내 달라고 하고, 망설이면 더 조르지 않고 마무리한다.",
+      `큰돈은 아니고 술자리에서 남의 물건을 깨서 지금 수리비만 물어 주면 된다며 ${FAMILY_TRANSFER_STAGE_TAIL}`,
     ),
-    extraTactics: [
-      OTHER_NUMBER_PRETEXT,
-      "소액 즉시 송금 요구 — '큰돈 아니야, 수리비만 지금 물어 주면 끝나, 바로 보내 줄 수 있지?' 처럼 부담 없는 금액이라며 지금 바로 이체하게 한다. 실제 금액 · 계좌는 지어내 단정하지 않고, 예시 계좌만 부른다.",
-    ],
+    // 2026-11-24(R-3 (B)) — 합의금 라벨은 이 루트의 결말이 아니라 뺀다(소액 수리비 문자가 결말).
+    dropLabels: ["합의금 송금 요구"],
+    extraTactics: [OTHER_NUMBER_PRETEXT, FAMILY_REPAIR_SCREEN_TACTIC],
     exitBlock: ["D2_secrecy", "D5_call_retention"],
-    sms: [],
+    sms: [FAMILY_REPAIR_SMS],
     legs: ONE_LEG("가족", "female"),
     ...ADVANCED,
-    channels: ["voice"],
+    channels: ["voice", "sms"],
     demandStages: 2,
     sources: ["S26", "C16", "C18"],
   },
@@ -1952,13 +1970,15 @@ const SPECS: VariantSpec[] = [
     scenarioId: "grandchild-impersonation",
     level: "beginner",
     authoring: "authored",
-    stages: st("급한 사정이 생겼다고 알린다.", "곧바로 송금을 부탁한다."),
-    keepLabels: ["다급함 조성", "애정·죄책감 이용", "디지털 취약 악용", "송금 직접 요구"],
+    // 2026-11-24(R-3 (B)) — 계좌 문자 → 앱 안 이체 화면(위 FAMILY_* 상수 · 판정표 TS). 고급 fv-cx5y(상품권 분기)는 무변경(판정 문서 별도 판단).
+    stages: st("급한 사정이 생겼다고 알린다.", `곧바로 ${FAMILY_TRANSFER_STAGE_TAIL}`),
+    keepLabels: ["다급함 조성", "애정·죄책감 이용", "디지털 취약 악용"],
+    extraTactics: [GRANDCHILD_SCREEN_TACTIC],
     exitBlock: ["D0_none"],
-    sms: [],
+    sms: [GRANDCHILD_MONEY_SMS],
     legs: ONE_LEG("손주", "male"),
     ...BEGINNER,
-    channels: ["voice"],
+    channels: ["voice", "sms"],
     demandStages: 1,
   },
   {
@@ -1968,10 +1988,12 @@ const SPECS: VariantSpec[] = [
     authoring: "current",
     stages: [],
     exitBlock: ["D2_secrecy", "D5_call_retention"],
-    sms: [],
+    dropLabels: ["송금 직접 요구"],
+    extraTactics: [GRANDCHILD_SCREEN_TACTIC],
+    sms: [GRANDCHILD_MONEY_SMS],
     legs: ONE_LEG("손주", "male"),
     ...INTERMEDIATE,
-    channels: ["voice"],
+    channels: ["voice", "sms"],
     demandStages: 2,
   },
   {
