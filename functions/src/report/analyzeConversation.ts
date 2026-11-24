@@ -32,6 +32,7 @@ import { CODE_DIGITS_WITH_ENDING, CODE_HANGUL_DIGITS, extractSpokenCodes, otpCan
 import { PHOTO_DEMAND } from "../roleplay/photoTurn";
 import { resolveAttemptedTacticLabels, resolveSecretCodeLabel } from "./attemptedTactics";
 import { TRANSFER_DONE_REPORT } from "../shared/transferClaim";
+import { asksPasswordAloud, PASSWORD_MASK } from "../realtime/liveTranscriptGuard";
 
 /** 대처법·예방 조언 문구를 고르는 채널. 부재는 "voice"다(`MessageDoc.channel` 하위호환 규칙과 같다). */
 export type AdviceChannel = MessengerChannel;
@@ -727,11 +728,15 @@ function isResistanceForReport(replyText: string): boolean {
 // | P1 | 대사가 핀 번호를 불러 · 말해 · 알려 · 읽어 달라고 요구하지 않았다 | 이 행 밖(종전 판정) |
 // | P2 | 답에 거절 어휘가 있다 | 이 행 밖 |
 // | P3 | 답에 숫자 4자리 이상(띄어쓰기 · 붙임표로 끊겨도 이어서 센다 · 뒤가 금액 · 날짜 단위면 아님) 또는 개인정보 가림 표지([계좌] · [전화]) 또는 한글 숫자 낱말 6개 이상 | 순응(속은 순간) — 라벨은 세션 목록의 상품권 · 핀 수법 |
+// | P3′ | (2026-11-24 브라우저 A A7) 답에 Live 비밀번호 가림 표지 `[비밀번호]` ∧ 대사가 핀을 말로 묻는다(가림을 건 U1 판정 `asksPasswordAloud` ∧ '핀 · PIN') — P1 요구 어형 밖이어도 | P3과 같다 |
 const PIN_REQUESTED = /(?:핀|PIN|pin|Pin)\s*(?:번호|넘버|코드)?[^.?!\n]{0,30}?(?:불러|부르|말씀해|알려|읽어)/;
 const PIN_DIGITS_IN_ANSWER = /(?<![\d,])\d{2,}(?:[\s-]+\d{2,})*(?![\d,]|\s*(?:원|만|천|년|월|일|시|분|살|개|명|장|층))/g;
 const PIN_WORDS_IN_ANSWER = /[공영일이삼사오육칠팔구](?:\s?[공영일이삼사오육칠팔구]){5,}/;
 function isPinGiven(scammerText: string, replyText: string): boolean {
-  if (!PIN_REQUESTED.test(scammerText) || REFUSAL_IN_ANSWER.test(replyText)) return false;
+  if (REFUSAL_IN_ANSWER.test(replyText)) return false;
+  // P3′ — Live 전사는 핀 숫자를 `[비밀번호]`로 가려 저장한다(`realtime/liveTranscriptGuard.ts` U1).
+  if (replyText.includes(PASSWORD_MASK) && /핀|PIN/i.test(scammerText) && asksPasswordAloud(scammerText)) return true;
+  if (!PIN_REQUESTED.test(scammerText)) return false;
   const digitCount = Math.max(0, ...(replyText.match(PIN_DIGITS_IN_ANSWER) ?? []).map((run) => run.replace(/\D/g, "").length));
   // 8자리 이상 숫자열은 저장 전 개인정보 가림(`guardrails` `maskPII`)이 "[계좌]" · "[전화]"로 바꾼다 — 가려진 표지도 숫자열로 센다.
   return digitCount >= 4 || /\[(?:계좌|전화)\]/.test(replyText) || PIN_WORDS_IN_ANSWER.test(replyText);

@@ -185,7 +185,7 @@ test("[BA-1 A6] 통화 유지 — 형제 노드 · 라우팅 0 · 동시 열림 
   assert.ok(!overlayCode.includes("useRouter") && !overlayCode.includes("router."), "오버레이는 라우팅하지 않는다");
   // 문자함 · 확인 시트를 열면 은행 앱이 닫힌다 · 종료 래치(E2 · 끊기 승인)에서도 닫힌다.
   assert.ok(page.split("setBankAppOpen(false);").length - 1 >= 4);
-  assert.ok(page.includes("inert={chatOpen || smsOverlayOpen || bankAppOpen ? true : undefined}"));
+  assert.ok(page.includes("inert={chatOpen || smsOverlayOpen || bankAppOpen || legScreenCoversCallShell(legScreen.kind) ? true : undefined}"));
   // 통화 띠(탭 = 통화 복귀)가 오버레이에 있다(통화 중일 때만 — 메신저는 부재).
   assert.ok(overlayCode.includes("aria-label={COPY.callPill}") && BANK_APP_COPY.callPill === "눌러서 통화로 돌아가기");
   // 2026-11-07 — 통화 표시줄 경과 = 지금 통화의 경과(`callDisplaySec` — `callClock.ts` `callElapsedSince`).
