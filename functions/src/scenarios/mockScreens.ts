@@ -309,6 +309,7 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `asset-gold-buy` | `scenarios/inCallSms.ts` ASSET_PROTECTION_NOTICE_CALL(문자 본문·칩 — 2026-11-07 금형) | "보관 대상 자산은 아래 지정 거래소에서 금 실물로 주문해 주세요." | 지정 거래소에서 금 실물 주문 | "해담골드 금 실물 주문" | "금 실물 주문하기" |
 // | `cash-withdraw` | `scenarios/inCallSms.ts` INSTITUTIONAL_IMPERSONATION(문자 본문·칩 — 2026-11-07 현금 예탁형) | "예탁 대상 예금은 아래에서 거래 은행 출금 예약을 해 주세요." | 거래 은행 출금 예약 | "예탁금 현금 · 수표 출금 예약" | "예탁금 출금 예약하기" |
 // | `asset-cash-withdraw` | `scenarios/inCallSms.ts` ASSET_PROTECTION_NOTICE_CALL(문자 본문·칩 — 2026-11-07 현금형) | "보관 대상 예금은 아래에서 거래 은행 출금 예약을 해 주세요." | 거래 은행 출금 예약 | "보관 자산 현금 · 수표 출금 예약" | "보관 자산 출금 예약하기" |
+// | `loan-cash-withdraw` | `scenarios/inCallSms.ts` LOAN_SCAM(문자 본문·칩 — 2026-11-24 대출 고급 현금 상환형) | "대환 전 기존 대출 상환금은 아래에서 거래 은행 출금 예약을 해 주세요." | 거래 은행 출금 예약 | "기존 대출 상환금 현금 · 수표 출금 예약" | "상환금 출금 예약하기" |
 // | `loan-check-app-install` | `scenarios/inCallSms.ts` LOAN_SCAM(문자 본문·칩 — T194-c-1 Q2) | "아래에서 심사용 보안 점검 앱을 설치해 주세요." | 심사용 보안 점검 앱 설치 | "심사용 보안 점검 앱을 설치해야 대출 심사가 진행됩니다" | "권한 허용하고 계속하기" |
 //
 // ⚠️ **이 표가 조용히 낡지 않게 하는 장치(주석은 강제가 아니다).** 위 **줄 번호는 스냅샷일 뿐이며

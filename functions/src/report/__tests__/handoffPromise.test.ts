@@ -266,7 +266,8 @@ test("[T191 J-2 · §124] 인출·전달 약속 갈래가 열리는 저작 대�
   }
   // 2026-11-07(사용자 결정 D-G2 E1-b) — 기관 사칭 고급 현금 예탁형 fv-q7cn의 "직원에게 맡겨 주십시오" 저작 대사가 앱 안 출금 예약 화면 문면으로 바뀌어
   // 기관 사칭에서 이 갈래가 열리는 저작 대사가 없어졌다(자산 보호는 시나리오 원본 수법 · 은퇴 변형 문면이 남아 그대로 열린다).
-  assert.deepEqual([...opened].sort(), [ASSET_PROTECTION, PROSECUTION, "card-delivery-call", "loan-refinance-scam"].sort());
+  // 2026-11-24(페르소나 점검 N1) — 대환대출 고급 현금 상환형 fv-r4hc도 앱 안 출금 예약 화면 문면으로 바뀌어 대환대출에서 이 갈래가 열리는 저작 대사가 없어졌다.
+  assert.deepEqual([...opened].sort(), [ASSET_PROTECTION, PROSECUTION, "card-delivery-call"].sort());
 });
 
 // ── (7) 보류 표본 — 한계 고정 ─────────────────────────────────────────────────────────────────
