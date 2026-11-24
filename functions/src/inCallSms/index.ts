@@ -73,7 +73,7 @@ export {
   textPathAnchorScammerTurn,
   resolveInCallSmsPlan,
 } from "./buildDoc";
-import { cardBalanceWonFrom } from "../session/cardBalanceFit";
+import { cardBalanceWonFrom, spokenBalanceWonFrom } from "../session/cardBalanceFit";
 import { resolveFictionalBankName } from "../shared/fictionalBank";
 
 /**
@@ -314,6 +314,8 @@ export const deliverInCallSms = onCall<
     sessionId, // §114 — 세션별 인증번호(문서 본문 · Live 대조 1줄이 같은 값)
     // 2026-11-09 판정표 BL3 — 카드 잔액이 있으면 잔액형 문자 금액을 맞춘다(부재 = 종전).
     cardBalanceWon: cardBalanceWonFrom(session.personaCard?.items),
+    // 2026-11-23 판정표 BL3′ B2 — 카드 잔액이 없으면 참가자가 말한 잔액(클라 값 · 서버 검증).
+    spokenBalanceWon: spokenBalanceWonFrom(request.data?.spokenBalanceWon),
   });
 
   // 관측(§59.11 관례 · AC-099 (h)) — 도착 · 거부 모두 그 시점의 사용자 발화 수와 함께 1줄. 거부는 Firestore 델타 0.

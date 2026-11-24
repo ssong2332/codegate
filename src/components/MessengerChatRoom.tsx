@@ -57,6 +57,7 @@ import EndTrainingButton from "@/components/EndTrainingButton";
 import MessengerFakeLanding, { isBankTransferLandingId } from "@/components/MessengerFakeLanding";
 import BankAppOverlay from "@/components/BankAppOverlay";
 import { fictionalBalanceFor, isBankAppEnabled, latestDemandAmount, myBankNameFor } from "@/lib/bankapp/bankApp";
+import { belowDemandBalance } from "@/lib/bankapp/withdrawAccounts";
 import { readDebugFlagSearch } from "@/lib/realtime/debugFlags";
 import MessengerProfileSheet from "@/components/MessengerProfileSheet";
 import VoiceTalkDialScreen from "@/components/VoiceTalkDialScreen";
@@ -1428,7 +1429,8 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
       {fakeLanding && bankAppEnabled && isBankTransferLandingId(fakeLanding.fakeLandingId) && fakeLanding.bankName && fakeLanding.accountNumber ? (
         <BankAppOverlay
           myBankName={myBankNameFor(sessionId ?? "", fakeLanding.bankName)}
-          balance={fictionalBalanceFor(sessionId ?? "")}
+          // 판정표 Z4 — 메신저는 잔액을 묻지 않는다: 요구액보다 적은 잔액(요구액 없음 = 고정 값).
+          balance={belowDemandBalance(fictionalBalanceFor(sessionId ?? ""), fakeLanding.transferAmount)}
           target={{
             bankName: fakeLanding.bankName,
             accountNumber: fakeLanding.accountNumber,

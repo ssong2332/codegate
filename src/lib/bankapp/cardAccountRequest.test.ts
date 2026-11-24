@@ -83,7 +83,7 @@ test("[CR5] 맞춘 문자 — 이체 화면 금액 · N1 · W3가 같은 기준"
   assert.equal(recordTransferAndCompare("cr5-a", { accountNumber: "100-2043-7788-21", amount }, amount), "equal");
   assert.equal(recordTransferAndCompare("cr5-b", { accountNumber: "100-2043-7788-21", amount }, "1,000,000"), "less", "적게 보냄 = N1 less");
   // 재현 — 맞추기 전 문자 금액(412만)은 카드 잔액 300만 원이면 W3에 걸려 요구대로 보낼 수 없었다.
-  assert.equal(withdrawError("cr5-c", card, "4,120,000"), "출금 가능 금액보다 많습니다.");
+  assert.match(withdrawError("cr5-c", card, "4,120,000") ?? "", /^잔액이 부족합니다\. 출금 가능 금액은 [\d,]+원입니다\.$/); // 2026-11-23 W3 문구
 });
 
 test("[CR6] 드리프트 — 1회 한도", () => {

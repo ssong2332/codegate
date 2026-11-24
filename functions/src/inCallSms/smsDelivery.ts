@@ -13,6 +13,7 @@ import { withSessionOtp } from "../scenarios/sessionOtp";
 import type { FlowVariantSms, SmsPurpose } from "../scenarios/flowVariants";
 import type { InCallSmsDoc, InCallSmsTriggerKind } from "../shared/types";
 import { buildInCallSmsDoc } from "./buildDoc";
+import { fitSmsBodyAmount, spokenFitAnnounceLine } from "../session/cardBalanceFit";
 import { priorSenderLabelOf, sessionSenderLabel } from "./senderLabel";
 import { isAmountComparison, type AmountComparison } from "../roleplay/screenAction";
 import type { DeliveredSmsRecord, SmsGateStatus } from "./smsGate";
@@ -47,6 +48,8 @@ export type SmsDeliveryInput = {
   sessionId?: string;
   /** ⭐ 2026-11-09 판정표 BL3 — 카드 잔액(원 · `cardBalanceWonFrom`). 부재 = 종전 금액. */
   cardBalanceWon?: number;
+  /** ⭐ 2026-11-23 판정표 BL3′ B2 — 참가자가 말한 잔액(원 · `spokenBalanceWonFrom`으로 검증한 값). 카드 잔액이 없을 때만 쓴다. */
+  spokenBalanceWon?: number;
   /** 테스트 주입용(기본 `Timestamp.now()`). */
   now?: () => FirebaseFirestore.Timestamp;
 };
@@ -81,9 +84,14 @@ export async function deliverSmsThroughGate(
     // 선언이 카탈로그에 없으면 `resolveDeclaredSms`가 이미 걸렀다 — 방어적으로 거부(문서 0).
     if (!catalogItem) return { status: "not_allowed" };
     // §114 — 문서 본문 · Live 대조 1줄(호출부가 돌려받은 item으로 만든다)이 같은 세션 번호를 쓴다.
-    const item = withSessionOtp(catalogItem, input.sessionId);
+    let item = withSessionOtp(catalogItem, input.sessionId);
     const arrivedAt = (input.now ?? Timestamp.now)();
-    const doc = buildInCallSmsDoc(item, arrivedAt, input.anchorScammerTurn, input.scenarioId, input.fictionalBankName, input.cardBalanceWon);
+    // 판정표 BL3′ — 카드 잔액(B1)이 먼저 · 없으면 말한 잔액(B2). B3 — 말한 잔액으로 금액이 바뀌면 도착 지시에 새 금액 1줄(두 경로 같은 item을 돌려받는다).
+    const spoken = input.cardBalanceWon === undefined ? input.spokenBalanceWon : undefined;
+    if (spoken !== undefined && fitSmsBodyAmount(item.body, spoken) !== item.body) {
+      item = { ...item, announceInstruction: `${item.announceInstruction} ${spokenFitAnnounceLine(spoken)}` };
+    }
+    const doc = buildInCallSmsDoc(item, arrivedAt, input.anchorScammerTurn, input.scenarioId, input.fictionalBankName, input.cardBalanceWon ?? spoken);
     tx.create(item.smsId, {
       ...doc,
       // 2026-11-08 판정표 L — 같은 번호로 먼저 온 문자가 있으면 그 이름(트랜잭션 안에서 읽은 목록 — 동시 발송도 같은 판정).

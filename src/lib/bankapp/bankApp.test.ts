@@ -111,11 +111,12 @@ test("[BA-1 A2] 옛 계좌 문자 보정 — 문자에 보이는 예금주 · �
   assert.ok(smsOverlay.includes("const amount = sms.transferAmount ?? amountFromSmsBody(sms.body);"));
 });
 
-test("[BA-1 A2] 내 은행 · 잔액 — 결정적 · 사기범 계좌 은행과 다르다 · 1,000만~3,000만 원", () => {
+// 2026-11-23 판정표 Z4′(사용자 결정 1b) — 고정 잔액 1,000만 ~ 3,000만 → 100만 ~ 500만 원.
+test("[BA-1 A2] 내 은행 · 잔액 — 결정적 · 사기범 계좌 은행과 다르다 · 100만~500만 원", () => {
   for (const seed of ["s1", "s2", "abc", ""]) {
     const balance = fictionalBalanceFor(seed);
     assert.equal(balance, fictionalBalanceFor(seed));
-    assert.ok(balance >= 10_000_000 && balance <= 30_000_000 && balance % 10_000 === 0, `${seed}: ${balance}`);
+    assert.ok(balance >= 1_000_000 && balance <= 5_000_000 && balance % 10_000 === 0, `${seed}: ${balance}`);
     for (const avoid of FICTIONAL_BANK_NAMES) assert.notEqual(myBankNameFor(seed, avoid), avoid);
     assert.ok(FICTIONAL_BANK_NAMES.includes(myBankNameFor(seed)));
   }
