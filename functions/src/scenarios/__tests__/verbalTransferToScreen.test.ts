@@ -8,6 +8,9 @@ import { findMockScreenItem, isBankTransferLanding } from "../mockScreens";
 import { extractTacticLabel } from "../tacticFlavor";
 import { isDecisionScreenPending, isVerbalTransferPending, VERBAL_TRANSFER_VARIANTS } from "../../scammerHangup/goalAction";
 import { requiresServerPromptProvider } from "../../realtime/provider";
+import { attachesSmsBackstop } from "../../realtime/index";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { ACCOUNT_HOLDER_BANKS } from "../../shared/fictionalBank";
 import type { DeliveredSmsRecord } from "../../inCallSms/smsGate";
 
@@ -81,8 +84,19 @@ test("[TS7] 손주 고급 fv-cx5y(상품권 분기)는 무변경 — 문자 0 ·
   assert.equal(pending(GRANDCHILD, "fv-cx5y", []), false);
 });
 
-test("[EP1 · EP2] 이체 화면 문자를 선언한 세션은 서버 프롬프트 경로(ElevenLabs 제외)", () => {
-  for (const [id, scenarioId] of ROUTES) assert.equal(requiresServerPromptProvider({ scenarioId, flowVariantId: id }), true, id);
-  assert.equal(requiresServerPromptProvider({ scenarioId: GRANDCHILD, flowVariantId: "fv-cx5y" }), false);
-  assert.equal(requiresServerPromptProvider({ scenarioId: FAMILY }), false);
+test("[EP1] 서버 프롬프트 경로(gemini · none) — 선언한 계좌 문자에 백스톱 표시가 붙는다", () => {
+  assert.equal(attachesSmsBackstop("gemini", true), true);
+  assert.equal(attachesSmsBackstop("none", true), true);
+  assert.equal(attachesSmsBackstop("gemini", false), false);
+});
+
+test("[EP2] ElevenLabs 경로 — 라우팅 무변경 · 문자 백스톱 0 · 끊기 콜러블은 Live 화면만", () => {
+  // 사용자 결정: 복제 목소리 판은 말 송금 그대로 — 이체 화면 문자를 선언해도 ElevenLabs를 막지 않는다.
+  for (const [id, scenarioId] of ROUTES) assert.equal(requiresServerPromptProvider({ scenarioId, flowVariantId: id }), false, id);
+  assert.equal(attachesSmsBackstop("elevenlabs", true), false);
+  assert.equal(attachesSmsBackstop("elevenlabs", false), false);
+  // 4-c · VD는 끊기 콜러블에서만 판정된다 — ElevenLabs 화면은 그것을 부르지 않는다.
+  const root = join(__dirname, "../../../../src/lib/realtime");
+  assert.match(readFileSync(join(root, "GeminiVoiceSession.tsx"), "utf8"), /requestScammerHangup/);
+  assert.doesNotMatch(readFileSync(join(root, "RealtimeVoiceSession.tsx"), "utf8"), /requestScammerHangup/);
 });

@@ -83,8 +83,8 @@ export const SMS_SENDER_NUMBER: Readonly<Record<string, string>> = {
   "kidnapping-threat": "070-0457-2618",
   // 2026-11-24(재측정 R-3 · 사용자 결정 (B) — docs/research/verbal-transfer-to-screen-2026-11-24.md) — 가족 사고 · 손주의 계좌 문자. "다른 번호로 연락한다"는 설정이라
   // 휴대전화 꼴(010 뒤 첫 자리 0 — 배정되지 않는 꼴로 추정 · 위 규칙과 같은 원칙).
-  "family-accident-deepvoice": "010-0472-3816",
-  "grandchild-impersonation": "010-0485-2290",
+  "family-accident-deepvoice": "070-0472-3816",
+  "grandchild-impersonation": "070-0485-2290",
 };
 
 // ⭐ 2026-11-07(카드사 고급 R1 축소 · 메인 지시 "문자 발신처 분리") — R1(fv-k3dn) 문자 3통은 **보낸 곳마다 다른 번호**이고 발신 표시는 **번호만**이다.
@@ -672,7 +672,7 @@ const FAMILY_ACCIDENT_DEEPVOICE: InCallSmsItem[] = [
     body: "예금주: 한지우\nOO은행 948-2716-5093-27\n금액: 3,000,000원\n합의금 이 계좌로 보내줘.\n아래 링크 누르면 바로 보내져.",
     linkDisplayText: "바로 보내기",
     fakeLandingId: "family-send-transfer",
-    linkAddress: "quick-send-now.invalid/send/Fm3q",
+    linkAddress: "family-quick-send.invalid/send/Fm3q",
     afterScammerTurns: 2,
     announceInstruction: FAMILY_TRANSFER_ANNOUNCE,
   },
@@ -683,8 +683,8 @@ const FAMILY_ACCIDENT_DEEPVOICE: InCallSmsItem[] = [
     body: "예금주: 정은솔\nOO은행 948-2716-5093-27\n금액: 500,000원\n수리비 이 계좌로 보내줘.\n아래 링크 누르면 바로 보내져.",
     linkDisplayText: "바로 보내기",
     fakeLandingId: "family-send-transfer",
-    linkAddress: "quick-send-now.invalid/send/Fm7r",
-    afterScammerTurns: 2,
+    linkAddress: "family-quick-send.invalid/send/Fm7r",
+    afterScammerTurns: 3,
     announceInstruction: FAMILY_TRANSFER_ANNOUNCE,
   },
 ];
@@ -696,7 +696,7 @@ const GRANDCHILD_IMPERSONATION: InCallSmsItem[] = [
     body: "예금주: 이도경\nOO은행 948-2716-5093-27\n금액: 500,000원\n이 계좌로 보내주세요.\n아래 링크 누르면 바로 보내져요.",
     linkDisplayText: "바로 보내기",
     fakeLandingId: "family-send-transfer",
-    linkAddress: "quick-send-now.invalid/send/Gc4w",
+    linkAddress: "family-quick-send.invalid/send/Gc4w",
     afterScammerTurns: 2,
     announceInstruction: FAMILY_TRANSFER_ANNOUNCE,
   },

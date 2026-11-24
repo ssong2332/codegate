@@ -304,7 +304,7 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `friend-bank-transfer` | `roleplay/linkMarker.ts` LINK_LABELS(칩 라벨 — P2-c) | "송금하기" | 링크에서 송금 | "송금할 금액을 입력해 주세요" | "송금하기" |
 // | `tax-refund-fee-transfer` | `scenarios/inCallSms.ts` TAX_REFUND_SCAM(문자 본문·칩 — P2-d) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "수수료 이체 정보를 확인해 주세요" | "수수료 이체하기" |
 // | `kidnap-ransom-transfer` | `scenarios/inCallSms.ts` KIDNAPPING_THREAT(문자 본문·칩 — 2026-11-07 앱 안 결말) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "지금 이체할 금액을 확인해 주세요" | "지금 이체하기" |
-// | `family-send-transfer` | `scenarios/inCallSms.ts` FAMILY_ACCIDENT_DEEPVOICE · GRANDCHILD_IMPERSONATION(문자 본문·칩 — 2026-11-24 R-3 (B)) | "아래 링크 누르면 바로 보내져." | 링크에서 송금 | "보낼 금액을 확인해 주세요" | "바로 보내기" |
+// | `family-send-transfer` | `scenarios/inCallSms.ts` FAMILY_ACCIDENT_DEEPVOICE · GRANDCHILD_IMPERSONATION(문자 본문·칩 — 2026-11-24 R-3 (B)) | "아래 링크 누르면 바로 보내져." | 링크에서 송금 | "보내실 금액을 확인해 주세요" | "바로 보내기" |
 // | `voucher-purchase` | `scenarios/inCallSms.ts` PROSECUTION_COOPERATION_CALL(문자 본문·칩 — 2026-11-07 앱 안 결말) | "검수 대상 자금은 아래 판매처에서 상품권으로 구매해 주세요." | 판매처에서 상품권 구매 | "다솜 문화상품권 구매" | "상품권 구매하기" |
 // | `gold-buy` | `scenarios/inCallSms.ts` INSTITUTIONAL_IMPERSONATION(문자 본문·칩 — 2026-11-07 금 구매형) | "검수 대상 예금은 아래 지정 거래소에서 골드바로 구매해 주세요." | 지정 거래소에서 골드바 구매 | "해담골드 골드바 구매" | "골드바 구매하기" |
 // | `asset-gold-buy` | `scenarios/inCallSms.ts` ASSET_PROTECTION_NOTICE_CALL(문자 본문·칩 — 2026-11-07 금형) | "보관 대상 자산은 아래 지정 거래소에서 금 실물로 주문해 주세요." | 지정 거래소에서 금 실물 주문 | "해담골드 금 실물 주문" | "금 실물 주문하기" |
@@ -1278,13 +1278,13 @@ const FAMILY_SEND_TRANSFER: MockScreenItem = {
   landingId: "family-send-transfer",
   kind: "credential-form",
   entrySurface: "in-call-sms",
-  headline: "보낼 금액을 확인해 주세요",
-  bodyLines: ["받는 분 통장에는 보내는 분 실명으로 표시됩니다."],
+  headline: "보내실 금액을 확인해 주세요",
+  bodyLines: ["문자로 받은 계좌가 채워져 있습니다."],
   issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 가족",
-  mockHost: "quick-send-now.invalid",
-  fields: ["입금받을 계좌", "보낼 금액"],
+  mockHost: "family-quick-send.invalid",
+  fields: ["보내실 계좌", "송금할 금액"],
   submitLabel: "바로 보내기",
-  successHeadline: "보내기가 완료되었습니다.",
+  successHeadline: "송금을 마쳤습니다.",
   momentTactic: "가족 사고 · 급한 사정을 내세운 송금 요구",
   correctAction:
     "가족이 다른 번호로 연락해 급하게 돈을 보내 달라고 하면 보내기 전에 그 가족의 원래 번호로 직접 전화해 확인하세요 — 목소리가 비슷해도 본인이 아닐 수 있습니다. ① 통화를 끊고 저장된 원래 번호로 다시 걸기 ② 다른 가족에게 함께 확인하기 ③ 문자로 받은 계좌로 송금하지 않기 ④ 이미 이체했다면 바로 112(경찰)나 그 은행 대표번호로 지급정지를 요청하고 1332(금융감독원)에도 알리기.",
