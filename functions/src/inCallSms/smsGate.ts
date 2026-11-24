@@ -31,7 +31,8 @@
 // ⭐ 2026-11-24(브라우저 A 라이브 A2 · 검찰 고급 fv-a6lq — 본인 확인 · 계좌 · 잔액을 모두 거부한 참가자에게 대출 안내 문자가 발화 수만 차서 왔다) 판정표 HB — 위 표보다 앞선다:
 // | # | If | Then |
 // |---|---|---|
-// | HB1 | 자동 백스톱(주장 아님) ∧ 직전 두 참가자 발화가 둘 다 적대(`participantHostile` — 클라 `participantHostileStreak` · 반복 차단 1-c와 같은 정규식) | `wait`(넛지 · 발송 0) |
+// | HB0 | 아직 도착한 문자가 없다(첫 문자 — 실제 사기도 상대가 적대여도 보내는 미끼 · 메인 결정 (B)) | 종전 |
+// | HB1 | 이미 도착한 문자가 있다(뒤 단계 문자) ∧ 자동 백스톱(주장 아님) ∧ 직전 두 참가자 발화가 둘 다 적대(`participantHostile` — 클라 `participantHostileStreak` · 반복 차단 1-c와 같은 정규식) | `wait`(넛지 · 발송 0) |
 // | HB2 | 사기범 "보냈다" 주장 · 모델 도구 | 종전(주장은 CL · OC, 같은 목적 뒤 문자 도구는 1-b′) |
 // | HB3 | 적대 연속이 끊김(최근 발화가 적대 아님 · 값 부재) | 종전 — 하한이 이미 지났으면 그 발화에 보낸다 |
 // 간격 = 그 문자 선언의 `backstopUserTurns`(§124 — 변형별) · 부재면 `BACKSTOP_USER_TURNS`.
@@ -302,8 +303,8 @@ export function planSmsBackstop(
   const target = pending[0];
   // SB1 — 설치 화면을 마치지 않았으면 다음 단계 문자를 밀지 않는다(주장 백스톱 포함 · Q3 — 시한 없음).
   if (input.installPendingSince !== undefined) return { action: "wait" };
-  // HB1 — 적대가 이어지는 동안 자동 백스톱은 다음 문자를 밀지 않는다(HB2 주장 = 아래 종전).
-  if (input.participantHostile === true && input.claimed !== true) return { action: "wait" };
+  // HB1 — 적대가 이어지는 동안 자동 백스톱은 다음 단계 문자를 밀지 않는다(HB0 첫 문자 · HB2 주장 = 아래 종전).
+  if (input.participantHostile === true && input.claimed !== true && input.delivered.length > 0) return { action: "wait" };
   const openAt = gateOpensAtUserTurns(target, input.delivered);
   // §126 — 주장이 있으면 명시 요청 간격(1)으로 연다(하한 `notBeforeUserTurns` · 첫 문자 하한은 그대로).
   if (input.claimed === true) {

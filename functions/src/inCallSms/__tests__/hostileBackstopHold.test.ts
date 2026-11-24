@@ -4,6 +4,7 @@
 // | # | 고정하는 것 |
 // |---|---|
 // | HH1 | 재현 HB1 — 사건 조회 문자 도착 뒤 하한을 지난 발화 · 적대 연속 → wait(넛지 · 발송 0) / 같은 입력에 적대 아님 → 대출 안내 발송(종전) |
+// | HH0 | HB0 — 첫 문자(아직 도착한 문자 없음)는 적대여도 종전(메인 결정 (B) — 상대가 적대여도 보내는 미끼) |
 // | HH2 | HB2 — 사기범 "보냈다" 주장 백스톱은 적대여도 종전 |
 // | HH3 | 배선 — 서버가 요청의 `participantHostile === true`만 백스톱 판정에 넘긴다 |
 import { test } from "node:test";
@@ -27,6 +28,16 @@ test("[HH1 재현] 적대 연속이면 자동 백스톱이 대출 안내를 보�
   assert.equal(normal.action === "deliver" ? normal.item.smsId : undefined, GUIDE);
   // HB3 — 적대가 끊기면(값 false) 하한이 이미 지났으니 그 발화에 보낸다.
   assert.equal(planSmsBackstop({ declared: declared(), delivered, userTurns: 9, participantHostile: false }).action, "deliver");
+});
+
+test("[HH0] HB0 — 첫 문자는 적대여도 종전대로 보낸다", () => {
+  for (let userTurns = 0; userTurns <= 8; userTurns += 1) {
+    const normal = planSmsBackstop({ declared: declared(), delivered: [], userTurns });
+    const hostile = planSmsBackstop({ declared: declared(), delivered: [], userTurns, participantHostile: true });
+    assert.deepEqual(hostile, normal, `발화 ${userTurns}`);
+  }
+  const first = planSmsBackstop({ declared: declared(), delivered: [], userTurns: 8, participantHostile: true });
+  assert.equal(first.action === "deliver" ? first.item.smsId : undefined, CASE);
 });
 
 test("[HH2] HB2 — '보냈다' 주장 백스톱은 적대여도 종전(게이트가 열렸으면 보낸다)", () => {
