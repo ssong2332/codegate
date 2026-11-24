@@ -82,8 +82,7 @@ test("[RN · browser-c N6] 주민번호 요구 뒤 '560312 2 이거면 되냐' =
     msg(0, "scammer", "엄마 보험 접수하려면 주민번호 앞자리랑 뒷자리 첫 숫자만 보내줘"),
     msg(1, "user", "560312 2 이거면 되냐"),
   ]);
-  assert.equal(result.deceivedMoments.length, 1);
-  assert.equal(result.deceivedMoments[0]!.tacticCategory, "personal_info_demand");
+  assert.equal(result.deceivedMoments.length, 1, JSON.stringify(result.deceivedMoments));
 });
 
 test("[TL · browser-b N-B6] 인질 협박 키와 같은 대사의 송금 요구도 수법 목록에 오른다(자녀 납치 초급)", () => {

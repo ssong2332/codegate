@@ -87,7 +87,7 @@ test("[§115 배선] 백스톱 응답 · 끊기 응답 · 클라 주입 1회", (
   assert.ok(sms.includes('if (followUpUserTurns === undefined) return withScreenStatus({ status: "none_pending" });'), "후속 값 없는 변형은 종전 응답");
   const hangup = readFileSync(path.join(SRC, "scammerHangup/index.ts"), "utf8");
   assert.ok(hangup.includes("const followUpPending = followUpUserTurns !== undefined && !goalActionDone;"));
-  assert.ok(hangup.includes("scammerHangupGuidance(decision.status, { followUpPending, goalActionDone })")); // §127 — 할 일 완료 뒤 6행 재시도 문면
+  assert.ok(hangup.includes("scammerHangupGuidance(decision.status, { followUpPending, goalActionDone, verbalTransferPending })")); // §127 — 할 일 완료 뒤 6행 재시도 문면
   const page = readFileSync(path.resolve(SRC, "../../src/app/session/play/page.tsx"), "utf8");
   assert.ok(page.includes('if (result.status === "none_pending" && result.wrapUpInstruction && !state.wrapUpSent) {'), "클라 1회 가드");
   // 2026-10-31 — `wrapUp` 표시: 이 지시를 처리 중인 동안의 `end_call`은 6행 지시 대기로 막지 않는다(`src/lib/realtime/wrapUpHangup.test.ts`).

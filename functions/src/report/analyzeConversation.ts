@@ -1120,11 +1120,15 @@ export function analyzeConversation(
     // §128(2) T-1 — 문구 키가 빈 대사도 요구 어형 표(`resolveDemandFallbackTactic` — 세션 목록 안 라벨만)로 "시도된 수법"에 올린다.
     // 종전에는 속은 순간으로 판정된 짝에서만 보정해, 거절한 요구(추가 송금 · 비밀번호 등)가 목록에서 빠졌다. 속은 순간 판정 · 라벨은 무변경.
     // 판정표 TL(2026-11-24 페르소나 점검 N-B6 — 자녀 납치 초급 "아이는 저희 쪽에 있으니 지금 천만 원 … 바로 입금하세요"가 '자녀 인질 협박' 키만 맞아
-    // '즉시 송금 요구'가 빠짐) — 키가 맞았어도 **표 라벨과 같은 범주의 키**가 없으면 표 라벨도 올린다(같은 범주 키가 있으면 종전 — 키 라벨이 더 정확하다).
+    // '즉시 송금 요구'가 빠짐) — 키가 맞았어도 표 라벨이 **송금 범주**이고 같은 범주 키가 없으면 표 라벨도 올린다(같은 범주 키가 있으면 종전 — 키 라벨이 더 정확하다).
+    // 송금 범주만인 이유: 개인정보 범주까지 열면 '확인질문 재촉' 키가 맞은 본인 확인 대사에 말하지 않은 '본인확인 빙자 정보 수집'이 오른다(interleavedDemandPairing (2)).
     const demandLabel = resolveDemandFallbackTactic(msg.textMasked, msgScope.tactics);
+    const demandCategory = demandLabel ? resolveTacticCategory(demandLabel) : undefined;
     if (
       demandLabel &&
-      !matchedTactics.some((t) => resolveTacticCategory(extractTacticLabel(t)) === resolveTacticCategory(demandLabel))
+      (matchedTactics.length === 0 ||
+        (demandCategory === "payment_demand" &&
+          !matchedTactics.some((t) => resolveTacticCategory(extractTacticLabel(t)) === demandCategory)))
     ) {
       tacticLabelsUsed.add(demandLabel);
     }
