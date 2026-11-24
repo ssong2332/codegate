@@ -218,7 +218,7 @@ export function isLegScreenHoldPending(input: {
 export const VERBAL_TRANSFER_VARIANTS: readonly string[] = [
   "fv-4dy4", "fv-krq3", "fv-66hh", "fv-h5sz", // 가족 사고
   "fv-brcb", "fv-mabg", // 손주 사칭
-  "fv-c5ih", "fv-dxwu", // 자녀 납치 초 · 중급
+  // 자녀 납치 초 · 중급(fv-c5ih · fv-dxwu)은 #608에서 계좌 문자 → 이체 화면 루트가 됐다 → 4-c(화면 결정)가 맡는다.
 ];
 
 export function isVerbalTransferPending(flowVariantId: string | undefined, participantSaidSent: boolean | undefined): boolean {
