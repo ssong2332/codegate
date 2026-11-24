@@ -11,6 +11,7 @@
 // | SA6 | 배선 — 페이지가 대사(참가자 · 사기범 순서 그대로)로 화면을 여는 순간 값을 만들고, 값은 화면 안에서만 쓴다(네트워크 · 콜백 0 · G138) |
 // | SA7 | 금 거래소 화면도 같은 규칙(S12 · 2026-11-08 사용자 결정) — 결제 계좌 은행 · 출금 가능 금액 = 말한 값 / 말 없으면 고정 값 |
 // | SA8 | 100만 원 미만 잔액은 그대로 두고 출금 예약은 최소 금액에 걸린다(S8 · 2026-11-08 사용자 결정 "그대로 둠") |
+// | SA9 | 2026-11-24 브라우저 A A3 — "밖에 · 뿐"은 보유(S14b) · '자산 · 어느 정도' 질문(S6″) · 둘로 나뉜 답(S6′) · 금 화면 렌더 |
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -160,4 +161,24 @@ test("[SA8] 판정표 S8(2026-11-08 사용자 결정 \"그대로 둠\") — 100�
   assert.ok(text.includes("500,000원"), "출금 가능 금액 = 말한 잔액 그대로");
   // "전액"을 눌러도 최소 금액 안내(잔액 판정보다 먼저 — `cashReserveError`).
   assert.match(cashReserveError("500,000", "cash") ?? "", /1,000,000원부터/);
+});
+
+test("[SA9] 브라우저 A A3 재현 — '200만 원밖에 없어요' · 자산 질문 뒤 나뉜 답 → 금 거래소 화면 출금 가능 2,000,000원(S14b · S6′ · S6″)", () => {
+  // S14b — 금액 뒤 "밖에 · 뿐"은 '가진 돈이 그것뿐'이다(S14 '없' 건너뜀 아님).
+  assert.deepEqual(spokenAccountFrom([user("새솔은행 하나만 써요. 거기 이백만 원밖에 없어요.")]), { bankName: "새솔은행", balance: 2_000_000 });
+  assert.deepEqual(spokenAccountFrom([user("300만 원뿐이에요.")]), { balance: 3_000_000 });
+  assert.deepEqual(spokenAccountFrom([user("980만 원은 없어요.")]), {}, "S14 그대로");
+  // S6″ — '자산 · 어느 정도' 질문 뒤 숫자만 답해도 잔액(실측 전사 "거기 200만 원").
+  const asked = scammer("거래하시는 은행과 자산은 어느 정도이신가요?");
+  assert.deepEqual(spokenAccountFrom([asked, user("거기 200만 원.")]), { balance: 2_000_000 });
+  assert.deepEqual(spokenAccountFrom([scammer("예금은 대략 어느 정도 되세요?"), user("200만 원.")]), { balance: 2_000_000 });
+  // S6′ — 음성 인식이 한 답을 둘로 나눠도 앞 사기범 질문을 본다.
+  assert.deepEqual(spokenAccountFrom([asked, user("새솔은행 하나만 써요."), user("거기 200만 원.")]), { bankName: "새솔은행", balance: 2_000_000 });
+  assert.deepEqual(spokenAccountFrom([scammer("오늘 안에 처리하셔야 합니다."), user("거기 200만 원.")]), {}, "S7 그대로 — 앞 질문이 잔액 질문이 아니면");
+  // 렌더 — 금 거래소 화면 결제 계좌.
+  const turns = [asked, user("새솔은행 하나만 써요."), user("거기 이백만 원밖에 없어요.")];
+  const text = renderLandingScreen(goldProps({ landingId: "asset-gold-buy", spokenAccountNow: () => spokenAccountFrom(turns) })).text;
+  assert.ok(text.includes("새솔은행"), "결제 계좌 은행 = 말한 은행");
+  assert.ok(text.includes("2,000,000원"), "출금 가능 금액 = 말한 잔액");
+  assert.equal(text.includes(won(fictionalBalanceFor(LEDGER))), false, "고정 잔액이 남으면 안 된다");
 });

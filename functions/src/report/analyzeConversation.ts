@@ -573,6 +573,16 @@ function relabelWithoutIdentity(scammerText: string, reply: AnalysisMessage, sco
   );
 }
 
+/** 판정표 IO · BK — 인증번호 숫자열을 지운 뒤에도 신원 값(이름 · 생년월일 · 날짜 · 가림 표지 · 사진)이 남는가("588845요"는 6자리라 날짜로도 잡힌다). */
+function hasIdentityValueBesidesCode(reply: AnalysisMessage): boolean {
+  return hasIdentityValue({ ...reply, textMasked: reply.textMasked.replace(new RegExp(OTP_CODE_IN_ANSWER.source, "g"), " ") });
+}
+/** 판정표 IO1 — 답이 인증번호 낭독인가: 인증번호 답 ∧ 그 밖 신원 값 없음 ∧ (짝 대사가 인증번호를 물음 ∨ 답에 '인증' ∨ 세션 정답과 같은 번호). */
+function isOtpReadback(scammerText: string, reply: AnalysisMessage, otpCodes: readonly string[]): boolean {
+  if (!isOtpCodeAnswer(reply) || hasIdentityValueBesidesCode(reply)) return false;
+  return OTP_ASKED.test(scammerText) || /인증/.test(reply.textMasked) || hasCorrectOtp(reply.textMasked, otpCodes);
+}
+
 /** L2 — 답의 내용 범주. 사진 턴은 판정하지 않는다(§131). */
 function answerContentCategory(scammerText: string, reply: AnalysisMessage): TacticCategory | undefined {
   if (reply.photo === true) return undefined;
@@ -1301,7 +1311,30 @@ export function analyzeConversation(
         ? relabelWithoutIdentity(labelSource.textMasked, userReply, scopeTactics)
         : undefined;
     if (identityRelabel) tacticLabelsUsed.add(identityRelabel);
-    const tactic = identityRelabel ?? otpCheckedTactic;
+    // ⭐ 2026-11-24 브라우저 A 라이브 A1b(기관 고급 금 구매형 — "네, 인증 번호는 58884" · "588845요. 여섯 자리 다 불렀어요."가 '신원정보 직접 요구'에 응함)
+    // · A4(카드사 고급 R1 상담원 통화 — 생년월일 답 "3월 1일"이 '거래 은행 정보 수집'에 응함 · 그 통화 목록에 신원 라벨이 없다). 판정표 O · ID와 같은 방향:
+    // | # | If(위에서 고른 라벨 · 답) | Then |
+    // |---|---|---|
+    // | IO1 | 신원 라벨 ∧ 인증번호 낭독(`isOtpReadback`) ∧ 목록(그 통화)에 '인증번호' 라벨 | 그 인증번호 라벨 |
+    // | IO2 | 그 밖 | 그대로 |
+    // | BK1 | 자산 · 거래 은행 라벨(개인정보 범주) ∧ 답에 잔액 공개 · 은행 이름 없음 ∧ 인증번호 아닌 신원 값(`hasIdentityValueBesidesCode`) | 신원 라벨: 그 통화 목록 → 없으면 세션 전체 목록 |
+    // | BK2 | BK1인데 어느 목록에도 신원 라벨이 없다 · 또는 그 밖 | 그대로 |
+    const afterIdentity = identityRelabel ?? otpCheckedTactic;
+    const otpReadbackLabel =
+      IDENTITY_LABEL.test(afterIdentity) && isOtpReadback(labelSource.textMasked, userReply, otpCodes)
+        ? scopeTactics.map(extractTacticLabel).find((label) => OTP_LABEL.test(label))
+        : undefined;
+    const identityFor = (tactics: readonly string[]) => tactics.map(extractTacticLabel).find((label) => IDENTITY_LABEL.test(label));
+    const bankLabelWithoutBank =
+      ASSET_INFO_LABEL.test(afterIdentity) &&
+      resolveTacticCategory(afterIdentity) === "personal_info_demand" &&
+      !BALANCE_DISCLOSURE.test(userReply.textMasked) &&
+      !BANK_NAME.test(userReply.textMasked) &&
+      hasIdentityValueBesidesCode(userReply);
+    const identityForBankLabel = bankLabelWithoutBank ? (identityFor(scopeTactics) ?? identityFor(weakenedTactics)) : undefined;
+    const answerRelabel = otpReadbackLabel ?? identityForBankLabel;
+    if (answerRelabel) tacticLabelsUsed.add(answerRelabel);
+    const tactic = answerRelabel ?? afterIdentity;
     // AC-026 예시("15초 시점에 속았습니다")를 그대로 따르기 위해 turnIndex가 아니라 실제 경과
     // 시간(초)을 라벨로 쓴다 — MessageDoc.createdAt이 이미 존재하므로 정확한 초 단위 계산이
     // 가능하다(구현 판단, Mock 단계라 정밀 음성 타이밍 데이터는 없지만 메시지 write 시각은 실측값).

@@ -295,7 +295,8 @@ test("[§129 C1] 부인 · 모름 답의 명사 단독 순응(계좌 · 비밀�
   assert.equal(analyzeConversation(given, 0, G2LD_TACTICS()).wasDeceived, true, "숫자를 불러 줬으면 속음(V3)");
 });
 
-test("[§129 L1 · L2 · L3] 생년 · 인증번호 순간 라벨 = '신원정보 직접 요구'(부인 대응 라벨 0 · 빈 라벨 0)", () => {
+// 2026-11-24 판정표 IO1(`analyzeConversation.ts` · 브라우저 A A1b) — 인증번호 낭독 순간은 목록의 '인증번호 요구'(종전 L3 기대값 = '신원정보 직접 요구').
+test("[§129 L1 · L2 · L3 · IO1] 생년 순간 라벨 = '신원정보 직접 요구' · 인증번호 순간 = '인증번호 요구'(부인 대응 라벨 0 · 빈 라벨 0)", () => {
   const birth = dialogue([
     ["scammer", "고객님, 만든 적이 없으시다니 오히려 명의가 도용됐을 가능성이 큽니다. 그래서 더 빨리 확인해야 합니다. 먼저 본인 확인부터 하겠습니다."],
     ["user", "네, 확인해 주세요. 홍길동이고 1960년생이에요."],
@@ -306,8 +307,8 @@ test("[§129 L1 · L2 · L3] 생년 · 인증번호 순간 라벨 = '신원정�
     ["user", "277758이요"],
   ]);
   const result = analyzeConversation(otp, 0, G2LD_TACTICS(), ["277758"]);
-  assert.equal(result.deceivedMoments[0]?.tactic, "신원정보 직접 요구");
-  assert.ok(result.tacticsUsed.includes("신원정보 직접 요구"), "AC-083 (a) — 속은 순간 라벨은 수법 목록 안");
+  assert.equal(result.deceivedMoments[0]?.tactic, "인증번호 요구");
+  assert.ok(result.tacticsUsed.includes("인증번호 요구"), "AC-083 (a) — 속은 순간 라벨은 수법 목록 안");
 });
 
 test("[§129 L2] 사진 턴은 내용 범주 라벨 판정에서 뺀다(사진 순간 라벨은 §131 소관 — 그쪽 수정과 겹치지 않게 소스로만 고정)", () => {
@@ -350,7 +351,7 @@ test("[§129 C1~C5 · L1~L3] 라이브 대본 — 속은 순간 10 → 4(생년 
   assert.deepEqual(result.deceivedMoments.map((m) => m.tactic), [
     "신원정보 직접 요구",
     "신원정보 직접 요구",
-    "신원정보 직접 요구",
+    "인증번호 요구", // 2026-11-24 판정표 IO1(종전 '신원정보 직접 요구')
     "실물 조사 명목 금 구매 인출 요구",
   ]);
 });

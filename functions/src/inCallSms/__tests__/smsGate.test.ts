@@ -211,14 +211,15 @@ test("[백스톱 역검증] 선택 목적도 강제하는 오염본(required 무
 
 // ── 4. 단일 통로(메모리 저장소) — 허용이면 문서 1건 + 기록 필드, 거부면 0건 ─────────────────────────────
 const FAKE_TS = { seconds: 0, nanoseconds: 0 } as unknown as FirebaseFirestore.Timestamp;
-function memoryStore(): SmsStore & { docs: Map<string, InCallSmsDoc> } {
+// `submitted` — 도착한 문자 화면을 참가자가 바로 제출했다고 본다(1-b′ — 같은 목적 뒤 문자는 앞 화면 제출 뒤에만 모델 도구로 간다).
+function memoryStore(submitted = false): SmsStore & { docs: Map<string, InCallSmsDoc> } {
   const docs = new Map<string, InCallSmsDoc>();
   return {
     docs,
     transact: async (fn) =>
       fn({
         listDelivered: async () =>
-          [...docs.values()].map((d) => ({ smsId: d.smsId, userTurnsAtArrival: d.userTurnsAtArrival })),
+          [...docs.values()].map((d) => ({ smsId: d.smsId, userTurnsAtArrival: d.userTurnsAtArrival, ...(submitted ? { landingSubmitted: true as const } : {}) })),
         create: (smsId, doc) => {
           if (docs.has(smsId)) throw new Error("ALREADY_EXISTS");
           docs.set(smsId, doc);
@@ -277,7 +278,8 @@ test("[폴백 경로 동일 판정] 같은 대화 · 같은 요청열이면 실�
 
 // ── 5. 변형 선언 = 실제 동작(전 변형 순회 · S5 M2 "선언값 검증" 해소) ──────────────────────────────────
 async function simulate(variant: FlowVariant, mode: "model_all" | "backstop_only"): Promise<InCallSmsDoc[]> {
-  const store = memoryStore();
+  // 2026-11-24 1-b′ — 모델 최악 요청은 참가자가 화면을 매번 제출한 경우다(제출 전에는 같은 목적 뒤 문자가 도구로 가지 않는다 · `sameLinkModelTool.test.ts`).
+  const store = memoryStore(mode === "model_all");
   const { declared } = resolveDeclaredSms(variant.scenarioId, variant.variantId);
   for (let userTurns = 0; userTurns <= 24; userTurns += 1) {
     if (mode === "model_all") {

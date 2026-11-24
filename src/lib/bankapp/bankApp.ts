@@ -287,7 +287,14 @@ const BANK_MENTION = /([가-힣A-Za-z]{1,8})(\s?)(?:은행|뱅크)/g;
 const BANK_MENTION_STOP = /^(?:거래|주거래|다른|무슨|어느|어떤|그|이|저|제|내|시중|인터넷|모바일|저축|같은)$/;
 const SPOKEN_HOLD_WORDS = /있|잔액|잔고|예금|통장|모아|모은|저축/g;
 const SPOKEN_SEND_WORDS = /보내|보낼|보냈|이체|송금|찾|뽑|인출|출금|드리|드려|드릴|입금/g;
-const BALANCE_QUESTION = /잔액|잔고|예금|예치|얼마(?:나|정도)?\s*(?:있|되|계)/;
+// ⭐ 2026-11-24 브라우저 A 라이브 A3(자산 보호 고급 금 구매형 — "새솔은행 … 이백만 원밖에 없어요" · 전사 "거기 200만 원" → 금 주문 화면 고정 값):
+// | # | If | Then |
+// |---|---|---|
+// | S6′ | 열쇠말 없음 ∧ 그 참가자 대사 앞의 가장 가까운 사기범 대사(사이에 참가자 대사만 — 음성 인식이 한 답을 둘로 나눈 경우)가 잔액 질문 | 잔액 후보(S6과 같다) |
+// | S6″ | 잔액 질문 어형에 '자산' · '어느 정도 있/되'("예금은 대략 어느 정도 되세요?" · "자산은 어느 정도이신가요?") | S6 질문으로 본다 |
+// | S14b | 금액 바로 뒤 "밖에 · 뿐"(같은 문장 · "200만 원밖에 없어요") | 보유 말로 본다(S14 '없' 건너뜀보다 앞) |
+const BALANCE_QUESTION = /잔액|잔고|예금|예치|자산|얼마(?:나|정도)?\s*(?:있|되|계)|어느\s*정도\s*(?:있|되|이)/;
+const SPOKEN_ONLY_WORDS = /^\s*(?:정도|쯤)?\s*(?:밖에|뿐)/;
 const SPOKEN_BALANCE_MIN = 10_000;
 const SPOKEN_BALANCE_MAX = 1_000_000_000;
 
@@ -357,12 +364,14 @@ function lastBalanceIn(text: string, askedBalance: boolean): number | undefined 
     const lastEnd = (re: RegExp) => Math.max(-1, ...[...before.matchAll(re)].map((m) => (m.index ?? 0) + m[0].length));
     const holdAfter = firstAt(SPOKEN_HOLD_WORDS);
     const sendAfter = firstAt(SPOKEN_SEND_WORDS);
+    const onlyHeld = SPOKEN_ONLY_WORDS.test(following); // S14b
     // S14 — "980만 원은 없어요": 금액 뒤 첫 말이 "없"이면 잔액 후보가 아니다.
-    if (firstAt(/없/g) < Math.min(holdAfter, sendAfter)) return;
+    if (!onlyHeld && firstAt(/없/g) < Math.min(holdAfter, sendAfter)) return;
     const holdBefore = lastEnd(SPOKEN_HOLD_WORDS);
     const sendBefore = lastEnd(SPOKEN_SEND_WORDS);
-    const kind =
-      holdAfter !== Infinity || sendAfter !== Infinity
+    const kind = onlyHeld
+      ? "hold"
+      : holdAfter !== Infinity || sendAfter !== Infinity
         ? holdAfter < sendAfter ? "hold" : "send"
         : holdBefore >= 0 || sendBefore >= 0
           ? holdBefore > sendBefore ? "hold" : "send"
@@ -392,7 +401,10 @@ export function spokenAccountFrom(turns: readonly { role: "scammer" | "user"; te
       realBank = mention.kind === "real"; // S2 → 판정표 A3b(이름 없는 표기) · S2′ → A3a(그 표기)
       realBankName = mention.kind === "real" ? mention.name : undefined;
     }
-    const previous = turns[index - 1];
+    // S6′ — 사이의 참가자 대사를 건너뛴 가장 가까운 사기범 대사.
+    let back = index - 1;
+    while (back >= 0 && turns[back]!.role === "user") back -= 1;
+    const previous = back >= 0 ? turns[back] : undefined;
     const value = lastBalanceIn(turn.text, previous?.role === "scammer" && BALANCE_QUESTION.test(previous.text));
     if (value !== undefined) {
       balance = value; // S9
