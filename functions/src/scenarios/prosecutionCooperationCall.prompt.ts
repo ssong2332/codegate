@@ -175,6 +175,13 @@ export function prosecutionVoucherRoutePersona(endingClause: string, endingRule:
   return prosecutionRoutePersona(endingClause, endingRule).replace(CASE_LINK_ONLY_SCREEN_LINE, CASE_AND_VOUCHER_SCREEN_LINE);
 }
 
+// ⭐ 2026-11-23(사용자 결정 "앱 안 대출로 바꾸기") — 대출금형(fv-a6lq)은 사건 조회 문자 뒤에 대출 안내 · 대출금 보관 계좌 문자(앱 안 화면 두 개)가 더 있다.
+const CASE_AND_LOAN_SCREEN_LINE =
+  "- 사건 조회 안내 문자 · 대출 안내 문자 · 대출금 보관 계좌 안내 문자 말고는 서류·사진·메신저 같은 다른 화면을 보내겠다고 하지 않는다. 그 밖에 필요한 것은 말로만 전한다.";
+export function prosecutionLoanRoutePersona(endingClause: string, endingRule: string): string {
+  return prosecutionRoutePersona(endingClause, endingRule).replace(CASE_LINK_ONLY_SCREEN_LINE, CASE_AND_LOAN_SCREEN_LINE);
+}
+
 export const prosecutionCooperationCallPrompt: ScenarioPromptDoc = {
   personaPrompt,
   weakenedTactics,

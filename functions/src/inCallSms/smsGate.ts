@@ -13,6 +13,7 @@
 // | # | If | Then |
 // |---|---|---|
 // | 1 | `purpose`가 변형 `sms` 선언에 없다(enum 밖 · 부재 포함) | `not_allowed`(쓰기 0) |
+// | 1-b | 2026-11-23 — 그 목적으로 선언된 문자가 둘 이상 | 선언 순서상 아직 도착하지 않은 첫 문자로 아래 행을 본다(다 도착했으면 첫 문자 → 2행) |
 // | 2 | 그 목적의 문자가 이미 도착 | `already_delivered`(쓰기 0) |
 // | 2-b | ⭐ D-c(P2 실측 2026-11-01) — 선언 순서상 **앞선 필수 문자**가 아직 도착하지 않았다(선택 문자는 막지 않는다) | `too_early` |
 // | 3 | `userTurns < max(하한, FIRST_SMS_MIN_USER_TURNS)` — 하한 = 판정표 F(`explicitFloor`면 `explicitNotBeforeUserTurns ?? notBeforeUserTurns` · 그 밖 `notBeforeUserTurns`) | `too_early` |
@@ -191,9 +192,10 @@ function skipsSpacing(item: FlowVariantSms, delivered: readonly DeliveredSmsReco
 
 /** ⛔ 판정표 순서 그대로(위 머리 주석). 부수효과 0. */
 export function resolveSmsGate(input: SmsGateInput): SmsGateResult {
-  const item = isSmsPurpose(input.purpose)
-    ? input.declared.find((declared) => declared.purpose === input.purpose)
-    : undefined;
+  // 2026-11-23(1-b행) — 같은 목적 문자가 둘 이상이면(한 통화 앱 안 대출 — 설치 · 사건 조회 링크 뒤 대출 안내 링크) 선언 순서상 아직 안 보낸 첫 문자,
+  // 다 보냈으면 첫 문자(→ 2행). 목적마다 문자가 하나인 변형은 종전과 같다.
+  const candidates = isSmsPurpose(input.purpose) ? input.declared.filter((declared) => declared.purpose === input.purpose) : [];
+  const item = candidates.find((declared) => !input.delivered.some((d) => d.smsId === declared.smsId)) ?? candidates[0];
   if (!item) return { status: "not_allowed" };
   if (input.delivered.some((d) => d.smsId === item.smsId)) return { status: "already_delivered", item };
   // ⭐ D-c(P2 실 키 실측 2026-11-01 — 카드 `fv-w3dq` 이관 문자가 설치 문자보다 먼저 · 환급 `fv-aqx2` 수수료 문자가 신청 링크보다 먼저) — 선언 순서 = 단계 순서다.

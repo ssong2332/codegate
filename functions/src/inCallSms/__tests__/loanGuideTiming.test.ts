@@ -79,9 +79,18 @@ test("[판정표 F · CL 회귀] 인증번호 명시 하한 3 · 이미 도착�
   assert.equal(planSmsBackstop({ declared: LEG0, delivered: delivered(6, true), userTurns: 7, claimed: false, explicitFloor: false }).action, "wait");
 });
 
-test("[선언] explicitAfterScreenOf는 fv-c5fj 대출 안내 문자 하나 — 같은 레그 앞선 · 화면을 여는 문자를 가리킨다", () => {
+test("[선언] explicitAfterScreenOf는 fv-c5fj 대출 안내 문자 + 한 통화 앱 안 대출 보관 계좌 문자 2 — 같은 레그 앞선 · 화면을 여는 문자를 가리킨다", () => {
   const users = FLOW_VARIANTS.flatMap((v) => v.sms.filter((s) => s.explicitAfterScreenOf !== undefined).map((s) => `${v.variantId}:${s.smsId}`));
-  assert.deepEqual(users, [`fv-c5fj:${LOAN}`]);
+  // 2026-11-23 — 카드 배송 고급 · 검찰 고급 한 통화 앱 안 대출: 대출금 보관 계좌 문자는 대출 신청 화면 제출 뒤에만 명시 하한(8)으로 연다.
+  assert.deepEqual(users, [`fv-c5fj:${LOAN}`, "fv-e5mv:card-delivery-loan-safe-account", "fv-a6lq:prosecution-loan-safe-account"]);
+  for (const [variantId, scenarioId] of [["fv-e5mv", "card-delivery-call"], ["fv-a6lq", "prosecution-cooperation-call"]] as const) {
+    const list = findFlowVariant(variantId)!.sms;
+    const at = list.findIndex((s) => s.explicitAfterScreenOf !== undefined);
+    const prior = list.findIndex((s) => s.smsId === list[at]!.explicitAfterScreenOf);
+    assert.ok(prior >= 0 && prior < at, variantId);
+    assert.equal(findInCallSmsItem(scenarioId, list[prior]!.smsId)?.fakeLandingId, "loan-apply", `${variantId}: 대출 신청 화면 제출 뒤`);
+    assert.ok(list[at]!.explicitNotBeforeUserTurns! <= list[at]!.notBeforeUserTurns, variantId);
+  }
   const sms = findFlowVariant("fv-c5fj")!.sms;
   const loanIndex = sms.findIndex((s) => s.smsId === LOAN);
   const loan = sms[loanIndex]!;

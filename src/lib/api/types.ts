@@ -106,6 +106,8 @@ export type SendMessageRequest = {
   duringCall?: boolean;
   /** §129 에뮬 D2 — 이 탭에서 "받기" 뒤 지난 ms(`sendMessage` 래퍼가 채운다 · functions/src/roleplay/types.ts와 1:1). */
   answeredElapsedMs?: number;
+  /** 2026-11-23 판정표 BL3′ — 참가자가 통화에서 말한 통장 잔액(원). functions/src/roleplay/types.ts와 1:1. 부재 = 종전. */
+  spokenBalanceWon?: number;
 };
 // isMock: 서버가 이미 반환 중이었으나(functions/src/roleplay/index.ts:137) 클라 타입에 누락돼
 // 있던 계약 드리프트를 채팅 화면 구현 시 해소.
@@ -231,6 +233,8 @@ export type DeliverInCallSmsRequest = {
   smsClaimed?: boolean;
   /** 판정표 CL(2026-11-08 · B1) — `smsClaimed`일 때만: 주장 문장이 가리키는 문자 목적(`smsClaimPurposes`). 서버 계약 `functions/src/inCallSms/types.ts`와 1:1. */
   smsClaimedPurposes?: ("identity" | "transfer" | "link")[];
+  /** 2026-11-23 판정표 BL3′ — 참가자가 통화에서 말한 통장 잔액(원 · `spokenAccountFrom`). 서버 계약 `functions/src/inCallSms/types.ts`와 1:1. 부재 = 종전. */
+  spokenBalanceWon?: number;
 };
 // ⭐ §53.6 (3)(T118/R-1과 동형) — 전환(호 전환)이 끝난 오퍼가 연 문자에는 `announceInstruction`이
 // 생략된다. 값이 없으면 클라는 주입하지 않는다.
