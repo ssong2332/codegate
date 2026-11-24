@@ -82,8 +82,9 @@ const AFTER_ASSEMBLY_SHA256: Readonly<Record<"beginner" | "intermediate", { sha2
   // P2 확인 실측 결함 수정(2026-11-01 · D-e2) — 공통 금지 문장에 "간편결제나 다른 카드로 더 보내라, " 예시(+20자 · `OUT_OF_SERVICE_SENTENCE` — `revertFullAudit`가 되돌린다)로 갱신. 직전 값: 초급 e49622b3aaf2(7345자) · 중급 3029a095e391(6611자).
   // D4(2026-11-07 Edge 실사용 시험 판 29 · 32) — 초급 블록 물러섬 보강(+520자 · `fullAuditDelta.ts` BEGINNER_D4_TEXT_CHANGES — `revertFullAudit`가 되돌린다). 초급만 · 중급 무변경. 직전 값: 초급 b469e25b910a(7365자).
   // 2026-11-23(적대 응대 · docs/research/hostile-reply-loop-2026-11-23.md 3-A) — [대화 방식] 직접 질문 답부터 · 거절 짚기 1문장(+164자 · `DIRECT_QUESTION_REPLY_SENTENCE` — `revertFullAudit`가 되돌린다)으로 갱신. 직전 값: 초급 849387ce434e(7885자) · 중급 01f48911d946(6631자).
-  beginner: { sha256: "b7bec781ed234640d47c94a54927ca65561229ec34adedb1ba441a57500c8cdd", length: 8049 },
-  intermediate: { sha256: "74a8397acbad7f65385a4bcdb4beacb76a7a953e670734afdb945d54c26701ae", length: 6795 },
+  // 2026-11-24(페르소나 점검 N5 · docs/research/fact-statement-reply-2026-11-24.md F) — [대화 방식] 사실 진술 받기 1문장(+311자 · `FACT_STATEMENT_REPLY_SENTENCE` — `revertFullAudit`가 되돌린다)으로 갱신. 직전 값: 초급 b7bec781ed23(8049자) · 중급 74a8397acbad(6795자).
+  beginner: { sha256: "ad57a87c23c071409d6b1fe23f0bbc15826c47848ee23a8d0cc8ad1a92fe0c94", length: 8360 },
+  intermediate: { sha256: "d87c9f33a6b0bc9b79d237a5e12ccd615bca46784e8b3575afa4030227a82bea", length: 7106 },
 };
 
 test("[T194-a G586 · §84.13.3 ④] parcel 초급 · 중급 조립 = 갱신 기대값(가드레일 (5)항 포함) · 가드레일 최후미", () => {
