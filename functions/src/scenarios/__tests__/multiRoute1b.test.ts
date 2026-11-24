@@ -46,11 +46,14 @@ test("[§125 페르소나] 새 결말 루트의 페르소나는 원본 결말 �
     assert.equal(p.includes("자산 검수 명목으로 코인 구매·송금을 요구하는 상황"), false, id);
     assert.ok(p.includes(`${CASE_RECORD_NAMES.office} ${CASE_RECORD_NAMES.department} ${CASE_RECORD_NAMES.investigator} 수사관`), `${id}: 가상 고유명`);
     // 2026-11-07 — 상품권형 fv-v2mk는 상품권 구매 안내 문자가 하나 더 있다(앱 안 구매 화면 — Edge 시험 판 12 · 사용자 결정 "앱 안 화면 추가").
-    const screenLine = id === "fv-v2mk" ? "사건 조회 안내 문자와 상품권 구매 안내 문자 말고는" : "사건 조회 안내 문자 말고는";
+    // 2026-11-23 — 대출금형 fv-a6lq는 대출 안내 · 대출금 보관 계좌 문자가 더 있다(앱 안 대출 — 사용자 결정 "앱 안 대출로 바꾸기").
+    const screenLine =
+      id === "fv-v2mk" ? "사건 조회 안내 문자와 상품권 구매 안내 문자 말고는" : "사건 조회 안내 문자 · 대출 안내 문자 · 대출금 보관 계좌 안내 문자 말고는";
     assert.ok(p.includes(screenLine), `${id}: 화면 문자 줄`);
   }
   assert.match(persona("fv-v2mk"), /문화상품권을 사서 그 핀 번호를 불러 달라고/);
-  assert.match(persona("fv-a6lq"), /대출을 받게 하고 그 대출금을 담당 직원에게 맡기라고/);
+  assert.match(persona("fv-a6lq"), /문자 속 화면에서 비대면 대출을 신청하게 하고, 들어온 대출금을 보관 계좌로 옮기라고/);
+  assert.doesNotMatch(persona("fv-a6lq"), /담당 직원에게 맡기/, "2026-11-23 — 앱 밖 대면 전달 0");
   for (const id of ["fv-p3jx", "fv-t8ga"]) {
     const p = persona(id);
     assert.equal(p.includes("돈을 찾아 담당 직원에게 맡기라고 요구하는 상황"), false, id);
@@ -69,18 +72,20 @@ test("[§125 결말] 말로 끝나는 결말 — 결정 순간 · 출처(C · S)
     assert.ok(v.decisionMoment, id);
     assert.ok(v.sources!.some((s) => /^C\d+$/.test(s)) && v.sources!.some((s) => /^S\d+$/.test(s)), `${id}: AC-097 (c)`);
   }
-  for (const id of ["fv-t8ga", "fv-a6lq"]) {
-    assert.match(findFlowVariant(id)!.stages.at(-1)!.summary, /장소 · 시간 · 주소[^.]*정하지도 묻지도 않는다/, id);
-  }
+  assert.match(findFlowVariant("fv-t8ga")!.stages.at(-1)!.summary, /장소 · 시간 · 주소[^.]*정하지도 묻지도 않는다/);
+  // 2026-11-23 — fv-a6lq는 결말이 대출 신청 · 대출금 보관 이체 두 단계라 만날 곳 0 문장은 대출 신청 단계에 있다.
+  assert.match(findFlowVariant("fv-a6lq")!.stages.at(-2)!.summary, /장소 · 시간 · 주소[^.]*정하지도 묻지도 않는다/);
 });
 
 // 2026-11-07 — 상품권형 fv-v2mk는 결말이 앱 안 구매 화면 결제 + 핀 낭독이 되어 "약속하면 마무리" 줄을 뺐다(약속만으로 끝나지 않는다 — 결정 화면 4-c).
 test("[§125 실측 반영] 말로 끝나는 결말 3벌(대출금 · 금 · 공탁금) — 약속하면 되풀이 없이 마무리 · 답을 미루면 한 번만 다시", () => {
   assert.equal(findFlowVariant("fv-v2mk")!.stages.some((s) => /같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary)), false);
-  for (const id of ["fv-a6lq", "fv-p3jx"]) {
+  for (const id of ["fv-p3jx"]) {
     const v = findFlowVariant(id)!;
     assert.ok(v.stages.some((s) => /같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary)), id);
   }
+  // 2026-11-23 — 대출금형 fv-a6lq는 결말이 앱 안 대출금 보관 이체 화면이 되어 "약속하면 마무리" 줄을 뺐다(약속만으로 끝나지 않는다 — 결정 화면 4-c).
+  assert.equal(findFlowVariant("fv-a6lq")!.stages.filter((s) => /짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary)).length, 0);
   // 2026-11-07(사용자 결정 D-G1) — 금형 fv-t8ga는 결말이 앱 안 금 거래소 화면 결제가 되어 "약속하면 마무리" 줄을 뺐다(fv-v2mk와 같은 이유).
   assert.equal(findFlowVariant("fv-t8ga")!.stages.filter((s) => /짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary)).length, 0);
 });

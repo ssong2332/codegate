@@ -67,10 +67,14 @@ export function myBankNameFor(seed: string, avoid?: string): string {
   return FICTIONAL_BANK_NAMES[start]!;
 }
 
-/** BA4 — 세션별 고정 가상 잔액(1,000만 ~ 3,000만 원 · 1만 원 단위 · 결정적). 서버로 가지 않고 사기범도 모른다. 출금 계좌 목록의 첫 계좌 잔액이다. */
+/**
+ * BA4 — 세션별 고정 가상 잔액(1만 원 단위 · 결정적). 서버로 가지 않고 사기범도 모른다. 출금 계좌 목록의 첫 계좌 잔액이다.
+ * ⭐ 2026-11-23 판정표 Z4(사용자 결정 1b — *"없는데 보내라면 보내지는 거야?"*) — 참가자가 잔액을 말하지 않았으면 큰 돈이 있다고 가정하지 않는다:
+ * 종전 1,000만 ~ 3,000만 원 → 100만 ~ 500만 원. 요구액이 있는 화면은 `withdrawAccounts.ts` `belowDemandBalance`가 요구액보다 적게 한 번 더 자른다.
+ */
 export function fictionalBalanceFor(seed: string): number {
-  const steps = (3000 - 1000) + 1; // 만 원 단위 칸 수
-  return (1000 + (hash(`balance:${seed}`) % steps)) * 10_000;
+  const steps = (500 - 100) + 1; // 만 원 단위 칸 수
+  return (100 + (hash(`balance:${seed}`) % steps)) * 10_000;
 }
 
 /** 금액(숫자 · 쉼표만 남긴 값)을 정수로. 판정 불가면 undefined. */
@@ -292,7 +296,22 @@ const SPOKEN_BALANCE_MAX = 1_000_000_000;
  * 화면은 은행 이름 대신 이름 없는 표기(`withdrawAccounts.ts` `NAMELESS_BANK_NAME`)를 쓴다(A3b).
  * `realBankName` — ⭐ 2026-11-09 S2′ 알아보기 함수가 알아본 실제 은행 표기(A3a — '내 계좌' 줄에만 · 판정표 P). 서버 · 콜백 0.
  */
-export type SpokenAccount = { bankName?: string; balance?: number; realBank?: true; realBankName?: string };
+export type SpokenAccount = { bankName?: string; balance?: number; realBank?: true; realBankName?: string; noMoney?: true };
+
+// ⭐ 2026-11-23 판정표 Z3 · S13 · S14(사용자 결정 — 잔액 부족 판정 · `withdrawAccounts.ts` 판정표 Z):
+// | # | If | Then |
+// |---|---|---|
+// | S13 | 참가자 대사에 '돈이 없다'는 말(`NO_MONEY` — "돈 없어요" · "그런 돈 없어요" · "잔액 없어요" · "한 푼도 없어요" · "통장이 비었어요") ∧ 그 대사에 S4 · S6 잔액 후보 없음 | `noMoney`(잔액 0 → 판정표 Z3) |
+// | S13a | '돈' 앞뒤에 "문제 · 걱정 · 상관 · 관계"("돈 문제는 없어요") | S13 아님 |
+// | S14 | 금액 바로 뒤(같은 문장 · 보유 · 보내기 말보다 앞)에 "없" — "980만 원은 없어요" | 그 금액은 잔액 후보 아님(건너뜀 → 잔액을 모름 = 판정표 Z4) |
+// | S9′ | 여러 번 말함 | 잔액 · `noMoney` 중 마지막 대사의 것(뒤에 금액을 말하면 `noMoney`가 풀린다) |
+const NO_MONEY = /(?:돈|잔액|잔고|여윳돈|현금|통장)[^.?!\n]{0,10}?없|한\s?푼도\s?없|땡전|무일푼|빈털터리|통장(?:이|은)?\s?(?:텅\s?)?비었/;
+const NO_MONEY_EXCEPT = /문제|걱정|상관|관계|지장/;
+
+function saysNoMoney(text: string): boolean {
+  const match = NO_MONEY.exec(text);
+  return match !== null && !NO_MONEY_EXCEPT.test(match[0]);
+}
 
 /** S2′ 알아보기 함수(대사 → 실제 은행 언급의 끝 위치 · 표기). 이 파일은 실제 은행 이름을 두지 않으므로 호출부가 넘긴다. */
 export type RealBankRecognizer = (text: string) => readonly { end: number; name: string }[];
@@ -338,6 +357,8 @@ function lastBalanceIn(text: string, askedBalance: boolean): number | undefined 
     const lastEnd = (re: RegExp) => Math.max(-1, ...[...before.matchAll(re)].map((m) => (m.index ?? 0) + m[0].length));
     const holdAfter = firstAt(SPOKEN_HOLD_WORDS);
     const sendAfter = firstAt(SPOKEN_SEND_WORDS);
+    // S14 — "980만 원은 없어요": 금액 뒤 첫 말이 "없"이면 잔액 후보가 아니다.
+    if (firstAt(/없/g) < Math.min(holdAfter, sendAfter)) return;
     const holdBefore = lastEnd(SPOKEN_HOLD_WORDS);
     const sendBefore = lastEnd(SPOKEN_SEND_WORDS);
     const kind =
@@ -362,6 +383,7 @@ export function spokenAccountFrom(turns: readonly { role: "scammer" | "user"; te
   let realBank = false;
   let realBankName: string | undefined;
   let balance: number | undefined;
+  let noMoney = false;
   turns.forEach((turn, index) => {
     if (turn.role !== "user") return; // S10
     const mention = lastBankMentionIn(turn.text, recognize);
@@ -372,14 +394,29 @@ export function spokenAccountFrom(turns: readonly { role: "scammer" | "user"; te
     }
     const previous = turns[index - 1];
     const value = lastBalanceIn(turn.text, previous?.role === "scammer" && BALANCE_QUESTION.test(previous.text));
-    if (value !== undefined) balance = value; // S9
+    if (value !== undefined) {
+      balance = value; // S9
+      noMoney = false; // S9′
+    } else if (saysNoMoney(turn.text)) {
+      balance = undefined; // S13 · S9′
+      noMoney = true;
+    }
   });
   return {
     ...(bankName ? { bankName } : {}),
     ...(realBank ? { realBank: true as const } : {}),
     ...(realBankName ? { realBankName } : {}),
     ...(balance !== undefined ? { balance } : {}),
+    ...(noMoney ? { noMoney: true as const } : {}),
   };
+}
+
+/**
+ * ⭐ 2026-11-23 판정표 BL3′(서버 `functions/src/session/cardBalanceFit.ts`) — 문자 발송 요청(`deliverInCallSms` · `sendMessage`)에 싣는 말한 잔액 칸.
+ * 판정표 S4 ~ S9 · S14의 금액만 싣는다('돈 없다' S13 = 칸 없음 — 서버는 종전 금액 · 화면은 Z3 잔액 0).
+ */
+export function spokenBalanceField(balance: number | undefined): { spokenBalanceWon?: number } {
+  return balance !== undefined ? { spokenBalanceWon: balance } : {};
 }
 
 /** 완료 화면 시각("오후 3:07" — 기기 시계 · 화면에만). */
