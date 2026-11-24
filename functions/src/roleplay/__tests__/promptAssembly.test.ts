@@ -1733,9 +1733,9 @@ const ACCOUNT_SMS_VARIANT_ONLY: Record<string, string[]> = {
   "asset-protection-notice-call": ["fv-k9ra", "fv-p3jx", "fv-t8ga"],
   // 2026-11-24(사용자 결정 (A)) — 납치 초 · 중급도 계좌 문자를 선언한다(원본 수법 · 옛 세션만 선언 0).
   "kidnapping-threat": ["fv-c5ih", "fv-dxwu", "fv-k268", "fv-w7tb"],
-  // 2026-11-24(사용자 결정 (B)) — 가족 사고 4 · 손주 초 · 중급 2가 계좌 문자 + 이체 화면을 선언한다(원본 수법 · 옛 세션 · 손주 고급 fv-cx5y는 선언 0).
+  // 2026-11-24(사용자 결정 (B)) — 가족 사고 4 · 손주 초 · 중급 2가 계좌 문자 + 이체 화면을 선언한다(원본 수법 · 옛 세션은 선언 0). 같은 날 손주 고급 fv-cx5y가 상품권 구매 문자(계좌 줄 없는 `account`)를 선언한다(판정표 VC).
   "family-accident-deepvoice": ["fv-4dy4", "fv-krq3", "fv-66hh", "fv-h5sz"],
-  "grandchild-impersonation": ["fv-brcb", "fv-mabg"],
+  "grandchild-impersonation": ["fv-brcb", "fv-mabg", "fv-cx5y"],
 };
 
 test("[2026-10-17 계좌 문자 역검증] 옛 institutional 수법 문구를 끼운 오염본은 같은 판정식이 실패시킨다", () => {

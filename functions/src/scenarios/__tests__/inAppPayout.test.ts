@@ -165,7 +165,8 @@ test("[V3] 리포트 — 결제 제출 승격 · 핀 낭독 = 속은 순간 · �
     catalog,
   );
   assert.equal(promoted.promotedCount, 1);
-  assert.equal(promoted.deceivedMoments[0]!.tactic, "자금 검수 명목의 상품권 구매 · 핀 번호 요구");
+  // 2026-11-24(판정표 VC4) — 손주 고급과 화면 객체를 공유해 검찰 전용 표현을 뺐다.
+  assert.equal(promoted.deceivedMoments[0]!.tactic, "상품권 구매 · 핀 번호 요구");
 
   const kidnapPromoted = promoteSmsLandingSubmits(
     [{ smsId: "kidnap-ransom-account", kind: "account", senderLabel: "", body: "", arrivedAtMs: 5_000, anchorScammerTurn: 1, fakeLandingId: "kidnap-ransom-transfer", landingSubmittedAtMs: 30_000 }],

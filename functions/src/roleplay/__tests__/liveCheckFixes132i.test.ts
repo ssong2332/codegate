@@ -42,6 +42,8 @@ test("[§132.19] 판정표 A 대상 — 현금 · 금 · 상품권 · 대출금 
     targets.sort(),
     [
       "fv-a6lq", "fv-e5mv", "fv-g2ld", "fv-k9ra", "fv-q7cn", "fv-r4hc", "fv-t8ga", "fv-v2mk",
+      // 2026-11-24(판정표 VC) — 손주 고급 상품권 구매 화면 결말.
+      "fv-cx5y",
       // Edge 판 31(2026-11-07) — 문자 스미싱 앱 설치 · 재배송 링크 루트(이체 수단 0).
       "fv-rizf", "fv-afbr", "fv-hu8w", "fv-prr3", "fv-tvq2", "fv-k7qm", "fv-g454",
     ].sort(),

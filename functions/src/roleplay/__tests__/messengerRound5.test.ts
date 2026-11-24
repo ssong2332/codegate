@@ -79,8 +79,9 @@ test("[§131(1) 점검] 사진 · 신분증을 요구하는 전 변형 — 바�
     .map((v) => `${v.scenarioId}:${v.variantId}`);
   assert.deepEqual(blank, []);
   // 대상이 다른 사진 — 손주 사칭은 상품권 뒷면 사진(송금 대체) · 자녀 사칭은 신분증 사진(개인정보).
-  const grandchild = FLOW_VARIANTS.find((v) => v.variantId === "fv-cx5y")!;
-  assert.equal(photoMoment("상품권 산 거 뒷면 사진으로 하나만 부탁해요", grandchild.tactics).moment?.tactic, "상품권 대체 요구");
+  // 2026-11-24(판정표 VC) — fv-cx5y는 상품권 구매 화면 루트가 돼 사진 수법이 빠졌다 → 사진 수법이 남은 변형 없는 옛 세션(원본 수법)으로 본다.
+  const grandchild = resolveSessionScenarioPrompt("grandchild-impersonation", undefined)!;
+  assert.equal(photoMoment("상품권 산 거 뒷면 사진으로 하나만 부탁해요", grandchild.weakenedTactics).moment?.tactic, "상품권 대체 요구");
   assert.equal(photoMoment("보험 때문에 신분증 그거 하나만 부탁해").moment?.tactic, "신원정보 직접 요구");
 });
 

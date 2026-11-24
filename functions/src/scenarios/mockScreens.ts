@@ -305,7 +305,7 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `tax-refund-fee-transfer` | `scenarios/inCallSms.ts` TAX_REFUND_SCAM(문자 본문·칩 — P2-d) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "수수료 이체 정보를 확인해 주세요" | "수수료 이체하기" |
 // | `kidnap-ransom-transfer` | `scenarios/inCallSms.ts` KIDNAPPING_THREAT(문자 본문·칩 — 2026-11-07 앱 안 결말) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "지금 이체할 금액을 확인해 주세요" | "지금 이체하기" |
 // | `family-send-transfer` | `scenarios/inCallSms.ts` FAMILY_ACCIDENT_DEEPVOICE · GRANDCHILD_IMPERSONATION(문자 본문·칩 — 2026-11-24 R-3 (B)) | "아래 링크 누르면 바로 보내져." | 링크에서 송금 | "보내실 금액을 확인해 주세요" | "바로 보내기" |
-// | `voucher-purchase` | `scenarios/inCallSms.ts` PROSECUTION_COOPERATION_CALL(문자 본문·칩 — 2026-11-07 앱 안 결말) | "검수 대상 자금은 아래 판매처에서 상품권으로 구매해 주세요." | 판매처에서 상품권 구매 | "다솜 문화상품권 구매" | "상품권 구매하기" |
+// | `voucher-purchase` | `scenarios/inCallSms.ts` PROSECUTION_COOPERATION_CALL(문자 본문·칩 — 2026-11-07 앱 안 결말) · GRANDCHILD_IMPERSONATION(2026-11-24 fv-cx5y) | "검수 대상 자금은 아래 판매처에서 상품권으로 구매해 주세요." | 판매처에서 상품권 구매 | "다솜 문화상품권 구매" | "상품권 구매하기" |
 // | `gold-buy` | `scenarios/inCallSms.ts` INSTITUTIONAL_IMPERSONATION(문자 본문·칩 — 2026-11-07 금 구매형) | "검수 대상 예금은 아래 지정 거래소에서 골드바로 구매해 주세요." | 지정 거래소에서 골드바 구매 | "해담골드 골드바 구매" | "골드바 구매하기" |
 // | `asset-gold-buy` | `scenarios/inCallSms.ts` ASSET_PROTECTION_NOTICE_CALL(문자 본문·칩 — 2026-11-07 금형) | "보관 대상 자산은 아래 지정 거래소에서 금 실물로 주문해 주세요." | 지정 거래소에서 금 실물 주문 | "해담골드 금 실물 주문" | "금 실물 주문하기" |
 // | `cash-withdraw` | `scenarios/inCallSms.ts` INSTITUTIONAL_IMPERSONATION(문자 본문·칩 — 2026-11-07 현금 예탁형) | "예탁 대상 예금은 아래에서 거래 은행 출금 예약을 해 주세요." | 거래 은행 출금 예약 | "예탁금 현금 · 수표 출금 예약" | "예탁금 출금 예약하기" |
@@ -421,7 +421,25 @@ export function isVoucherLanding(landingId: string | undefined): boolean {
  * ⛔ 횟수 · 턴 번호 0 · 따옴표 대사 예시 0.
  */
 export const VOUCHER_PURCHASED_INSTRUCTION =
-  "(앱 확인: 상대가 방금 문자 링크의 구매 화면에서 상품권 결제를 마쳤다. 구매가 끝난 것으로 받아들이고, 다시 사라는 말은 하지 마라. 이번 대답에서 화면에 뜬 핀 번호를 지금 불러 달라고 하라. 핀 번호는 너에게 전달되지 않으니 지어내 말하지 말고, 상대가 번호를 불러 주면 검수번호로 등록됐다고 짧게 말한 뒤 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라. 상대가 번호를 불러 주기 전에는 원하던 것을 얻었다고 통화를 끝내지 마라.)";
+  "(앱 확인: 상대가 방금 문자 링크의 구매 화면에서 상품권 결제를 마쳤다. 구매가 끝난 것으로 받아들이고, 다시 사라는 말은 하지 마라. 이번 대답에서 화면에 뜬 핀 번호를 지금 불러 달라고 하라. 핀 번호는 너에게 전달되지 않으니 지어내 말하지 말고, 상대가 번호를 불러 주면 받았다고 짧게 말한 뒤 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라. 상대가 번호를 불러 주기 전에는 원하던 것을 얻었다고 통화를 끝내지 마라.)";
+
+// ⭐ 2026-11-07 — 검찰 고급 상품권형 결말(위 `VOUCHER_LANDINGS` 주석). ⛔ 실제 상품권 브랜드 · 판매처 0(가상명 — 웹 검색 2026-11-07 "다솜 문화상품권" · "한올기프트" 겹침 0).
+// ⭐ 2026-11-24(사용자 결정 (B) · 판정표 VC4) — 손주 고급 fv-cx5y와 **같은 객체**를 공유한다. 리포트 문구는 검찰 전용 표현("자금 검수" · "수사기관은")을 빼고 누구에게나 맞게.
+const VOUCHER_PURCHASE: MockScreenItem = {
+  landingId: "voucher-purchase",
+  kind: "credential-form",
+  entrySurface: "in-call-sms",
+  headline: "다솜 문화상품권 구매",
+  bodyLines: ["구매 즉시 모바일 상품권 핀 번호가 발급됩니다."],
+  issuerLabel: "ⓒ 한올기프트",
+  mockHost: "hanol-gift-shop.invalid",
+  fields: ["권종", "수량"],
+  submitLabel: "상품권 구매하기",
+  successHeadline: "상품권 구매가 완료되었습니다.",
+  momentTactic: "상품권 구매 · 핀 번호 요구",
+  correctAction:
+    "전화나 문자로 상품권을 사서 핀 번호를 불러 달라고 하면 상대가 수사기관 · 금융기관 · 가족이라고 해도 사기입니다 — 핀 번호를 알려 주는 순간 그 금액은 바로 빠져나갑니다. ① 상품권을 사지 말고 전화를 끊은 뒤 그 사람의 원래 번호 · 기관 대표번호로 직접 확인하기 ② 이미 샀다면 핀 번호를 누구에게도 알려 주지 않기 ③ 이미 알려 줬다면 바로 그 상품권 발행사 고객센터에 사용 정지를 요청하고 112(경찰) · 1332(금융감독원)에 알리기.",
+};
 
 // ⭐ 2026-11-07(Edge 재시험 2 S7 · 사용자 결정 D-G1 ~ D-G6 — docs/research/in-service-experience-plan-2026-10-31.md §14) — 기관 고급 금 구매형(fv-g2ld) ·
 // 자산 보호 고급 금형(fv-t8ga)의 앱 안 금 거래소 화면. 렌더 정본 = 클라 `src/components/MessengerFakeLanding.tsx` `GoldBuyMockup`:
@@ -1094,22 +1112,8 @@ const PROSECUTION_COOPERATION_CALL: MockScreenItem[] = [
     correctAction:
       "'문자로 보낸 사이트에서 자산을 코인으로 전환해 보관 지갑으로 옮기라'고 하면 그 자리에서 멈추세요 — 검찰 · 경찰 · 금융감독원은 어떤 경우에도 돈을 코인으로 바꾸라고 하거나 '보관 지갑' · '안전계좌'로 옮기라고 하지 않습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 문자 속 사이트의 전환 · 이체 버튼을 누르지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 보냈다면 112(경찰) · 1332(금융감독원)에 바로 신고하고 이용한 거래소에도 알리기.",
   },
-  // ⭐ 2026-11-07 — 검찰 고급 상품권형 결말(위 `VOUCHER_LANDINGS` 주석). ⛔ 실제 상품권 브랜드 · 판매처 0(가상명 — 웹 검색 2026-11-07 "다솜 문화상품권" · "한올기프트" 겹침 0).
-  {
-    landingId: "voucher-purchase",
-    kind: "credential-form",
-    entrySurface: "in-call-sms",
-    headline: "다솜 문화상품권 구매",
-    bodyLines: ["구매 즉시 모바일 상품권 핀 번호가 발급됩니다."],
-    issuerLabel: "ⓒ 한올기프트",
-    mockHost: "hanol-gift-shop.invalid",
-    fields: ["권종", "수량"],
-    submitLabel: "상품권 구매하기",
-    successHeadline: "상품권 구매가 완료되었습니다.",
-    momentTactic: "자금 검수 명목의 상품권 구매 · 핀 번호 요구",
-    correctAction:
-      "수사기관 · 금융기관은 수사나 검수를 이유로 상품권을 사라고 하거나 핀 번호를 불러 달라고 하지 않습니다 — 핀 번호를 알려 주는 순간 그 금액은 바로 빠져나갑니다. ① 상품권을 사지 말고 전화를 끊기 ② 이미 샀다면 핀 번호를 누구에게도 알려 주지 않기 ③ 이미 알려 줬다면 바로 그 상품권 발행사 고객센터에 사용 정지를 요청하고 112(경찰) · 1332(금융감독원)에 알리기.",
-  },
+  // ⭐ 2026-11-07 — 검찰 고급 상품권형 결말(위 `VOUCHER_PURCHASE`).
+  VOUCHER_PURCHASE,
   // ⭐ 2026-11-23 — 한 통화 앱 안 대출 체험(`flowVariants.ts` `IN_APP_LOAN_*` 표 · 위 `IN_APP_LOAN_LANDINGS`).
   ...IN_APP_LOAN_LANDINGS,
 ];
@@ -1314,7 +1318,8 @@ export const MOCK_SCREENS: Record<string, MockScreenItem[]> = {
   "kidnapping-threat": KIDNAPPING_THREAT,
   // 2026-11-24(재측정 R-3 · 사용자 결정 (B)) — 가족 사고 · 손주 계좌 문자가 여는 이체 화면(같은 객체 공유).
   "family-accident-deepvoice": [FAMILY_SEND_TRANSFER],
-  "grandchild-impersonation": [FAMILY_SEND_TRANSFER],
+  // 2026-11-24(사용자 결정 (B)) — 고급 fv-cx5y 상품권 구매 화면(검찰과 같은 객체).
+  "grandchild-impersonation": [FAMILY_SEND_TRANSFER, VOUCHER_PURCHASE],
 };
 
 /**

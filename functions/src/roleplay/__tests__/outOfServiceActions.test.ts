@@ -275,7 +275,7 @@ const ROUTE_LEDGER: Readonly<Record<string, number>> = {
   // 단계 · 수법 · 결정 순간 3문장이 빠졌다(3 → 0 — 이 키는 장부에서 빠진다). 새 출금 예약 문면은 J2 패턴에 걸리지 않는다.
   // 2026-11-07(Edge 시험 판 12 · 사용자 결정 "앱 안 화면 추가") — 검찰 상품권형 fv-v2mk의 상품권 문면은 이제 앱 안 구매 화면(`voucher-purchase`)을 가리킨다
   // (문자 속 구매 화면에서 사고 화면에 뜬 핀을 불러 달라 — J12 통화 안 말 요구 · O4). 패턴은 표기만 봐서 계속 센다(5 → 6 · 문자 · 화면 · 화면 문구 · 결제 뒤 지시 새 항목).
-  "functions/src/scenarios/flowVariants.ts#J4_VOUCHER": 6, // O4 확인(상품권 구매 화면 안)
+  "functions/src/scenarios/flowVariants.ts#J4_VOUCHER": 10, // O4 확인(상품권 구매 화면 안 · 2026-11-24 손주 고급 fv-cx5y 단계 · 수법 · 주석 +4)
   "functions/src/scenarios/flowVariants.ts#J5_COIN": 2, // O4 확인
   // U7(2026-11-01) — 대환대출 설치 수법 2벌(fv-d8pw · fv-r4hc 인라인)을 상수 `LOAN_APP_INSTALL_VIA_SMS` 1개로 합쳤다(9 → 7 · 4 → 3).
   // 조립 결과의 유도 문장 수는 같다(fv-m3hd · fv-d8pw · fv-r4hc가 같은 상수 · fv-6s5p 원문 유지) — 소스 문장만 줄었다.
@@ -284,7 +284,7 @@ const ROUTE_LEDGER: Readonly<Record<string, number>> = {
   "functions/src/scenarios/flowVariants.ts#J7_APP_DELETE": 3, // P6
   "functions/src/scenarios/flowVariants.ts#J9_PHOTO": 2, // P6
   "functions/src/scenarios/grandchildImpersonation.prompt.ts#J4_VOUCHER": 1, // P5
-  "functions/src/scenarios/inCallSms.ts#J4_VOUCHER": 4, // O4 확인(상품권 구매 안내 문자 — 앱 안 구매 화면 링크)
+  "functions/src/scenarios/inCallSms.ts#J4_VOUCHER": 10, // O4 확인(상품권 구매 안내 문자 — 앱 안 구매 화면 링크 · 2026-11-24 손주 고급 문자 +6)
   "functions/src/scenarios/loanScam.prompt.ts#J1_LOAN": 2, // P4
   "functions/src/scenarios/messengerParcelSmishingSms.prompt.ts#J6_INSTALL": 1, // P6
   "functions/src/scenarios/mockScreens.ts#J1_LOAN": 1, // P4
@@ -314,13 +314,12 @@ const ACCOUNT_SMS_WITHOUT_SCREEN_LEDGER: readonly string[] = [];
  * | 행 | 이유 |
  * |---|---|
  * | (납치 0) | 2026-11-07 고급 2 · 2026-11-24 초 · 중급 2(사용자 결정 (A) — 페르소나 점검 판단 요청 1)가 계좌 문자 + 이체 화면을 선언해 모두 빠졌다 |
- * | (가족 사고 0) · 손주 `fv-cx5y` | 2026-11-24 사용자 결정 (B) — 가족 사고 4 · 손주 초 · 중급 2가 계좌 문자 + 이체 화면을 선언해 빠졌다(ElevenLabs 경로는 판정표 EP2 — 말 송금 그대로). 손주 고급 `fv-cx5y`는 상품권 분기라 별도 결정 대기 |
+ * | (가족 사고 0 · 손주 0) | 2026-11-24 사용자 결정 (B) — 가족 사고 4 · 손주 초 · 중급 2가 계좌 문자 + 이체 화면을 선언해 빠졌다(ElevenLabs 경로는 판정표 EP2 — 말 송금 그대로). 같은 날 손주 고급 `fv-cx5y`도 상품권 구매 화면으로 바뀌어 빠졌다(판정표 VC) |
  * | 카드사 `fv-akj5` | #192 — 2인 챌린지 수신자 고급 조립 바이트 고정 |
  * ⛔ 늘리지 않는다. P2-d에서 환급 3이 빠졌다(수수료 계좌 문자 · 이체 화면 — 메인 "권고대로"). P2-b에서 카드사 자가 고급 `fv-x7ue` · `fv-w3dq`가 빠졌다(피해금 이관 문자 · 화면 선언) · P2-c에서 메신저 6이 빠졌다(칩).
  */
 const VERBAL_ACCOUNT_WITHOUT_SCREEN_LEDGER: readonly string[] = [
   "card-company-impersonation#fv-akj5",
-  "grandchild-impersonation#fv-cx5y",
 ];
 /** smsDeclarationConsistency.test.ts의 계좌 낭독 지시 패턴 + "부른다"(완성형 음절이라 "부르"에 안 걸린다 — 환급 문면) + "불러주는 계좌"(납치 · 손주 문면). */
 const ACCOUNT_READOUT = /계좌\s*불러\s*(?:줄게|드릴게)|계좌는\s*'[^']+'\s*(?:같은|처럼)[^.]*(?:부르|부른)|불러주는 계좌/;
