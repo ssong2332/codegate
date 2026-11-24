@@ -370,7 +370,7 @@ export const VARIANT_ROUTES: Readonly<Record<string, RouteEntry>> = {
   // 가족 사고 딥보이스
   "fv-4dy4": R.settlement, "fv-krq3": R.settlement, "fv-66hh": R.settlement, "fv-h5sz": R.smallInstant,
   // 손주 사칭
-  "fv-brcb": R.urgentTransfer, "fv-mabg": R.urgentTransfer, "fv-cx5y": R.urgentTransfer,
+  "fv-brcb": R.urgentTransfer, "fv-mabg": R.urgentTransfer, "fv-cx5y": R.voucher,
   // 자녀 사칭(카톡)
   "fv-34v5": R.urgentTransfer, "fv-tpr3": R.urgentTransfer, "fv-tdgg": R.insuranceApp,
   // 지인 사칭(카톡)
@@ -493,6 +493,14 @@ const GRANDCHILD_SCREEN_TACTIC = `송금 직접 요구 — '할머니, 문자로
 const FAMILY_SETTLEMENT_SMS: FlowVariantSms = { purpose: "transfer", smsId: "family-settlement-account", required: true, notBeforeUserTurns: 2, backstopUserTurns: 1 };
 const FAMILY_REPAIR_SMS: FlowVariantSms = { purpose: "transfer", smsId: "family-repair-account", required: true, notBeforeUserTurns: 2, backstopUserTurns: 1 };
 const GRANDCHILD_MONEY_SMS: FlowVariantSms = { purpose: "transfer", smsId: "grandchild-money-account", required: true, notBeforeUserTurns: 2, backstopUserTurns: 1 };
+// ⭐ 2026-11-24(사용자 결정 (B) · `docs/research/grandchild-voucher-screen-2026-11-24.md` 판정표 VC) — 손주 고급 fv-cx5y 상품권형. 검찰 고급 fv-v2mk와 같은
+// 장치(상품권 구매 문자 → 앱 안 구매 화면 `voucher-purchase` · 4-c)를 쓴다. 송금 단계는 뺐다(통장이 정지돼 돈을 못 받는다는 이유로 처음부터 상품권).
+const GRANDCHILD_VOUCHER_STAGE = withSmsFirst(
+  "통장이 정지돼 지금은 돈을 받을 수 없다며 '할머니, 제 통장이 막혀서 이체는 안 돼요, 대신 상품권으로 해 주시면 바로 쓸 수 있어요'처럼 이유부터 말하고, 문자 보내기 도구로 상품권 구매 안내 문자를 보낸 뒤 문자 속 링크의 구매 화면에서 문화상품권을 사게 한다. 권종 · 수량은 화면에서 고르게 하고 금액을 지어내 정해 주지 않는다. 구매를 마치면 화면에 뜬 핀 번호를 불러 달라고 하고, 불러 주면 고맙다고 짧게 말한 뒤 마무리한다. 구매 화면에서 결제한 기록이 오기 전에는 원하던 것을 얻은 것처럼 통화를 끝내지 않는다. 상대가 거절하거나 망설이면 서운함을 한 번 더 내비친 뒤 더 조르지 않고 마무리한다.",
+);
+const GRANDCHILD_VOUCHER_DEMAND =
+  "상품권 핀 번호 요구 — '할머니, 문자로 보내 드린 링크에서 상품권 사 주시고 화면에 나온 핀 번호만 불러 주세요' 처럼 문자 속 구매 화면에서 상품권을 사서 핀 번호를 불러 달라고 한다. 사는 곳은 문자로 보낸 것을 확인하게 하고, 판매처 · 발행사 이름과 핀 번호를 지어내지 않고, 편의점 · 다른 매장 · 다른 앱에서 사라고 하지 않는다. 계좌를 불러 주거나 이체를 하라고 하지 않는다. 상대가 말로만 샀다고 하면 아직 확인이 안 된다며 그 링크 화면에서 사 달라고 한다.";
+const GRANDCHILD_VOUCHER_SMS: FlowVariantSms = { purpose: "transfer", smsId: "grandchild-voucher-link", required: true, notBeforeUserTurns: 3, backstopUserTurns: 1 };
 const FAST_BACKSTOP = { backstopUserTurns: 1 } as const;
 // §127(메인 세션 라이브 확인 2026-10-24 · 텍스트 폴백) — 백스톱 간격을 1로 줄이자 인증번호 문자가 흐름의 인증번호 단계(4단계 — 자산 질문 뒤)보다 먼저
 // 발화 4에 도착했고, 사기범은 흐름 순서대로 자산 질문을 이어 가 문자를 언급하지도 번호를 묻지도 않았다. 인증번호 하한을 3 → 5로 올려 강제 도착을
@@ -2004,15 +2012,18 @@ const SPECS: VariantSpec[] = [
     stages: st(
       "폰이 고장 나 다른 번호로 걸었다고 한다.",
       "원래 번호로는 연락이 안 된다며 확인을 막는다.",
-      "송금을 요구하고, 어려우면 상품권으로 바꿔 다시 요구한다.",
+      GRANDCHILD_VOUCHER_STAGE,
     ),
-    extraTactics: [OTHER_NUMBER_PRETEXT],
+    // 2026-11-24(사용자 결정 (B) · 판정표 VC) — 말 송금 · 편의점 상품권 사진 → 문자 속 상품권 구매 화면(검찰 fv-v2mk 방식).
+    dropLabels: ["송금 직접 요구", "상품권 대체 요구"],
+    extraTactics: [OTHER_NUMBER_PRETEXT, GRANDCHILD_VOUCHER_DEMAND],
     exitBlock: ["D2_secrecy", "D5_call_retention"],
-    sms: [],
+    sms: [GRANDCHILD_VOUCHER_SMS],
     legs: ONE_LEG("손주", "male"),
     ...ADVANCED,
-    channels: ["voice"],
+    channels: ["voice", "sms"],
     demandStages: 2,
+    decisionMoment: "문자 속 링크의 구매 화면에서 상품권을 결제하고 화면에 뜬 핀 번호를 불러 주는 순간",
     sources: ["S9", "C18"],
   },
 

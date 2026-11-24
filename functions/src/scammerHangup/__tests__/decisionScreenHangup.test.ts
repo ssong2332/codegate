@@ -217,6 +217,7 @@ const EXPECTED_GUARDED = [
   "fv-h5sz", // 가족 사고 고급(수리비형)
   "fv-brcb", // 손주 초급
   "fv-mabg", // 손주 중급
+  "fv-cx5y", // 손주 고급 — 상품권 구매 화면(voucher-purchase · 판정표 VC)
 ];
 
 // 2026-11-07 — 상품권형 fv-v2mk는 앱 안 구매 화면이 생겨 4-c 대상으로 옮겼다(4 → 3). 같은 날 금형 fv-t8ga도 금 거래소 화면이 생겨 옮겼다(3 → 2).

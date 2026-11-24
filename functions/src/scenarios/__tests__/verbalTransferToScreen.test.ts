@@ -78,10 +78,11 @@ test("[TS 4-c] 재현 krq3 — 말로만 '보냈어요'(화면 제출 없음)는
   }
 });
 
-test("[TS7] 손주 고급 fv-cx5y(상품권 분기)는 무변경 — 문자 0 · 4-c 대상 아님", () => {
+// 2026-11-24(사용자 결정 (B)) — fv-cx5y는 상품권 구매 화면 루트가 됐다(판정표 VC · `grandchildVoucherScreen.test.ts`). 송금 화면 문자는 선언하지 않는다.
+test("[TS7] 손주 고급 fv-cx5y — 송금 화면 문자 0(상품권 구매 화면 문자만) · 4-c 대상", () => {
   const v = variant("fv-cx5y");
-  assert.deepEqual(v.sms, []);
-  assert.equal(pending(GRANDCHILD, "fv-cx5y", []), false);
+  assert.deepEqual(v.sms.map((s) => s.smsId), ["grandchild-voucher-link"]);
+  assert.equal(pending(GRANDCHILD, "fv-cx5y", []), true);
 });
 
 test("[EP1] 서버 프롬프트 경로(gemini · none) — 선언한 계좌 문자에 백스톱 표시가 붙는다", () => {

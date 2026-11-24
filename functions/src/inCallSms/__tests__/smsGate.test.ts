@@ -484,8 +484,8 @@ test("[M2 트립와이어] 종전(시나리오 기준)과 판정이 갈리는 �
   // 2026-11-07 — 납치 협박에 고급 계좌 문자 카탈로그가 생겨(Edge 시험 판 7) 문자 선언 0인 초급 fv-c5ih · 중급 fv-dxwu가 더해졌다. 두 변형의 조립 산출물은
   // 변형 선언(0)을 따르므로 그대로다 — 갈리는 것은 변형 없는 옛 납치 세션뿐이다(카드 배송 · 유포 협박 카탈로그 신설과 같은 무소급 규칙).
   // 2026-11-24(사용자 결정 (A)) — 납치 초 · 중급도 계좌 문자를 선언해 갈리지 않게 됐다(목록에서 빠짐).
-  // 2026-11-24(사용자 결정 (B)) — 손주 사칭에 계좌 문자 카탈로그가 생겨 문자 선언 0인 고급 fv-cx5y(상품권 분기 · 무변경)가 더해졌다(무소급 — 그 변형 조립은 선언 0 그대로).
-  assert.deepEqual(changed, ["fv-akj5", "fv-aqp6", "fv-bmiq", "fv-cx5y", "fv-nss6"]);
+  // 2026-11-24(사용자 결정 (B)) — 손주 고급 fv-cx5y도 상품권 구매 문자를 선언해 갈리지 않게 됐다(한때 목록에 있었다).
+  assert.deepEqual(changed, ["fv-akj5", "fv-aqp6", "fv-bmiq", "fv-nss6"]);
   for (const id of ["fv-bmiq", "fv-nss6"]) assert.equal(FLOW_VARIANTS.find((v) => v.variantId === id)!.retired, true, id);
 });
 

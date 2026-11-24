@@ -700,6 +700,20 @@ const GRANDCHILD_IMPERSONATION: InCallSmsItem[] = [
     afterScammerTurns: 2,
     announceInstruction: FAMILY_TRANSFER_ANNOUNCE,
   },
+  // ⭐ 2026-11-24(사용자 결정 (B) · 판정표 VC3) — 손주 고급 fv-cx5y 상품권 구매 안내(검찰 `prosecution-voucher-link`와 같은 화면 `voucher-purchase`).
+  // 계좌 줄 없는 `account`(목적 transfer 짝 규칙 — 검찰 상품권 문자 선례). afterScammerTurns=4: 이 시나리오의 2와 겹치지 않는 값.
+  {
+    smsId: "grandchild-voucher-link",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["grandchild-impersonation"]}`,
+    body: "할머니 여기서 상품권 사 주시면 돼요.\n아래 링크 누르면 바로 살 수 있어요.\n다 사면 화면에 나오는 핀 번호만 불러 주세요.",
+    linkDisplayText: "상품권 사기",
+    fakeLandingId: "voucher-purchase",
+    linkAddress: "hanol-gift-shop.invalid/buy/Gc8v",
+    afterScammerTurns: 4,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 상품권 구매 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크의 화면에서 상품권을 사고 화면에 뜬 핀 번호를 불러 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 핀 번호 · 금액을 지어내 말하지 말고, 편의점이나 다른 곳에서 사라고 하지 말고, 실제 주소를 읽어 주지도 마라.)",
+  },
 ];
 
 // §53(§51 커밋 D 집행 — UX-027 v1.24 (1) ㉰ / v1.25 정본, `docs/Architecture.md` §53.6/§53.8) —
