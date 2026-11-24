@@ -14,6 +14,7 @@
 // |---|---|---|
 // | 1 | `purpose`가 변형 `sms` 선언에 없다(enum 밖 · 부재 포함) | `not_allowed`(쓰기 0) |
 // | 1-b | 2026-11-23 — 그 목적으로 선언된 문자가 둘 이상 | 선언 순서상 아직 도착하지 않은 첫 문자로 아래 행을 본다(다 도착했으면 첫 문자 → 2행) |
+// | 1-b′ | ⭐ 2026-11-24(브라우저 A 라이브 A2 · 검찰 고급 fv-a6lq — 본인 확인을 모두 거부한 참가자에게 사기범이 "사건 조회 링크에서 본인 확인"이라며 link를 부르자 1-b가 대출 안내 문자를 보냈다) 모델 도구 요청(`modelTool`) ∧ 1-b가 고른 문자 앞에 같은 목적 문자가 도착했고 그 화면을 아직 제출하지 않았다 | 그 앞 문자로 본다(→ 2행 — P-2a 다시 가리키기). 뒤 문자는 화면 제출 뒤 도구 · 자동 백스톱으로 간다 |
 // | 2 | 그 목적의 문자가 이미 도착 | `already_delivered`(쓰기 0) |
 // | 2-b | ⭐ D-c(P2 실측 2026-11-01) — 선언 순서상 **앞선 필수 문자**가 아직 도착하지 않았다(선택 문자는 막지 않는다) | `too_early` |
 // | 3 | `userTurns < max(하한, FIRST_SMS_MIN_USER_TURNS)` — 하한 = 판정표 F(`explicitFloor`면 `explicitNotBeforeUserTurns ?? notBeforeUserTurns` · 그 밖 `notBeforeUserTurns`) | `too_early` |
@@ -141,6 +142,8 @@ export type SmsGateInput = {
   explicitFloor?: boolean;
   /** 판정표 OC(2026-11-12) — 주장 백스톱의 대상 목적(CL 판정을 지난 값). 부재 = 주장 아님 · 판정 불가(종전). */
   claimedPurposes?: readonly SmsPurpose[];
+  /** 1-b′(2026-11-24) — 실시간 모델 도구 호출(`send_prepared_sms`)이다. 부재 · false = 종전(백스톱 · 주장 · 마커). */
+  modelTool?: boolean;
 };
 
 /** §126 — 판정 4행의 간격. */
@@ -195,7 +198,12 @@ export function resolveSmsGate(input: SmsGateInput): SmsGateResult {
   // 2026-11-23(1-b행) — 같은 목적 문자가 둘 이상이면(한 통화 앱 안 대출 — 설치 · 사건 조회 링크 뒤 대출 안내 링크) 선언 순서상 아직 안 보낸 첫 문자,
   // 다 보냈으면 첫 문자(→ 2행). 목적마다 문자가 하나인 변형은 종전과 같다.
   const candidates = isSmsPurpose(input.purpose) ? input.declared.filter((declared) => declared.purpose === input.purpose) : [];
-  const item = candidates.find((declared) => !input.delivered.some((d) => d.smsId === declared.smsId)) ?? candidates[0];
+  const firstPending = candidates.find((declared) => !input.delivered.some((d) => d.smsId === declared.smsId));
+  // 1-b′ — 모델 도구가 같은 목적을 부를 때 앞 문자 화면이 아직이면 앞 문자를 가리킨 것으로 본다.
+  const before = firstPending ? candidates[candidates.indexOf(firstPending) - 1] : undefined;
+  const priorUnsubmitted =
+    input.modelTool === true && before !== undefined && input.delivered.some((d) => d.smsId === before.smsId && d.landingSubmitted !== true);
+  const item = priorUnsubmitted ? before : (firstPending ?? candidates[0]);
   if (!item) return { status: "not_allowed" };
   if (input.delivered.some((d) => d.smsId === item.smsId)) return { status: "already_delivered", item };
   // ⭐ D-c(P2 실 키 실측 2026-11-01 — 카드 `fv-w3dq` 이관 문자가 설치 문자보다 먼저 · 환급 `fv-aqx2` 수수료 문자가 신청 링크보다 먼저) — 선언 순서 = 단계 순서다.
@@ -322,7 +330,7 @@ export function correctModelSmsPurpose(input: SmsGateInput): {
 } {
   // §126 — 모델 도구 호출은 명시 요청이다(간격 1 · 발송 통로도 같은 값으로 다시 판정한다).
   // 판정표 F — `explicitFloor`는 호출부 값 그대로(실시간 모델 도구 = true).
-  const gate = resolveSmsGate({ ...input, explicit: true });
+  const gate = resolveSmsGate({ ...input, explicit: true, modelTool: true });
   if (gate.status === "already_delivered" && gate.item !== undefined) {
     return { purpose: input.purpose, alreadyDeliveredInstruction: buildSmsAlreadyDeliveredInstruction(gate.item.purpose) }; // P-2a
   }

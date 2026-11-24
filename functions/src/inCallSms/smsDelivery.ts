@@ -75,6 +75,8 @@ export async function deliverSmsThroughGate(
       userTurns: input.userTurns,
       explicit: input.explicit,
       explicitFloor: input.explicitFloor,
+      // 1-b′ — 모델 도구 호출이면 같은 목적의 앞 문자 화면 제출 전에는 앞 문자로 본다(사전 판정 `correctModelSmsPurpose`와 같은 값).
+      modelTool: input.trigger === "model_tool",
       ...(input.claimedPurposes ? { claimedPurposes: input.claimedPurposes } : {}),
     });
     if (gate.status !== "allowed") {
