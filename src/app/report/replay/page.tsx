@@ -992,10 +992,11 @@ function ReplayMockScreenItem({
   const branchCopy = resolveMockScreenCopy(mockScreen, deceivedMoments, "replay");
   const submittedText = mockScreenSubmittedText(mockScreen);
   const declinedText = branchCopy.branch === "declined" ? mockScreenDeclinedText(mockScreen) : null;
-  const copy = submittedText
-    ? { tone: "neutral" as const, text: submittedText }
+  // 리플레이 주석 상자는 소제목(`heading`)도 그린다 — 제출 사실은 사실 1줄(소제목 없음) · 응하지 않음은 분기 소제목을 그대로 둔다.
+  const copy: { tone: "caution" | "neutral" | "praise"; heading?: string; text: string } = submittedText
+    ? { tone: "neutral", text: submittedText }
     : declinedText
-      ? { tone: "praise" as const, text: declinedText }
+      ? { tone: "praise", heading: branchCopy.heading, text: declinedText }
       : branchCopy;
   return (
     <li className="outline-none">
