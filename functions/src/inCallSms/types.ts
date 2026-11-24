@@ -28,6 +28,8 @@ export type DeliverInCallSmsRequest = {
    * 문장 원문은 싣지 않는다(목적 enum만).
    */
   smsClaimedPurposes?: string[];
+  /** ⭐ 2026-11-24 판정표 HB(`smsGate.ts` `planSmsBackstop`) — 클라가 본 직전 두 참가자 발화 적대 연속. `true`만 인정 · 자동 백스톱만 보류. 부재 = 종전. */
+  participantHostile?: boolean;
   /**
    * ⭐ 2026-11-23 판정표 BL3′(`session/cardBalanceFit.ts`) — 참가자가 통화에서 말한 통장 잔액(원 · 화면 판정표 S4 ~ S9 · S14 — '돈 없다'는 싣지 않는다).
    * 카드 잔액이 없을 때 잔액형 문자 금액을 이 값에 맞춘다. 서버 검증 = 정수 · 1만 ~ 10억 원 · 만 원 단위 내림(밖 = 없음 · 종전 금액).
