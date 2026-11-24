@@ -104,7 +104,7 @@ test("[CW5] 화면 문구 — G437 · AC-102 (d) · 보류 안내", () => {
   const doneEnd = component.indexOf("// ② 금융사기", doneStart);
   assert.ok(doneStart > 0 && doneEnd > doneStart, "완료 화면 구간 표식");
   assert.doesNotMatch(component.slice(doneStart, doneEnd), /pickupNote|신분증|영업점/, "완료 화면 렌더에 방문 안내 0");
-  for (const id of ["cash-withdraw", "asset-cash-withdraw"]) {
+  for (const id of ["cash-withdraw", "asset-cash-withdraw", "loan-cash-withdraw"]) {
     const entry = SERVER_CATALOG.slice(SERVER_CATALOG.indexOf(`landingId: "${id}"`));
     assert.match(entry.slice(0, 1500), /successHeadline: "[^"]*접수되었습니다\."/, `${id} 완료 머리글 = 접수`);
   }
@@ -120,8 +120,8 @@ test("[CW6] 화면 컴포넌트 — 저장 · 전송 0 · 콜백 무인자 · �
     assert.ok(call === "onCredentialSubmit()" || call === "onHeld()", `콜백에 값을 실어 보내면 안 된다: ${call}`);
   }
   assert.equal((LANDING_SOURCE.match(/onHeld=\{\(\) => onLandingStep\?\.\("landing_held"\)\}/g) ?? []).length, 2, "금 · 출금 예약 보류 = 고정 값 한 개씩");
-  assert.ok(SERVER_CATALOG.includes('export const CASH_LANDINGS: readonly string[] = ["cash-withdraw", "asset-cash-withdraw"];'));
-  assert.ok(LANDING_SOURCE.includes('const CASH_LANDINGS: readonly string[] = ["cash-withdraw", "asset-cash-withdraw"];'), "클라 목록 = 서버 목록");
+  assert.ok(SERVER_CATALOG.includes('export const CASH_LANDINGS: readonly string[] = ["cash-withdraw", "asset-cash-withdraw", "loan-cash-withdraw"];'));
+  assert.ok(LANDING_SOURCE.includes('const CASH_LANDINGS: readonly string[] = ["cash-withdraw", "asset-cash-withdraw", "loan-cash-withdraw"];'), "클라 목록 = 서버 목록");
   assert.ok(component.includes("bankIdentity?.myBankName ? myBankAppName(appBankName) : issuerNameOf(copy.issuerLabel)"), "머리띠 = 이체 화면과 같은 규칙(2026-11-08 판정표 S — 참가자가 말한 은행이 있으면 그 은행 · `spokenAccount.test.ts`)");
   assert.ok(component.includes("<BankAuthSheet"), "생체 인증 시트(이체 화면과 같은 컴포넌트)");
 });

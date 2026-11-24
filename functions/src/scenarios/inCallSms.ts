@@ -165,6 +165,22 @@ const LOAN_SCAM: InCallSmsItem[] = [
     announceInstruction:
       "(참가자 휴대전화로 방금 보안 점검 앱 설치 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 앱 설치를 진행해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 실제 주소를 읽어 주지 말고, 설치 방법·권한 설정은 설명하지 마라.)",
   },
+  // ⭐ 2026-11-24(페르소나 점검 N1 · 묶음 ①) — 대환대출 고급 현금 상환형(fv-r4hc) 결말. 종전에는 "예금을 현금으로 찾아 직원에게 직접 상환"을 말로
+  // 약속받아 참가자를 실제 은행 창구로 보냈다. 이제 사기범이 도구로 보내고, 링크가 내 은행 앱 머리띠의 출금 예약 화면(`loan-cash-withdraw`)을 연다
+  // (`asset-cash-reserve`와 같은 흐름 · 다른 문구). 목적 `transfer` ↔ 종류 `account`(계좌 · 금액 줄 없음 — 출금 예약 문자 선례).
+  // afterScammerTurns=4(이 시나리오 2 · 3 · 5와 겹치지 않음).
+  {
+    smsId: "loan-cash-reserve",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["loan-refinance-scam"]} (○○캐피탈 상담센터)`,
+    body: "[○○캐피탈] 기존 대출 상환금 출금 예약 안내\n대환 전 기존 대출 상환금은 아래에서 거래 은행 출금 예약을 해 주세요.\n예약이 끝나면 상환 담당 직원이 따로 연락드립니다.\n외부에 알리지 마십시오.",
+    linkDisplayText: "상환금 출금 예약하기",
+    fakeLandingId: "loan-cash-withdraw",
+    linkAddress: "repay-reserve.invalid/reserve/Lc3p",
+    afterScammerTurns: 4,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 거래 은행 출금 예약 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크의 은행 화면에서 기존 대출 상환금의 출금 예약을 해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 은행 이름 · 금액을 지어내 말하지 말고, 은행 창구 같은 다른 곳에서 따로 하라고 하지 말고, 실제 주소를 읽어 주지도 마라.)",
+  },
 ];
 
 // ⭐ T194-c-1(docs/Architecture.md §84.5.2 · §84.15.4) — `card-delivery-call`(고급 전용 · 챌린지 불가) 최초의 통화 중 문자. 고급 변형

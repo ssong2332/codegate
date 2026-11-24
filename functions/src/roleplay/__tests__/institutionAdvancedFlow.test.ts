@@ -198,9 +198,9 @@ test("[신고①] sessionTransferSmsOpensLanding — 링크가 붙은 계좌 문
   for (const v of listFlowVariants("loan-refinance-scam", "intermediate")) {
     assert.equal(sessionTransferSmsOpensLanding("loan-refinance-scam", v.variantId), true, v.variantId);
   }
-  // 계좌 문자를 선언하지 않는 변형은 여전히 거짓(납치 — 문자 0 · G306). P2-d — 환급도 수수료 계좌 문자가 생겨 참이 됐다.
+  // P2-d — 환급도 수수료 계좌 문자가 생겨 참이 됐다. 2026-11-24(사용자 결정 (A)) — 납치 중급도 계좌 문자 · 이체 화면을 선언해 참이 됐다.
   for (const v of listFlowVariants("kidnapping-threat", "intermediate")) {
-    assert.equal(sessionTransferSmsOpensLanding("kidnapping-threat", v.variantId), false, v.variantId);
+    assert.equal(sessionTransferSmsOpensLanding("kidnapping-threat", v.variantId), true, v.variantId);
   }
   for (const v of listFlowVariants("tax-refund-scam", "intermediate")) {
     assert.equal(sessionTransferSmsOpensLanding("tax-refund-scam", v.variantId), true, v.variantId);

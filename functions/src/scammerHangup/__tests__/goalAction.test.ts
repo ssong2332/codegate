@@ -194,7 +194,8 @@ test("[§115 C-5 · §117 · §124] 후속 단계가 있는 변형 = 기관 사�
   // 2026-11-07 — 금 구매형 fv-g2ld는 결말이 앱 안 금 거래소 화면이 되어 후속 값 대신 4-c 결정 화면으로 옮겼다.
   // 같은 날(사용자 결정 D-G2 E1-b) 현금 예탁형 fv-q7cn도 앱 안 출금 예약 화면 결말이 되어 4-c 결정 화면으로 옮겼다.
   // 2026-11-23(사용자 결정 "앱 안 대출로 바꾸기") — 카드 배송 대출금형 fv-e5mv도 앱 안 대출금 보관 이체 화면 결말이 되어 4-c 결정 화면으로 옮겼다.
-  assert.deepEqual(withFollowUp, { "fv-pgqt": 3, "fv-r4hc": 6 }); // PR-B — fv-c5fj는 3통화(화면 보류 · 4-c)
+  // 2026-11-24(페르소나 점검 N1) — 현금 상환형 fv-r4hc도 앱 안 출금 예약 화면 결말이 되어 4-c 결정 화면으로 옮겼다(후속 값 6 제거).
+  assert.deepEqual(withFollowUp, { "fv-pgqt": 3 }); // PR-B — fv-c5fj는 3통화(화면 보류 · 4-c)
   assert.equal(goalFollowUpFor("card-company-impersonation", "fv-c5fj"), undefined, "시나리오가 다르면 적용 안 함");
   assert.equal(goalFollowUpFor("institutional-impersonation", undefined), undefined, "변형 없음 = 종전");
   // 다른 확인 무력화 고급 6종(기관 사칭 밖) — 후속 값이 없으므로 같은 입력에 같은 판정(넣든 빼든)

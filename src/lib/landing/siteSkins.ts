@@ -294,6 +294,7 @@ export const SITE_FAMILY_BY_LANDING: Readonly<Record<string, SiteFamilyId>> = {
   "asset-deposit-transfer": "agency-transfer",
   "asset-gold-buy": "gold",
   "asset-cash-withdraw": "bank",
+  "loan-cash-withdraw": "bank",
   "case-record-view": "agency",
   "asset-check-site": "agency",
   "asset-check-wallet": "agency",

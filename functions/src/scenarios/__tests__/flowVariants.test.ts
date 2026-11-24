@@ -92,7 +92,6 @@ const INTERMEDIATE_EXISTING_TACTIC_EXEMPT: Readonly<Record<string, readonly Axis
 const INTERMEDIATE_SMS_EXEMPT = [
   "family-accident-deepvoice",
   "grandchild-impersonation",
-  "kidnapping-threat", // 2026-11-07 — 카탈로그는 고급 계좌 문자 1건뿐(중급 = "현행" 문자 0)
   "messenger-child-impersonation-kakao",
   "messenger-friend-loan-kakao",
   "messenger-parcel-smishing-sms",

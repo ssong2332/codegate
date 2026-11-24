@@ -730,7 +730,7 @@ function componentHosts(code: string): string[] {
 test("[T190/G453 클라] 컴포넌트의 가짜 호스트 전부(카탈로그 8 + 범용 폴백 1)가 .invalid 규칙을 지킨다", (t) => {
   const hosts = componentHosts(componentCode);
   t.diagnostic(`[G453 클라] 호스트 ${hosts.length}개: ${hosts.join(" · ")}`);
-  assert.equal(hosts.length, 36, "2026-11-07 출금 예약 화면 2(기관 · 자산 보호 고급) + 2026-11-07 금 거래소 화면 2(기관 · 자산 보호 고급) + PR-B 기관 고급 3통화 2(대출 신청 · 대출금 보관 이체) + 2026-11-07 앱 안 결말 — 납치 이체 · 상품권 구매 2 + §142 카드사 고급 재구성 2(안전계좌 이체 · 원격 지원 설치) + 카탈로그 credential 19(P2 훈련용 이체 화면 5 · P2-c 메신저 2 · P2-d 환급 수수료 1 포함) + 설치 6(T194-a parcel-install · T194-c-1 Q2 3종 · §110.2 자녀 보험 접수 앱 1 · §92.3 credential 2 · §98 보관 지갑 1 · §101 자산 검수 사이트 1) + 범용 폴백 1");
+  assert.equal(hosts.length, 37, "2026-11-24 대출 고급 현금 상환형 출금 예약 화면 1 + 2026-11-07 출금 예약 화면 2(기관 · 자산 보호 고급) + 2026-11-07 금 거래소 화면 2(기관 · 자산 보호 고급) + PR-B 기관 고급 3통화 2(대출 신청 · 대출금 보관 이체) + 2026-11-07 앱 안 결말 — 납치 이체 · 상품권 구매 2 + §142 카드사 고급 재구성 2(안전계좌 이체 · 원격 지원 설치) + 카탈로그 credential 19(P2 훈련용 이체 화면 5 · P2-c 메신저 2 · P2-d 환급 수수료 1 포함) + 설치 6(T194-a parcel-install · T194-c-1 Q2 3종 · §110.2 자녀 보험 접수 앱 1 · §92.3 credential 2 · §98 보관 지갑 1 · §101 자산 검수 사이트 1) + 범용 폴백 1");
   assert.deepEqual(hosts.flatMap(clientHostViolations), []);
   // 범용 폴백 호스트는 카탈로그 호스트와 겹치지 않는다(겹치면 미스가 다른 사이트처럼 보인다).
   assert.equal(new Set(hosts).size, hosts.length);
@@ -756,6 +756,8 @@ const NUMERIC_FIELD_LABELS = [
   // §142 — 카드사 고급 재구성 안전계좌 이체(card-safe-transfer) 2칸.
   "안전계좌 번호",
   "보호 금액",
+  // 2026-11-24 — 대출 고급 현금 상환형 출금 예약 화면(loan-cash-withdraw).
+  "상환할 금액",
   "계좌번호",
   "안전계좌 번호",
   "이체 금액",
@@ -995,7 +997,7 @@ test("[§101 ③④⑤] 금액 칸은 필드별 명시 · 검증 실패면 콜�
   // §142 — 카드사 고급 재구성 안전계좌 이체 "보호 금액" +1.
   // PR-B — 기관 고급 3통화 "대출 신청 금액" · 대출금 보관 이체 "이체 금액" +2.
   // 2026-11-07(사용자 결정 D-G2 E1-b) — 출금 예약 화면 "출금 금액" · "보관할 금액" +2.
-  assert.deepEqual(amounts.sort(), ["보호 금액", "보관 신청 금액", "전송 금액", "전환 금액", "이체 금액", "이체 금액", "대출 신청 금액", "이관 금액", "옮길 금액", "출금 금액", "보관할 금액", ...Array<string>(9).fill("보낼 금액")].sort());
+  assert.deepEqual(amounts.sort(), ["보호 금액", "보관 신청 금액", "전송 금액", "전환 금액", "이체 금액", "이체 금액", "대출 신청 금액", "이관 금액", "옮길 금액", "출금 금액", "보관할 금액", "상환할 금액", ...Array<string>(9).fill("보낼 금액")].sort());
   const submit = componentCode.slice(componentCode.indexOf("const handleSubmit"), componentCode.indexOf("const issuerBar"));
   const guard = submit.indexOf("if (Object.keys(found).length > 0) return;");
   assert.ok(guard > 0, "검증 실패 시 되돌아가는 줄");
