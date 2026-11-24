@@ -19,6 +19,7 @@ import {
   listFlowVariants,
   resolveSessionScenarioPrompt,
   resolveVariantPrompt,
+  withPlaceholderNames,
   type FlowVariant,
 } from "../flowVariants";
 import { SCENARIO_PROMPTS } from "../index";
@@ -381,7 +382,7 @@ function newVariantTexts(): { where: string; text: string }[] {
     for (const stage of v.stages) out.push({ where: `${v.variantId} ${stage.stageId}`, text: stage.summary });
     const composed = resolveVariantPrompt(SCENARIO_PROMPTS[v.scenarioId], v).personaPrompt;
     // T194-a — 0번 leg 페르소나가 원본을 덮는 변형(parcel 고급)은 그 페르소나 뒤가 흐름 블록이다(페르소나 자체는 아래 leg 표면으로 들어간다).
-    const personaHead = v.legs[0]?.personaPrompt ?? SCENARIO_PROMPTS[v.scenarioId].personaPrompt;
+    const personaHead = withPlaceholderNames(v.scenarioId, v.legs[0]?.personaPrompt ?? SCENARIO_PROMPTS[v.scenarioId].personaPrompt);
     const block = composed.slice(personaHead.length);
     if (block) out.push({ where: `${v.variantId} flowBlock`, text: block });
     v.legs.forEach((leg, i) => out.push({ where: `${v.variantId} leg${i}`, text: `${leg.callerLabel} ${leg.personaPrompt ?? ""}` }));
@@ -530,9 +531,10 @@ test("[T191 S5 프롬프트 합성] 가드레일 원문 불변 · 최후미 · '
     const base = SCENARIO_PROMPTS[v.scenarioId];
     const resolved = resolveVariantPrompt(base, v);
     assert.equal(resolved.guardrailPreamble, base.guardrailPreamble, `${v.variantId}: 가드레일 변형 금지`);
-    assert.deepEqual(resolved.weakenedTactics, v.tactics);
+    // 2026-11-24 판정표 PH — 카드 배송 변형만 자리표시 앱 이름을 화면 이름으로 바꾼다(그 밖 = 항등).
+    assert.deepEqual(resolved.weakenedTactics, v.tactics.map((t) => withPlaceholderNames(v.scenarioId, t)));
     // T194-a(§84.4.2) — 0번 leg 페르소나가 있으면 그것이 원본을 대신한다(부재 = 원본 재사용 — 종전 단언 그대로).
-    const persona = v.legs[0]?.personaPrompt ?? base.personaPrompt;
+    const persona = withPlaceholderNames(v.scenarioId, v.legs[0]?.personaPrompt ?? base.personaPrompt);
     if (v.stages.length === 0) {
       assert.equal(resolved.personaPrompt, persona, `${v.variantId}: 단계 없는 변형은 페르소나 무변경`);
     } else {

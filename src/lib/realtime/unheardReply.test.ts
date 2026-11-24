@@ -119,6 +119,9 @@ test("[§105.2.6] 문구는 중립 — 맞장구 · 긍정을 가정하지 않�
   assert.ok(UNHEARD_REPLY_TEXT.startsWith("(") && UNHEARD_REPLY_TEXT.endsWith(")"));
   assert.ok(UNHEARD_REPLY_TEXT.includes("잘 들리지 않았다"));
   assert.ok(UNHEARD_REPLY_TEXT.includes("되묻"));
+  // 2026-11-24(페르소나 점검 N-B3 · 판정표 LV L5) — 협박 · 납치범의 상담원 말투 되묻기 → 인물 말투 그대로.
+  assert.ok(UNHEARD_REPLY_TEXT.includes("인물의 말투 그대로"));
+  assert.ok(!UNHEARD_REPLY_TEXT.includes("자연스럽게 되묻"), "종전 문면");
   for (const word of ["맞장구", "긍정", "동의", "네라고"]) assert.ok(!UNHEARD_REPLY_TEXT.includes(word), word);
 });
 

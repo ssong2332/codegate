@@ -135,6 +135,7 @@ import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddres
 import { asksIdentityCheck } from "./personaAuthority";
 import { extractSmsMarker } from "./smsMarker";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
+import { pinSessionAccountNumber } from "./accountPin";
 import { evaluateOtpCheck, otpCheckInputsFromHistory } from "./otpCheck";
 import {
   DEMAND_SENTENCE,
@@ -800,8 +801,11 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const turnFacts = {
       // 화면 행동만 인정 — 보낸 이체 화면이 있는데 아직 이체 기록이 없으면 말만으로는 송금으로 치지 않는다(대사 속 "입금 확인" 문장도 지워진다).
       // N1 — 이체를 마쳤어도 요구액보다 적게 보냈으면 "받은 것으로 친다"가 아니다(상태 줄이 모자란 금액 요구를 싣는다).
+      // ⭐ 2026-11-24(페르소나 점검 browser-c N3 · 판정표 TR1) — 말 없이 이체 화면만 마쳐도 받은 것으로 친다(종전엔 말로 "보냈다"일 때만 → 이체 직후 같은 송금 재요구 2/2).
       transferReported:
-        userReportedTransfer(storedHistory, maskedUserText) && !transferScreenPending && latestTransferAmount(screenFacts) !== "less",
+        (userReportedTransfer(storedHistory, maskedUserText) || screenFacts.some((f) => f.kind === "transfer" && f.done)) &&
+        !transferScreenPending &&
+        latestTransferAmount(screenFacts) !== "less",
       photoSent: userSentPhoto(storedHistory, isPhotoTurn),
     };
     const confirmAndCallContext =
@@ -1183,7 +1187,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const { text: realNameReplacedText, replacedCount: realNameReplacedCount } =
       replaceRealFinancialNames(markupFreeReplyText);
     // §81 — 실존명 치환 결과("OO은행")와 모델이 그대로 말한 자리표시자를 세션 가상 은행명으로 맞춘다(문자 본문과 일치).
-    const realNameFreeReplyText = applyFictionalBank(realNameReplacedText, fictionalBankName);
+    // 판정표 AP(2026-11-24 페르소나 점검 N11) — 모델이 지어낸 계좌번호를 세션 계좌로(`accountPin.ts`).
+    const realNameFreeReplyText = pinSessionAccountNumber(
+      applyFictionalBank(realNameReplacedText, fictionalBankName),
+      session.scenarioId,
+      routeAccountNumber,
+    );
     // §132 — 문자 도착 턴은 상한이 문자 언급 문장을 잘라 내지 않게 한다(`limitReplySentencesKeeping` 표).
     const lengthLimited = shouldLimitReplySentences(turnChoice)
       ? limitReplySentences(
