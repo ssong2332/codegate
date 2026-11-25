@@ -217,13 +217,15 @@ const FACTUAL_BY_DEMAND = [
   [/(자녀|아이|아드님|따님|아들|딸)/, "우리 아들은 지금 회사에 있을 텐데요? 아까 통화했어요."],
 ];
 const FACTUAL_CHECK = "일단 끊고 제가 대표번호로 확인 전화 해 볼게요.";
+// 2026-11-24 브라우저 A A5 확인(판정표 CD) — 배송 통화 첫 두 답을 라이브 대사 그대로: 신청 안 함 → 카드사에 직접 확인. 그 뒤는 factual.
+const FACT_COURIER_OPEN = ["그 카드 저는 신청 안 했어요.", "카드사에 직접 확인 전화 해 볼게요. 카드 뒷면 번호로요."];
 
 // getOtp — 도착한 문자 속 인증번호(있으면 순응 참가자는 그 번호를 부른다 · 2026-10-24). 없으면 종전 고정값.
 function makeResponder(persona, getOtp = () => undefined) {
   let paid = false, lastReply = "";
   return function respond(lastScammerText, i) {
     if (i === 0) return "여보세요, 네 누구세요?";
-    if (persona !== "refuse" && persona !== "hostile" && persona !== "factual" && /인증\s?번호|인증 코드|숫자 여섯|여섯 자리/.test(lastScammerText) && getOtp()) {
+    if (persona !== "refuse" && persona !== "hostile" && persona !== "factual" && persona !== "factCourier" && /인증\s?번호|인증 코드|숫자 여섯|여섯 자리/.test(lastScammerText) && getOtp()) {
       const r = `${persona === "suspicious" ? "음… 알겠어요. " : ""}${getOtp()}요.`;
       if (r !== lastReply) return (lastReply = r);
     }
@@ -234,7 +236,8 @@ function makeResponder(persona, getOtp = () => undefined) {
       const r = hit && i % 2 === 0 ? hit[1] : HOSTILE_LINES[(i - 1) % HOSTILE_LINES.length];
       return (lastReply = r === lastReply ? HOSTILE_LINES[i % HOSTILE_LINES.length] : r);
     }
-    if (persona === "factual") {
+    if (persona === "factCourier" && i <= FACT_COURIER_OPEN.length) return (lastReply = FACT_COURIER_OPEN[i - 1]);
+    if (persona === "factual" || persona === "factCourier") {
       if (i % 5 === 4) return (lastReply = FACTUAL_CHECK);
       const hit = FACTUAL_BY_DEMAND.find(([re]) => re.test(lastScammerText));
       const r = hit ? hit[1] : FILLER[i % FILLER.length];
@@ -258,7 +261,7 @@ function makeResponder(persona, getOtp = () => undefined) {
     return (lastReply = FILLER[i % FILLER.length]);
   };
 }
-const MAX_USER_TURNS = { comply: 16, suspicious: 16, refuse: 9, verbal: 16, verbalInstall: 16, verbalTransfer: 16, truthful: 16, hostile: 12, factual: 14 };
+const MAX_USER_TURNS = { comply: 16, suspicious: 16, refuse: 9, verbal: 16, verbalInstall: 16, verbalTransfer: 16, truthful: 16, hostile: 12, factual: 14, factCourier: 14 };
 // 2026-11-07 — truthful 참가자가 금 거래소 화면 보류 뒤 하는 말(첫 줄 = 보류 직후 1회 · 나머지 = 이후 망설임 반복).
 const GOLD_HELD_FIRST_LINE = "화면에서 구매가 보류됐다고 나와요. 수사기관이 금을 사라고 하지 않는다고, 112에 확인하라던데요?";
 const CASH_HELD_FIRST_LINE = "화면에서 출금 예약이 보류됐다고 나와요. 수사기관이 현금을 찾으라고 하지 않는다고, 112에 확인하라던데요?";
