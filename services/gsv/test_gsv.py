@@ -67,10 +67,19 @@ class PickTest(unittest.TestCase):
 
 
 class GenParamsTest(unittest.TestCase):
-    def test_clamp_and_allowlist(self):
-        self.assertEqual(gen_params(None), {})
-        self.assertEqual(gen_params({"top_k": 99, "temperature": 0, "seed": 1, "top_p": True}), {"top_k": 50, "temperature": 0.1})
-        self.assertEqual(gen_params({"top_k": 15.7, "repetition_penalty": 1.2}), {"top_k": 15, "repetition_penalty": 1.2})
+    C = {"top_k": 20, "top_p": 0.9, "temperature": 1.2}
+
+    def test_g1_default_is_combo_c(self):  # 판정표 G1 — 운영 토큰(gen 없음) = 조합 C
+        self.assertEqual(gen_params(None), self.C)
+        self.assertEqual(gen_params({}), self.C)
+
+    def test_g2_g3_override_and_clamp(self):
+        self.assertEqual(gen_params({"top_k": 99, "temperature": 0, "seed": 1, "top_p": True}), {**self.C, "top_k": 50, "temperature": 0.1})
+        self.assertEqual(gen_params({"top_k": 15.7, "repetition_penalty": 1.2}), {**self.C, "top_k": 15, "repetition_penalty": 1.2})
+
+    def test_app_uses_gen_params_for_every_session(self):  # 배선 — 합성 기본 설정은 gen_params 한 곳
+        src = open(os.path.join(os.path.dirname(__file__), "app.py"), encoding="utf-8").read()
+        self.assertIn('**gen_params(t.get("gen"))}', src)
 
 
 class BudgetTest(unittest.TestCase):

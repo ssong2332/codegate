@@ -20,14 +20,19 @@ class Budget:
         return None
 
 
-# GPT 생성 설정(억양 시험 · §143.19) — 토큰(서버가 봉인)에 실린 값만, 허용 범위로 잘라 쓴다. 운영 토큰에는 없다 = 사전학습 기본값.
+# GPT 생성 설정 판정표 G(§143.19 · §143.20):
+# | 행 | 토큰 `gen` | 쓰는 값 |
+# | G1 | 없음(운영 토큰 — Functions는 싣지 않는다) | DEFAULT_GEN = 조합 C(메인 결정 2026-11-26 — 본인 녹음 재시험 "c가 좀 더 깔끔") |
+# | G2 | 허용 키 · 숫자 | 그 값(허용 범위로 자름) · 나머지 키는 G1 |
+# | G3 | 허용 밖 키 · 숫자 아님 · bool | 무시(G1 값) |
 GEN_RANGES = {"top_k": (1, 50), "top_p": (0.1, 1.0), "temperature": (0.1, 2.0), "repetition_penalty": (1.0, 2.0)}
+DEFAULT_GEN = {"top_k": 20, "top_p": 0.9, "temperature": 1.2}  # repetition_penalty = 라이브러리 기본(1.35)
 
 
 def gen_params(raw) -> dict:
+    out = dict(DEFAULT_GEN)
     if not isinstance(raw, dict):
-        return {}
-    out = {}
+        return out
     for k, (lo, hi) in GEN_RANGES.items():
         v = raw.get(k)
         if isinstance(v, (int, float)) and not isinstance(v, bool):

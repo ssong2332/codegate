@@ -138,7 +138,7 @@ class Gsv:
                     paths.append(p)
                 base = {"text_lang": "ko", "ref_audio_path": paths[0], "prompt_text": t["refs"][0]["text"], "prompt_lang": "ko",
                         "aux_ref_audio_paths": paths[1:], "text_split_method": "cut5", "batch_size": 1, "seed": 1234,
-                        "streaming_mode": True, **gen_params(t.get("gen"))}  # §143.19 — 운영 토큰엔 gen 없음 = 기본값
+                        "streaming_mode": True, **gen_params(t.get("gen"))}  # §143.20 판정표 G — 운영 토큰엔 gen 없음 = 조합 C
                 asr = bool(t.get("asr"))  # §143.19 시험 전용(실측 클라이언트가 봉인) — 합성 결과 받아쓰기를 done에 싣는다
                 budget = Budget(int(t.get("charBudget", 3000)), t.get("banned", []))
 
