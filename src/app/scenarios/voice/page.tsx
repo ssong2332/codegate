@@ -50,7 +50,7 @@ export default function ScenarioVoiceModeSelectPage() {
             key: "clone",
             icon: "mic",
             title: "내 목소리 복제",
-            description: "내 목소리 30초 녹음 후, 지인에게 그 목소리(딥보이스)로 걸려오는 전화를 보냅니다",
+            description: "내 목소리 1분 녹음 후, 지인에게 그 목소리(딥보이스)로 걸려오는 전화를 보냅니다",
             badge: lastPick("clone"),
           },
           {

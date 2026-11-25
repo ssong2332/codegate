@@ -259,7 +259,7 @@ export default function MessengerVoiceSelectPage() {
       </header>
 
       <div className="flex flex-col gap-3">
-        {/* "지금 30초 녹음"은 선택 후 별도 확정이 아니라 클릭 즉시 녹음 화면으로 이동하는
+        {/* "지금 1분 녹음"은 선택 후 별도 확정이 아니라 클릭 즉시 녹음 화면으로 이동하는
             단일 액션이라(D-25 기존 로직 무변경) SelectableCard(선택→별도 확정 버튼)의 상시
             "미선택" 원 어포던스를 그대로 쓰지 않고, 디자인 시스템의 카드 톤(테두리/라운드/배지)만
             재사용한 커스텀 카드로 둔다 — 판단 근거는 팀 보고 참고.
@@ -272,8 +272,8 @@ export default function MessengerVoiceSelectPage() {
             className="flex min-h-[64px] flex-col items-start gap-2 rounded-[8px] border-[1.5px] border-line bg-white p-5 text-left transition-colors hover:border-brand disabled:opacity-50"
           >
             <span className="flex flex-wrap items-center gap-2">
-              <span className="text-[17px] font-bold text-ink">지금 30초 녹음</span>
-              <Badge variant="caution">30초 소요</Badge>
+              <span className="text-[17px] font-bold text-ink">지금 1분 녹음</span>
+              <Badge variant="caution">1분 소요</Badge>
             </span>
             <span className="text-base leading-relaxed text-ink-sub">
               본인 목소리를 녹음해 통화에서 그대로 씁니다.

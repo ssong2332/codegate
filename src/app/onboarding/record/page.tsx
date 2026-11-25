@@ -20,13 +20,23 @@ import {
 } from "@/lib/recording";
 import { LoadingDots, ProgressSteps, type ProgressStep } from "@/components/ui";
 
-// 지정 대본(약 30초 낭독 분량) — UX.md UX-002 "지정된 30초 한국어 대본". 정확 대사 일치 검증은
-// 하루 스코프 밖(UX.md Validation)이라 낭독 유도 목적의 고정 문구만 제공한다.
-const SCRIPT_TEXT =
-  "안녕하세요. 저는 지금부터 제 목소리로 인공지능 음성 클론을 만들어 보려고 합니다. " +
-  "이 훈련은 가족을 사칭하는 보이스피싱 전화를 미리 겪어보고, 실제 상황에서 침착하게 " +
-  "대처하는 연습을 하기 위한 것입니다. 아무리 다급하고 놀라운 소식을 전화로 듣더라도, " +
-  "그 자리에서 돈을 보내지 않고 반드시 다른 방법으로 직접 확인하겠습니다.";
+// 지정 대본(1분 안 · 상황 11가지 · 201음절) — 목소리 복제가 억양까지 배우도록 감정 · 말투가 다른 문장을 고루 담는다.
+// 판정표: 평서 · 질문 · 다급 · 걱정 · 기쁨 · 부탁 · 놀람 · 화남 · 숫자 · 짧은 대답 · 차분한 다짐.
+// ⛔ 돈 · 이체 · 계좌 · 인증번호를 요구하는 문장은 넣지 않는다 — 본인 목소리 녹음이 그 자체로 악용될 수 있다.
+// 정확 대사 일치 검증은 하지 않는다(UX.md Validation) — 낭독 유도 목적의 고정 문구다.
+const SCRIPT_LINES: { cue: string; text: string }[] = [
+  { cue: "또박또박", text: "안녕하세요. 지금부터 제 목소리를 천천히 녹음해 보겠습니다." },
+  { cue: "묻듯이", text: "오늘 저녁에 떡볶이 먹을까? 혹시 내일 오후에 시간 괜찮아요?" },
+  { cue: "다급하게", text: "잠깐만, 빨리 와 줘! 지금 정말 급하단 말이야!" },
+  { cue: "걱정스럽게", text: "어떡하지... 너무 걱정돼서 아무것도 손에 안 잡혀." },
+  { cue: "기쁘게", text: "와, 진짜 잘됐다! 정말 축하해!" },
+  { cue: "미안한 듯", text: "미안해, 내가 실수했어. 한 번만 이해해 줄래?" },
+  { cue: "놀라서", text: "뭐라고? 정말이야? 믿을 수가 없네." },
+  { cue: "짜증 내듯", text: "아, 진짜 왜 그래! 그만 좀 해!" },
+  { cue: "숫자를 또렷이", text: "약속은 오후 세 시 사십오 분이고, 번호는 공일공, 삼사오육, 칠팔구공이야." },
+  { cue: "가볍게", text: "응, 알겠어. 아니야, 괜찮아." },
+  { cue: "차분하게", text: "전화로 다급한 이야기를 들으면, 먼저 끊고 직접 확인하겠습니다." },
+];
 
 // 온보딩 진행 표시(디자인 시스템 "5 · 상단 진행 표시") — 이 화면(녹음)과 clone/wait(클론 대기)
 // 두 화면에서만 노출한다(온보딩 플로우.dc.html의 2/3·3/3 진행바와 동일 스코프).
@@ -160,7 +170,7 @@ export default function RecordPage() {
           녹음해 주세요
         </h1>
         <p className="text-[17px] leading-[1.6] text-ink-sub">
-          녹음한 목소리로 훈련용 가상 통화가 만들어져요. 아래 대본을 소리 내어 읽어 주세요 (약 30초).
+          녹음한 목소리로 훈련용 가상 통화가 만들어져요. 아래 대본을 괄호 속 말투를 살려 소리 내어 읽어 주세요 (1분 안).
         </p>
       </div>
 
@@ -169,9 +179,16 @@ export default function RecordPage() {
         className="rounded-[8px] border-[1.5px] border-line bg-white p-4"
       >
         <h2 id="script-heading" className="mb-2 text-[14px] font-bold tracking-[0.08em] text-ink-sub">
-          30초 대본
+          1분 대본
         </h2>
-        <p className="text-[18px] leading-[1.7] text-ink">{SCRIPT_TEXT}</p>
+        <ol className="flex flex-col gap-2">
+          {SCRIPT_LINES.map((line) => (
+            <li key={line.cue} className="text-[18px] leading-[1.6] text-ink">
+              <span className="mr-1.5 text-[15px] text-ink-sub">({line.cue})</span>
+              {line.text}
+            </li>
+          ))}
+        </ol>
       </section>
 
       <label className="flex cursor-pointer select-none items-start gap-3 py-1">
