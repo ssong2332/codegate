@@ -22,7 +22,9 @@ import {
   setOpeningMessageText,
   hasMessengerVoiceSelectReturn,
   getSelectedDifficultyLevel,
+  getExperienceMode,
 } from "@/lib/recording";
+import { resolveCloneReadyRoute } from "@/lib/recording/cloneReadyRoute";
 import { createSession } from "@/lib/api";
 import { familyAddressRequestField } from "@/lib/familyAddress";
 import { Button, LoadingDots, ProgressSteps, type ProgressStep } from "@/components/ui";
@@ -92,8 +94,19 @@ export default function CloneWaitPage() {
     // createSession을 대신 호출하지 않고 voice-select로 복귀시킨다(D-25, 그 화면이 channel=
     // "messenger"/voiceSelectionSource="recorded"로 createSession을 마무리한다). 일반 보이스
     // 온보딩 흐름은 이 분기와 무관하게 무변경.
-    if (hasMessengerVoiceSelectReturn()) {
+    // 2026-11-26 — "지인에게 보내기"(send)에서 녹음하러 온 경우도 세션을 만들지 않고 UX-019 챌린지 만들기로 돌아간다
+    // (판정표 = cloneReadyRoute.ts). 예전엔 이 분기가 없어 본인 체험 통화가 시작됐다.
+    const route = resolveCloneReadyRoute({
+      messengerVoiceSelectReturn: hasMessengerVoiceSelectReturn(),
+      experienceMode: getExperienceMode(),
+      scenarioId: getSelectedScenarioId(),
+    });
+    if (route.kind === "voice-select") {
       router.push("/scenarios/messenger/voice-select");
+      return;
+    }
+    if (route.kind === "challenge") {
+      router.push(route.href);
       return;
     }
     let cancelled = false;
