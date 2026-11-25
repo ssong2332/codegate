@@ -25197,3 +25197,22 @@ Modal `/prepare`가 GPU에서 한다(faster-whisper small · 단어 타임스탬
 | I6 | D5 | 발급 단계 = `failed-precondition` + 정해진 문구 → 클라 `clone-failed` → `endCall("remote")` 종료 셸에 재시도 안내. 통화 중 = 재연결 1회 뒤 같은 길. **서비스 미설정(주소 없음)이면 종전 동작**(텍스트 폴백 — 운영이 오늘과 같다) | `realtime/index.ts` · `useRealtimeCall.ts` · `session/play/page.tsx` |
 | I7 | 미리 합성(`synthesize` — 오프닝 · 텍스트 경로) | 범위 밖 — GSV 공급자도 종전 Mock(무음)을 돌려준다 | `voice/gsvProvider.ts` |
 | I8 | 시험 | 서비스 `python -m unittest discover -s services/gsv`(토큰 · 참조 고르기 · 글자 상한 · Volume 0) · `voice/__tests__/gsvProvider.test.ts`(토큰 언어 간 벡터 · 저장 · 삭제 · 토큰 내용 · WT · RP3) · `src/lib/realtime/cloneTts.test.ts`(판정표 C · 한 조각씩 · 취소 · 재연결 · 문구 · 대본 대조) | — |
+
+### 143.17 실측 결과(2026-11-26 · 메인 승인 M1 ~ M3 3세션)
+
+참조 = Windows Heami TTS로 읽은 대본 11줄(실제 사람 녹음 0). Modal T4 · us-east · 한국 PC에서 접속. 수치 원본 = 실측 스크래치 `bench.json` · `m2.json`.
+
+| 항목 | 결과 | 기준(D3) | 근거 |
+|---|---|---|---|
+| M1 데워진 상태 첫 소리(8문장) | 평균 1.76초(1.03 ~ 2.72 · 글자 수에 따라 늘어남) | — | `bench_client.py` M1 2차(prime · cut5 뒤) |
+| M1 RTF | 평균 0.687(긴 문장 0.46 ~ 0.58) | < 1 | 같음 |
+| M1 ws 준비(참조 4개 읽기 + prime) | 2.82초 | I5 60초 | 같음 |
+| M1 prepare(녹음 → 참조 4개) | 7.6초 · 읽은 줄 10 · 참조 = 1 · 2 · 3 · 4줄 | createVoiceClone 240초 | 같음 |
+| M1 받아쓰기 오류(faster-whisper small) | CER 6.9%(숫자 표기 차이 빼면 약 5.2%) | — | 1 · 4 · 5번 문장 일부 낱말 |
+| M2 Live 첫 자막 조각(클립 끝 → 판정표 C 첫 조각) | 0.57 ~ 0.67초(5발화) · Live 첫 오디오와 거의 같은 때 | — | `live-mic-probe.mjs` 이벤트 `outText` |
+| M2 첫 소리 **추정**(자막 실측 + M1 합성 회귀 1.21 + 0.017 × 글자) | p50 2.19초 · p90 2.24초 | p50 ≤ 3.5 · p90 ≤ 5 | 추정 — 한 통화에서 직접 잰 값 아님(실기기 통화로 확인 필요) |
+| M3 콜드 스타트(/warm) | **134초** | — | 컨테이너 0개에서 시작 |
+| M3 콜드 뒤 ws 준비 · 첫 소리 | 9.9초 · 평균 1.58초 | — | 같은 컨테이너 |
+
+⚠️ 남은 위험(메인 결정 필요): 콜드 스타트 134초 > 통화 시작 대기 I5 60초. 데우기(D2)가 통화 시작 2분 이상 전에 닿지 않으면 첫 통화가 D5(실패 안내)로 끝난다. 특히 챌린지 받는 분은 입장 → 통화까지 짧다. 선택지 = (a) 그대로(데우기 시점 믿음) · (b) 대기 상한 150초 + 연결 중 화면 · (c) Modal 최소 컨테이너 1개 상시(T4 상시 과금) · (d) Modal 메모리 스냅샷으로 기동 단축(효과 미측정).
+듣기 평가(D1 — 3점 미만이면 B 미세 조정 검토)는 사용자 몫 — 합성 파일은 공유 노트 폴더 `gsv-m1-listen/`.
