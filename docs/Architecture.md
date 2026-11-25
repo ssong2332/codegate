@@ -25000,3 +25000,157 @@ PR-2 화면 계약(이 PR이 전제하는 것):
 | 3 | 클라 연락처 제거에 맞춰 상담원 · 조사관이 다음 공식 대표번호를 말로 한 자리씩 불러 준다(번호부 값 · 읽는 꼴 `spokenDialNumber`) · "직접 찾아보셔도 같은 번호" — 가로채기 판정(`planLegStart`)은 무변경 | `cardRebuildLegs.prompt.ts` · `dialDirectory.ts` |
 | 4 | R1 문자 3통 발신 = 보낸 곳마다 다른 번호 · 번호만(`CARD_R1_SMS_SENDER` — 배송 02-0767-3051 · 고객센터 02-0762-5513 · 자산보호 070-0462-1593). 클라 계약: 문자함 대화방 키 = `senderLabel` 번호. 그 밖 문자 발신 표시 무변경 | `inCallSms.ts` |
 | 5 | 참가자가 먼저 끊기(메인 승인 계약 — 전화 앱 세션 제안): `startCallLeg({action:"hangup"})` → 판정표 H1~H4(`planLegHangup` — 연결 중이면 relay `connected:false · legEnded · hungUpBy:"participant"` · 응답 `{status:"ended", legIndex}` · 이미 끝난 레그는 쓰기 0). 끊은 레그 뒤 callback · 그 레그 상대 번호(`legCounterpartNumber`) dial = 같은 레그 재연결(`rejoin` · 레그 시작 발화 수 유지) · 그 밖 번호 = 종전 판정(마지막 레그는 진짜 안내 / 없는 번호). 재연결 Live = "끊겼던 통화 · 같은 사람 · 이 통화 대화만" 맥락(`buildLegRejoinContext`) · 폴백 = 재연결 뒤 첫 턴 1줄. 리포트는 `hungUpBy`를 읽지 않는다(판정 영향은 메인 결정 대기) · 재연결은 그 레그의 통화 발급 예산(`issueBudget.ts`)을 함께 쓴다 | `callLegs/legPlan.ts` · `callLegs/index.ts` · `callLegs/request.ts` · `realtime/index.ts` · `roleplay/index.ts` · `shared/types.ts` |
+
+
+## 143. (Design — 2026-11-26 · 브랜치 `claude/clone-call-gsv-f2cee9` = main `7777100a` · 메인 세션 지시 — 사용자 결정 "ElevenLabs 보류 · 오픈소스 복제는 GPT-SoVITS" · 운영 결함 2026-11-25 16:22 `createRealtimeCall` `provider:"none" isMock:true` · 통화 진단 `mode:"fallback"` `micSent:0`) **복제 목소리 통화 = Gemini Live 자막 → Modal GPT-SoVITS 스트리밍 합성** — architect 기록 · ⛔ 승인 전 구현 금지
+
+### 143.0 금지 · 범위
+- ⛔ 이 절은 설계다. 승인 전에는 코드를 바꾸지 않는다. 실 키(Modal · Gemini) 호출은 매번 메인 세션 승인.
+- ⛔ `src/app/clone/wait/page.tsx`는 건드리지 않는다(메인 세션 별건 수정 중).
+- ⛔ 참가자 녹음 · 참조 클립 · 가중치를 저장소 · 로그에 넣지 않는다. Modal 쪽 디스크 쓰기는 요청 안에서 지우고(finally), 로그에 음성 · 본문 텍스트 0.
+- ⛔ Modal 토큰(`~/.modal.toml`)은 Functions · 브라우저로 옮기지 않는다. Functions → Modal 호출은 Modal 프록시 인증 토큰(별도 발급)만 쓴다.
+- 수치 표기: **실측** = 2026-11-26 Modal T4 측정(메모리 `voice-clone-oss-eval`) 또는 2026-10-20 혼합안 프로토타입. 그 밖은 **추정**.
+
+### 143.1 결함과 원인 (코드 근거)
+| # | 사실 | 근거 |
+|---|---|---|
+| 1 | 복제 세션(`voiceMode:"clone"` 또는 `voiceSelectionSource` recorded · reused)은 ElevenLabs 분기에서만 연결된다. Gemini 분기는 `voiceMode === "generic"`만 받는다 → 키가 없으면 Mock | `functions/src/realtime/provider.ts:118-138` · `realtime/index.ts:41-47` |
+| 2 | 클론 생성은 지금도 항상 Mock이다(`getVoiceProvider()` = `MockVoiceProvider`) — ElevenLabs 키가 있어도 실제 클론은 없었다 | `functions/src/voice/provider.ts:70` |
+| 3 | gemini-3.8-live는 TEXT 출력을 지원하지 않는다 → 다른 TTS를 쓰려면 **AUDIO로 받고 Live 음성은 버리고 출력 전사만** 쓴다 | 2026-10-20 프로토타입 실측(메모리 `voice-hybrid-deferred` · `docs/research/voice-clone-realtime-2026-11.md` §0) |
+| 4 | 같은 구조(Live 자막 → 문장 단위 TTS)의 첫 소리 중앙값 약 1.3초(Chirp · 6/6 성공) | 같은 기록(실측) |
+| 5 | GSV 최고 설정 T4 fp16: RTF 0.556 · 스트리밍 첫 소리 평균 1.06초(0.57~1.57) · 콜드 스타트 포함 76초 · 발음 오류율 1.9% — **단 미세조정 GPT는 사용자 본인 녹음으로 학습한 것** | 메모리 `voice-clone-oss-eval`(실측) |
+
+### 143.2 구조 (기본안)
+```
+[브라우저 통화 화면] ──(Live 단기 토큰 · 종전)──▶ Gemini Live (AUDIO + 출력 전사)
+      │  Live 오디오는 재생하지 않음 · 출력 전사 조각만 사용
+      │  문장 경계에서 자름 → 실존 기관명 가드(종전 liveTranscriptGuard) → 합성 요청
+      └──(WSS · 합성 토큰)──▶ Modal GSV 서비스(T4 · 1통화 = 1연결 = 1컨테이너)
+                                  ◀── PCM 조각(32kHz · 스트리밍) ── 종전 재생 큐 · 음량 정규화로 재생
+[Functions]
+  createVoiceClone ──(프록시 인증)──▶ Modal /prepare(녹음 서명 URL) → 참조 클립 4 + 글 → Storage `voices/{voiceId}/`
+  createRealtimeCall(복제 세션) → provider "gemini" + `cloneTts { url, token }`(토큰 = 참조 서명 URL을 **암호화**해 담음)
+  onSessionEnded · purgeChallenge → deleteVoice(voiceId) = `voices/{voiceId}/` 삭제 + Modal 캐시 비우기
+```
+- 공급자 이름은 새로 만들지 않는다: `provider:"gemini"` + 선택 필드 `cloneTts`(있으면 복제 재생 모드). 프롬프트 · 도구 · 문자 · 끊기 판정은 Gemini 경로 그대로 → 카드 · 문자 세션(`requiresServerPromptProvider`)도 그대로 성립한다.
+- `getRealtimeProvider` 판정표(변경 후):
+
+| # | 조건 | 결과 |
+|---|---|---|
+| RP1 | 서버 프롬프트 불필요 · ElevenLabs 키 · 에이전트 맵 있음 | ElevenLabs(종전 · 운영은 키 없음) |
+| RP2 | Gemini 키 · generic | Gemini(종전) |
+| RP3 | Gemini 키 · clone · **GSV 설정 있음**(`GSV_ENDPOINT_URL` · `GSV_TOKEN_KEY`) · 세션 voiceId가 `gsv_` 접두 · `voices/{voiceId}/ref.json` 있음 | **Gemini + cloneTts** (새 행) |
+| RP4 | clone인데 RP3 조건 중 하나라도 없음 | 결정 D5에 따름(권장: Gemini 기본 음성 + `cloneApplied:false` 표시 — 화면의 "본인 목소리" 표기 숨김) |
+| RP5 | Gemini 키 없음 | Mock(종전) |
+
+### 143.3 ① 참조 구간 · 받아쓴 글 고르기 (녹음 최대 60초 · 대본 11줄 — `src/app/onboarding/record/page.tsx:27-39`)
+Modal `/prepare`가 GPU에서 한다(faster-whisper small · 단어 타임스탬프 · VAD). 대본을 알고 있으므로 받아쓰기는 **대본 줄과 맞추기**용이다.
+
+| # | 단계 | 규칙 |
+|---|---|---|
+| R1 | 맞추기 | whisper 구간을 이어 붙여 대본 줄마다 글자 유사도(정규화 편집거리) 최댓값 구간을 찾는다. 유사도 ≥ 0.7이면 "읽은 줄" |
+| R2 | 받아쓴 글 | 읽은 줄은 **대본 원문**을 prompt_text로 쓴다(인식 오류 제거). 유사도 < 0.7 구간은 whisper 글 그대로(참조 후보에서는 뒤순위) |
+| R3 | 기본 참조 | 우선순위: 질문 줄(2번 "묻듯이") → 놀람(7번) → 그 밖 읽은 줄. 길이 3~10초(GSV 제한). 10초 넘으면 문장부호 경계에서 자르고, 3초 미만이면 바로 다음 줄을 이어 붙인다 |
+| R4 | 보조 참조 3 | 기본 참조와 다른 말투 줄에서: 다급(3) · 걱정(4) · 기쁨(5) 순, 없으면 남은 읽은 줄. 각 3~10초 |
+| R5 | 품질 문턱 | 읽은 줄 < 3 또는 기본 참조를 못 찾음 또는 말소리 총 < 15초 → `cloneStatus:"failed"` · 화면 "다시 녹음" (종전 실패 처리 경로) |
+| R6 | 저장 | 16bit wav(원 샘플레이트) 4개 + `ref.json`(줄 번호 · 글 · 길이) → Functions가 `voices/{voiceId}/`에 쓴다. Modal은 응답 뒤 /tmp 파일 삭제 |
+| R7 | 원본 | `voice_input.webm`은 종전대로 세션 Storage에 남고 세션 종료 때 지워진다(무변경) |
+
+### 143.4 ② 미세조정 여부 — **결정 D1**
+| 안 | 내용 | 대기 · 비용 | 품질 근거 |
+|---|---|---|---|
+| A (권장) | 제로샷: 사전학습 GPT(v2Pro 짝) + 원래 SoVITS v2Pro + 기본 참조 1 + 보조 3 | 녹음 뒤 추가 대기 0 · 저장물 = 클립 4개 | CPU 제로샷 실측: 사용자 판정 "OpenVoice보다 닮음" · 오류율 5%. **GPU 제로샷 청취는 아직 안 함 → M1로 확인** |
+| B | 사용자마다 GPT만 미세조정(15에폭) | T4 학습 시간 미측정(CPU 32분 → GPU 수 분 추정) · 녹음 뒤 그만큼 대기 · 가중치 약 150MB 저장 · 폐기 대상 추가 | 본인 48초 미세조정에서 오류율 1.1~1.9% · "가장 좋음" |
+| C | A로 시작, M1 청취에서 A가 문턱(평균 3점 미만) 미달이면 B 추가 구현 | A와 같음 | — |
+⚠️ 사전학습 GPT 파일 이름(v2Pro 짝 `s1v3.ckpt` 여부)은 구현 첫 단계에서 GPT-SoVITS 커밋 `6d51ffce`의 설정으로 확인한다(추정).
+
+### 143.5 ③ 콜드 스타트 숨기기 — **결정 D2**
+콜드 스타트 실측 76초(이미지 적재 + 모델 적재). Modal `scaledown_window` = 300초(제안)로 데워진 컨테이너를 5분 유지.
+
+| # | 시점(트리거) | 누가 | 효과 |
+|---|---|---|---|
+| W1 | 녹음 화면 진입(동의 통과 뒤) | 클라 → 새 콜러블 `warmCloneEngine` → Functions → Modal `/warm`(즉시 반환 · 백그라운드 적재) | 녹음 최대 60초 + 업로드 + `/prepare` 동안 데워짐 — 본인 체험은 통화까지 대체로 숨김(추정) |
+| W2 | `createVoiceClone`(`/prepare` 호출 자체가 컨테이너를 깨움) | Functions | W1이 실패해도 대기 화면에서 한 번 더 |
+| W3 | 챌린지 받는 사람 입장 화면 열림 | 클라 → `warmCloneEngine`(챌린지 토큰 인증 · 무로그인) | 입장 → 동의 → 시작까지 수십 초 — 다 못 숨길 수 있음 |
+| W4 | 통화 시작인데 아직 연결 안 됨 | 클라 | 수신 화면 벨을 계속 울림(최대 60초) · 연결되면 받기 가능. 넘으면 D5 처리 |
+| W5 | (선택) Modal 메모리 스냅숏 | Modal 설정 | 콜드 스타트 단축 가능(미측정) — 이후 과제 |
+| W6 | (선택) 상시 1대 `min_containers=1` | Modal 설정 | 숨길 필요 없음 · T4 상시 약 $430/월(추정) — 권장 안 함 |
+- 남용 방지: `warmCloneEngine`은 uid(또는 챌린지 토큰)당 2분에 1회 · 하루 20회(제안). 데우기만 하고 통화가 없으면 비용 = 적재 시간 + 5분 대기(T4 약 $0.06 추정).
+
+### 143.6 ④ 지연 (따뜻한 컨테이너 기준 · 추정)
+| 구간 | 값 | 근거 |
+|---|---|---|
+| Live 첫 출력 전사 | 약 1.1초 | Live 첫 오디오 실측과 같다고 가정(추정) |
+| 첫 조각 자르기 대기 | 0.2~0.6초 | 첫 조각 규칙 C1(아래) · 추정 |
+| GSV 첫 소리(스트리밍) | 1.06초(0.57~1.57) | 실측 T4 |
+| 브라우저 ↔ Modal 왕복 | 0.15~0.3초 | 한국 ↔ Modal 기본 리전(미국 추정) |
+| **합계** | **약 2.5~3.0초** | 지금 Live 단독(약 1.1~1.7초 실측)보다 1~1.5초 느리다 |
+- 자르기 규칙: C1 첫 조각 = 첫 `.?!` 또는 (8자 이상이면) 첫 `,` 또는 25자 · C2 다음 조각부터 = 문장 끝(`.?!`) 또는 60자 · C3 `turnComplete`면 남은 글 전부 · C4 한 조각씩 보내고 앞 조각 합성이 끝나면 다음을 보낸다(RTF 0.556 < 1이라 재생 틈 없음 — 추정).
+- 문턱(제안 · 결정 D1 측정 M2로 확인): 첫 소리 p50 > 3.5초 또는 p90 > 5초면 실서비스 보류.
+
+### 143.7 ⑤ 즉시 폐기 (DECISIONS #5 · `onSessionEnded` · 판정표 PC 무변경)
+| # | 대상 | 위치 | 지우는 때 | 방법 |
+|---|---|---|---|---|
+| P1 | 원본 녹음 | `users/{uid}/sessions/{sid}/voice_input.webm` | 세션 종료 | 종전 `purgeSessionArtifacts` ① |
+| P2 | 참조 클립 4 · `ref.json`(D1=B면 GPT 가중치 포함) | `voices/{voiceId}/` | 세션 종료(세션 voiceId) · 챌린지 폐기(챌린지 voiceId) | 새 `GsvVoiceProvider.deleteVoice` = 접두 나열 · 삭제. `deletionLogs` target kind 새 값 `clone_voice` |
+| P3 | Modal 컨테이너 메모리(참조 특징 캐시) | Modal | 합성 WS 닫힘 즉시 | 서비스 코드가 캐시를 비움 · 컨테이너 축소 때 사라짐 |
+| P4 | Modal 임시 파일 | 컨테이너 `/tmp` | 요청 끝 | `finally` 삭제 + 시험 |
+| P5 | Modal 쪽 영속 저장 | 없음(Volume · Dict 사용 0) | — | 서비스 코드 스캔 시험(Volume · Dict 금지) |
+| P6 | 참조 서명 URL | 합성 토큰 안(암호화) | 30분 뒤 만료 | Storage 서명 URL 만료 |
+- `deleteVoice`가 Modal을 부르지 않아도 외부 잔존 0이다(P3 · P5) — Modal 호출 실패가 폐기 결과를 failed로 만들지 않는다.
+- 챌린지는 종전 원칙(ADR-0005 스코프 고정) 그대로: 원본 세션 녹음으로 **새 voiceId**를 만들어 `voices/{새 id}/`에 복사본을 둔다. `purgeChallengeArtifacts`가 그 id를 지운다.
+- ⚠️ 열린 문제: "reused"(전에 쓴 목소리 다시 쓰기)는 전 세션 종료 때 `voices/`가 지워지므로 성립하지 않는다 → RP3의 `ref.json` 없음 = RP4로 떨어진다. 화면에서 "다시 녹음"으로 안내할지 → **결정 D6**.
+
+### 143.8 ⑥ 비밀값 · 설정
+| 이름 | 종류 | 어디 | 용도 |
+|---|---|---|---|
+| `GSV_ENDPOINT_URL` | 일반 설정(defineString) | `functions/.env` · `.env.example` | Modal 웹 엔드포인트 기본 주소(`https://…modal.run`) |
+| `GSV_TOKEN_KEY` | 비밀(defineSecret) | Secret Manager + Modal Secret `gsv-token` | 합성 토큰 서명 · 암호화(AES-256-GCM · 32바이트) — 두 쪽 같은 값 |
+| `MODAL_PROXY_TOKEN_ID` · `MODAL_PROXY_TOKEN_SECRET` | 비밀 | Secret Manager | Functions → Modal `/warm` · `/prepare` · `/evict` 호출(Modal 프록시 인증 헤더). 브라우저에 가지 않음 |
+- README 설정 절과 `.env.example`에 자리표시 값(`YOUR_GSV_ENDPOINT_URL` 등)만 추가. 값 생성 · 등록 명령(`firebase functions:secrets:set` · `modal secret create`)은 README에 이름만 적는다.
+- Modal 서비스 코드는 저장소 `services/gsv/app.py`(새 폴더 · Python 3.11 · GPT-SoVITS 커밋 `6d51ffce` 고정 · 사전학습 모델은 HF `lj1995/GPT-SoVITS` — 라이선스 MIT). 배포는 `modal deploy services/gsv/app.py`(사용자 PC 토큰).
+- 합성 토큰 내용: `{ voiceId, sessionId, exp(발급 + 25분), charBudget, refUrls[4](서명 GET · 30분) }` → AES-GCM 암호화 → 브라우저는 내용을 못 읽는다(참조 클립 URL이 받는 사람에게 노출되지 않음).
+
+### 143.9 ⑦ 챌린지 받는 사람 쪽 통화 경로
+| # | 단계 | 동작 |
+|---|---|---|
+| CH1 | 보내는 사람이 챌린지 만들기 | 종전 `createChallenge` (c) "새 클론" = Modal `/prepare`를 다시 돌리지 않고 원본 세션의 `voices/{원 id}/`를 `voices/{새 id}/`로 복사(GPU 0). 원본 세션이 이미 끝나 지워졌으면 원본 녹음도 없으므로 종전과 같이 실패 |
+| CH2 | 받는 사람 입장 | W3 데우기 |
+| CH3 | 통화 발급 | `createRealtimeCall`이 challenge 세션의 voiceId = 챌린지 voiceId(종전 `realtime/index.ts:137-154`) → RP3 → cloneTts. 응답 `voiceId`는 종전대로 빈 값 |
+| CH4 | 받는 사람이 토큰으로 할 수 있는 것 | 25분 동안 보내는 사람 목소리로 **임의 문장** 합성 가능 — 남용 위험 → **결정 D4** |
+| CH5 | 챌린지 폐기 | 종전 `purgeChallenge` → `deleteVoice(챌린지 voiceId)` = P2 |
+
+### 143.10 클라 통화 화면 변경 (`src/lib/realtime/GeminiVoiceSession.tsx` · 구현 범위)
+| # | 지점 | 변경 |
+|---|---|---|
+| UI1 | Live 오디오 예약(`:1610` 부근) | `cloneTts`면 Live PCM은 예약하지 않는다. 대신 GSV PCM을 **같은 예약 블록**(정규화 · `nextPlayTime` · `scheduledSources` · `markSpeaking`)에 넣는다 — 반이중 · 진단 · 지연 로그가 그대로 GSV 재생을 따른다 |
+| UI2 | 출력 전사(`:1564`) | 종전 처리 + 사고 차단 게이트 통과분만 조각 버퍼에 넣고 143.6 규칙으로 잘라 WS로 보낸다 |
+| UI3 | "말하는 중" 판정 | Live 턴이 끝나도 합성 대기 조각 > 0이면 말하는 중(마이크 막음 유지 · 끊기 배수 `beginHangupDrain`도 대기) |
+| UI4 | 끼어들기 `interrupted` | 종전 재생 정지 + WS `cancel` + 조각 버퍼 비움 |
+| UI5 | WS 끊김 · 오류 | 통화 중 1회 재연결(같은 토큰). 실패하면 결정 D5 |
+| UI6 | 10분 Live 재연결(§140) | 합성 WS와 무관 — 유지 |
+| UI7 | 통화 화면 표기 | "본인 목소리" 표기는 `cloneTts` 연결 성공 때만(근거 없는 표기 금지 — 종전 원칙) |
+- 비용 주의: Live 오디오 출력 과금은 남는다(쓰지 않는 음성도 과금 — 이중 과금 · 추정 통화당 소폭).
+
+### 143.11 결정이 필요한 것 (메인 세션 → 사용자)
+| # | 질문 | 선택지 (권장 = 첫째) |
+|---|---|---|
+| D1 | 미세조정 | (A) 제로샷 + 참조 4개로 시작, 청취 M1이 3점 미만이면 (B) 추가 · (B) 처음부터 사용자별 GPT 미세조정(녹음 뒤 수 분 대기) |
+| D2 | 데우기 시점 | (A) 녹음 화면 진입 + 챌린지 입장 화면(W1~W4) · (B) 녹음 업로드 때만(대기 화면 약 1분) · (C) 상시 1대(월 약 $430) |
+| D3 | 지연 문턱 | (A) 첫 소리 p50 ≤ 3.5초 · p90 ≤ 5초면 출시 · (B) p50 ≤ 2.5초(지금 측정으로는 못 맞출 가능성 큼) |
+| D4 | 받는 사람 토큰 남용 | (A) 토큰 25분 · 글자 상한 3,000자 · 합성 전 서버 가드(실존 기관명 · 금지어) 서비스 쪽에서도 검사 · (B) 위 + 합성 글을 Functions가 기록(지연 증가) · (C) 챌린지는 복제 목소리 제외(Live 기본 음성) |
+| D5 | 복제 연결 실패 때 | (A) Live 기본 음성으로 이어 가고 "본인 목소리" 표기 숨김 + 리포트에 사유 · (B) 통화를 끝내고 다시 시도 안내 |
+| D6 | "reused"(전 목소리 다시 쓰기) | (A) 이미 지워졌으므로 선택지를 숨기고 다시 녹음 안내 · (B) 사용자가 동의하면 목소리를 보관(즉시 폐기 원칙 예외 — 권장 안 함) |
+
+### 143.12 실측 계획 (⛔ 매번 메인 승인 · 참조 음성은 Windows Heami TTS 클립 또는 사용자 본인 동의 녹음만)
+| # | 측정 | 비용(추정) | 판정 |
+|---|---|---|---|
+| M1 | Modal T4 제로샷(사전학습 GPT) 문장 8개 생성 · 사용자 청취 · 발음 오류율 | T4 약 3분 ≈ $0.05 | D1 |
+| M2 | Live(실 키) 3세션 + GSV WS 전 구간 첫 소리 p50 · p90 | Live 3세션 + T4 약 15분 ≈ $0.2 | D3 |
+| M3 | 콜드 스타트(W1 시점부터 통화 연결까지) 1회 | T4 약 8분 | D2 |
+
+### 143.13 확인 안 한 것
+- Modal 리전 고정 가능 여부 · 한국 ↔ Modal 실제 왕복.
+- T4 한 대에서 동시 통화 2개(RTF 0.556 × 2 ≈ 1.1 → 실시간 미달 추정 · 그래서 1통화 1컨테이너).
+- faster-whisper를 같은 이미지에 넣었을 때 이미지 크기 · 적재 시간 증가.
+- 사전학습 GPT 파일 이름(143.4 ⚠️).
