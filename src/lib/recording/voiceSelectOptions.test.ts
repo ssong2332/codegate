@@ -21,8 +21,8 @@ test("[D-130] 화면 — 노출 술어는 getExperienceMode()로 정해진다", 
   assert.match(PAGE, /useState<boolean>\(\(\) => shouldShowCloneVoiceOptions\(getExperienceMode\(\)\)\)/);
 });
 
-test("[D-130] 화면 — ①'지금 30초 녹음' · ②'저장된 내 목소리 사용' 블록이 showCloneOptions 조건 안에 있다", () => {
-  const recordLabel = PAGE.indexOf("지금 30초 녹음</span>");
+test("[D-130] 화면 — ①'지금 1분 녹음' · ②'저장된 내 목소리 사용' 블록이 showCloneOptions 조건 안에 있다", () => {
+  const recordLabel = PAGE.indexOf("지금 1분 녹음</span>");
   const storedLabel = PAGE.indexOf("저장된 내 목소리 사용</span>");
   const fallbackLabel = PAGE.indexOf("기본 남성·여성 목소리</span>");
   assert.ok(recordLabel > -1 && storedLabel > -1 && fallbackLabel > -1, "카드 라벨을 찾지 못했다");

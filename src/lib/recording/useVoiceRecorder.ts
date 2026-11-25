@@ -6,8 +6,9 @@
 // (Architecture.md §6.1 — "타인 음성 무단 등록 경로가 UI에 없음"이 AC-020 클라이언트측 절반).
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// 대본(SCRIPT_TEXT, record 화면)은 30초 낭독 분량으로 작성됨(UX-002) — 도달 시 자동 정지.
-export const MAX_RECORDING_SECONDS = 30;
+// 대본(SCRIPT_LINES, record 화면)은 상황 11가지 · 약 46~57초 낭독 분량(UX-002) — 1분 도달 시 자동 정지.
+// 2026-11-26 사용자 결정 "녹음은 최대 1분" — 목소리 복제가 억양까지 배우려면 말투가 다양한 녹음이 필요하다(GPT-SoVITS 시험).
+export const MAX_RECORDING_SECONDS = 60;
 // "클론 생성" 활성화 최소 길이. UX.md Validation은 "≈30초 미달 시 비활성"이라고만 하고 정확한
 // 하한을 정하지 않아, 조기 정지로 인한 왕복 재녹음을 줄이도록 여유(10초)를 둔 값이다(judgment call).
 export const MIN_RECORDING_SECONDS = 20;

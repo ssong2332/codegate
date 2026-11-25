@@ -4,6 +4,11 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-11-26 추가분, 브랜치 `claude/record-script-1min`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting과 Storage 규칙**(규칙은 주석만 바뀜 · functions 변경 0).
+
+### Changed
+- **목소리 녹음 최대 1분 · 상황별 대본(DECISIONS #256)**: 녹음 상한을 30초에서 60초로 늘렸다. 대본은 말투 안내가 붙은 11줄(질문 · 다급 · 걱정 · 기쁨 · 놀람 · 숫자 등)이다. "30초 녹음" 문구 3곳(목소리 선택 · 시나리오 설명)도 "1분"으로 바꿨다.
+
 > ⚠️ **이 블록(2026-11-06 추가분, 브랜치 `claude/card-incoming-mic-diag`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting과 Functions**.
 
 ### Fixed
