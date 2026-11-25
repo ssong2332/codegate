@@ -20,6 +20,7 @@ import { markCallSetup, markCredentialsPrefetched, resetCallSetupMarks } from ".
 import { noteAccept, noteCredentialSource } from "./audioDiagnostics";
 import { SCREEN_OFF_COPY } from "./backgroundCall";
 import { CLONE_CALL_FAILED_MESSAGE, isCloneCallFailedError } from "./cloneCallFailed";
+import { connectTimeoutMs } from "./cloneTts";
 
 export type RealtimeCallStatus =
   | "idle"
@@ -166,7 +167,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
         setStatus("error");
         setErrorMessage("통화 연결이 지연되어 텍스트로 진행합니다.");
       }
-    }, 12000);
+    }, connectTimeoutMs(Boolean(credentials.cloneTts))); // §143 CW — 복제 통화는 합성 준비(최대 150초)를 "연결 중"으로 기다린다
     return () => clearTimeout(timer);
   }, [credentials, status]);
 

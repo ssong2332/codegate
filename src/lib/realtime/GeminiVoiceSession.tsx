@@ -617,6 +617,8 @@ export default function GeminiVoiceSession({
     let recheckGoAway: () => void = () => {};
     // ⭐ §143 — 복제 목소리 통화(`credentials.cloneTts`)면 Live 오디오는 재생하지 않고 출력 전사를 GPT-SoVITS로 보내 받은 PCM을 재생한다.
     let cloneTts: CloneTtsStream | null = null;
+    /** 판정표 CW — 복제 통화의 합성 준비(true = 준비 · false = 상한 실패). 복제 아닌 통화는 즉시 true. */
+    let cloneReady: Promise<boolean> = Promise.resolve(true);
     let cloneFailedReported = false;
     const reportCloneFailed = () => {
       if (cloneFailedReported || cancelled) return;
@@ -1487,7 +1489,8 @@ export default function GeminiVoiceSession({
         // 연결 중 거부돼도 처리되지 않은 rejection이 남지 않게 한다(실제 처리는 아래 await).
         micRequest.catch(() => {});
         pendingMic = micRequest;
-        // ⭐ §143 — 복제 목소리 합성 연결(콜드 스타트면 최대 60초 · W4). 실패 = 기본 음성으로 넘어가지 않는다(D5).
+        // ⭐ §143 — 복제 목소리 합성 연결(콜드 스타트면 최대 150초 · 판정표 CW). 실패 = 기본 음성으로 넘어가지 않는다(D5).
+        // CW1 · CW2 — 준비될 때까지 화면은 "연결 중"(onActive 보류) · 오프닝 · 마이크 전송도 보류(아래 `cloneReady`).
         if (credentials.cloneTts) {
           const stream = new CloneTtsStream(credentials.cloneTts.url, credentials.cloneTts.token, {
             onPcm: scheduleClonePcm,
@@ -1499,9 +1502,10 @@ export default function GeminiVoiceSession({
             guard: guardScammer,
           });
           cloneTts = stream;
-          // Live 연결과 병렬 — 준비 전에 온 전사는 스트림이 쌓아 두었다가 준비되면 보낸다(연결을 기다리지 않는다).
-          void stream.open().then((ok) => {
-            if (!ok) reportCloneFailed();
+          // Live 연결과 병렬(연결을 기다리지 않는다) — 기다리는 쪽은 통화 연결 알림 · 오프닝뿐이다.
+          cloneReady = stream.open().then((ok) => {
+            if (!ok) reportCloneFailed(); // CW3
+            return ok;
           });
         }
 
@@ -1844,7 +1848,10 @@ export default function GeminiVoiceSession({
                 if (cancelled || generation !== liveGeneration) return;
                 if (generation === 0) {
                   firstOpenAtMs = performance.now();
-                  handlersRef.current.onActive();
+                  // §143 CW1 · CW2 — 복제 통화는 합성이 준비된 뒤에 "통화 연결"을 알린다(그때까지 화면은 "연결 중").
+                  void cloneReady.then((ok) => {
+                    if (ok && !cancelled && generation === liveGeneration) handlersRef.current.onActive();
+                  });
                 }
               },
               onmessage: (message: LiveServerMessageLike) => {
@@ -2174,6 +2181,11 @@ export default function GeminiVoiceSession({
         // 권한이 이미 있으면 마이크가 연결보다 먼저 끝나 기다림 0이다(`connectToOpeningSentMs`로 관찰).
         const micStream = await micRequest;
         if (cancelled || !micStream) {
+          stopStream(micStream);
+          return;
+        }
+        // §143 CW1 — 복제 통화는 합성이 준비될 때까지 오프닝 · 마이크 전송을 보류한다(실패 = CW3 · 부모가 통화를 끝낸다).
+        if (!(await cloneReady) || cancelled) {
           stopStream(micStream);
           return;
         }

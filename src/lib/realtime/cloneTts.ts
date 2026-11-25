@@ -8,7 +8,22 @@
 // | C3 | 턴 끝(`final`) | 남은 글 전부 |
 // | C4 | 위 어디에도 안 닿음 | 자르지 않고 기다린다 |
 export const CLONE_TTS_SAMPLE_RATE = 32000;
-export const CLONE_TTS_READY_TIMEOUT_MS = 60_000; // W4 — 수신 화면 벨을 울리며 기다리는 상한(콜드 스타트)
+// 연결 대기 판정표 CW(§143.18 · 메인 결정 (b) "대기 150초+화면" — 콜드 스타트 실측 134초):
+// | 행 | 조건 | 동작 |
+// | CW1 | 복제 통화 · 합성 준비 전 | 화면 = 종전 "연결 중…"(status connecting) · 오프닝 · 마이크 전송 보류 |
+// | CW2 | 상한 안에 준비 | 통화 연결(onActive) · 오프닝을 보낸다 |
+// | CW3 | 상한(150초) 지남 | D5 — 통화를 끝내고 재시도 안내(기본 음성 · 텍스트로 넘어가지 않음) |
+// | CW4 | 대기 중 참가자가 끊음 | 종전 끊기(언제든 — 연결 중 화면의 종료 버튼) |
+// | CW5 | 준비 전 소켓 닫힘(기동 중 거절 등) | 상한 안이면 2초 뒤 다시 연결 · 상한 넘으면 CW3 |
+// | CW6 | 복제 아닌 통화 | 종전 연결 상한 12초 |
+export const CLONE_TTS_READY_TIMEOUT_MS = 150_000; // CW3
+export const CLONE_TTS_RETRY_MS = 2_000; // CW5
+/** 일반 통화의 "연결 중" 상한(종전 값 — CW6). */
+export const CALL_CONNECT_TIMEOUT_MS = 12_000;
+/** 화면 "연결 중" 상한 — 복제 통화는 합성 상한(CW3)보다 길게 둔다(그 전에 D5 안내가 먼저 나가게). */
+export function connectTimeoutMs(cloneCall: boolean): number {
+  return cloneCall ? CLONE_TTS_READY_TIMEOUT_MS + 15_000 : CALL_CONNECT_TIMEOUT_MS;
+}
 
 const END = /[.?!…。？！]/;
 
@@ -75,30 +90,42 @@ export class CloneTtsStream {
   private reconnects = 0;
   private closed = false;
   private readyWaiters: ((ok: boolean) => void)[] = [];
+  /** CW5 — 준비 전 닫힘을 다시 연결해도 되는 마지막 시각(open이 정한다). */
+  private openDeadline = 0;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   private readonly url: string;
   private readonly token: string;
   private readonly handlers: CloneTtsHandlers;
   private readonly makeSocket: (url: string) => Sock;
+  private readonly now: () => number;
 
   // 매개변수 속성은 쓰지 않는다 — 루트 시험이 Node 타입 지우기(--experimental-strip-types)로 돈다.
-  constructor(url: string, token: string, handlers: CloneTtsHandlers, makeSocket?: (url: string) => Sock) {
+  constructor(url: string, token: string, handlers: CloneTtsHandlers, makeSocket?: (url: string) => Sock, now: () => number = Date.now) {
     this.url = url;
     this.token = token;
     this.handlers = handlers;
     this.makeSocket = makeSocket ?? ((u) => new WebSocket(u) as unknown as Sock);
+    this.now = now;
   }
 
-  /** 연결 · 인증 · 참조 준비까지. 상한 안에 못 끝내면 false(D5). */
+  /** 연결 · 인증 · 참조 준비까지. 상한 안에 못 끝내면 false(D5 · CW3). */
   open(timeoutMs = CLONE_TTS_READY_TIMEOUT_MS): Promise<boolean> {
+    this.openDeadline = this.now() + timeoutMs;
     this.connect();
     return new Promise((resolve) => {
       if (this.ready) return resolve(true);
-      const t = setTimeout(() => resolve(false), timeoutMs);
-      this.readyWaiters.push((ok) => {
+      const waiter = (ok: boolean) => {
         clearTimeout(t);
         resolve(ok);
-      });
+      };
+      // CW3 — 상한: 기다리던 연결을 접는다(늦게 준비돼도 쓰지 않는다 · 닫힘이 onFatal을 다시 부르지 않게 closed 먼저).
+      const t = setTimeout(() => {
+        this.readyWaiters = this.readyWaiters.filter((w) => w !== waiter);
+        this.close();
+        resolve(false);
+      }, timeoutMs);
+      this.readyWaiters.push(waiter);
     });
   }
 
@@ -147,6 +174,14 @@ export class CloneTtsStream {
       this.connect();
       return;
     }
+    // CW5 — 아직 준비 전(콜드 기동 중 거절 등)이면 상한 안에서 다시 잇는다(상한은 open의 타이머가 맡는다).
+    if (!wasReady && this.readyWaiters.length > 0 && this.now() + CLONE_TTS_RETRY_MS < this.openDeadline) {
+      this.retryTimer = setTimeout(() => {
+        this.retryTimer = null;
+        if (!this.closed) this.connect();
+      }, CLONE_TTS_RETRY_MS);
+      return;
+    }
     this.readyWaiters.splice(0).forEach((w) => w(false));
     this.closed = true;
     this.handlers.onFatal(wasReady ? "closed" : "connect");
@@ -183,6 +218,8 @@ export class CloneTtsStream {
 
   close() {
     this.closed = true;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     this.sock?.close();
     this.sock = null;
   }
