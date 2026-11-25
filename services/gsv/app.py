@@ -137,9 +137,16 @@ class Gsv:
                     await asyncio.to_thread(_fetch, ref["url"], p)
                     paths.append(p)
                 base = {"text_lang": "ko", "ref_audio_path": paths[0], "prompt_text": t["refs"][0]["text"], "prompt_lang": "ko",
-                        "aux_ref_audio_paths": paths[1:], "text_split_method": "cut0", "batch_size": 1, "seed": 1234,
+                        "aux_ref_audio_paths": paths[1:], "text_split_method": "cut5", "batch_size": 1, "seed": 1234,
                         "streaming_mode": True}
                 budget = Budget(int(t.get("charBudget", 3000)), t.get("banned", []))
+
+                def prime():  # 참조 특징 추출(첫 합성에 약 5.5초 — M1 실측)을 준비 단계로 옮긴다(벨 울리는 동안)
+                    with self.lock:
+                        for _ in self.tts.run({**base, "text": "네.", "streaming_mode": False}):
+                            pass
+
+                await asyncio.to_thread(prime)
                 await sock.send_text(json.dumps({"type": "ready", "sr": SR_OUT}))
                 _log("ws_ready", prepSec=round(time.time() - started, 2))
                 loop = asyncio.get_running_loop()
