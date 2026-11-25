@@ -4,6 +4,11 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-11-26 추가분, 브랜치 `claude/send-record-return`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
+
+### Fixed
+- **지인에게 보내기 → 녹음 뒤 본인 체험으로 넘어가던 문제**: 복제 대기 화면이 보내기 모드를 확인하지 않아, 녹음이 끝나면 그 시나리오로 본인 통화를 시작했다. 이제 보내기 모드면 세션을 만들지 않고 챌린지 만들기 화면으로 돌아간다(판정표 `cloneReadyRoute.ts`). ⚠️ 복제 목소리 통화 자체가 음성으로 연결되지 않는 문제(ElevenLabs 꺼짐 → 텍스트 대화)는 별도 작업(GPT-SoVITS 연결)이다.
+
 > ⚠️ **이 블록(2026-11-26 추가분, 브랜치 `claude/record-script-1min`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting과 Storage 규칙**(규칙은 주석만 바뀜 · functions 변경 0).
 
 ### Changed

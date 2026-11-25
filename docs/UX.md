@@ -1094,7 +1094,7 @@ Flow IDs and Screen IDs are immutable once assigned — never renumber existing 
 | Purpose | ElevenLabs 클론 생성(수 초~수십 초) 동안 "멈춘 것처럼 보이는" 상황을 막고 데모 흐름을 유지한다. |
 | User Goal | 내 목소리 클론이 만들어지는 동안 기다린다. |
 | Entry | UX-002에서 "클론 생성". |
-| Exit | 클론 생성 완료 → UX-014(통화). |
+| Exit | 클론 생성 완료 → UX-014(통화). **(2026-11-26 정정) send(지인에게 보내기)에서 녹음하러 온 경우 → 세션을 만들지 않고 UX-019(챌린지 만들기)로 복귀**(판정표 `src/lib/recording/cloneReadyRoute.ts` · 메신저 목소리 선택 복귀는 종전대로 UX-025). |
 | Primary Actions | 없음(대기). |
 | Secondary Actions | 취소/뒤로(재녹음으로 복귀). |
 | States | Loading: 단계형 진행 표시("목소리 분석 중 → 클론 생성 중 → 준비 완료")·예상 시간 안내·진행 애니메이션(정지 인상 방지) / Empty: N/A / Error: 생성 실패·타임아웃 → 재시도 버튼 + 데모 폴백(사전 준비 음성) 안내 / Success: "준비 완료" 후 자동/버튼 이동. |
