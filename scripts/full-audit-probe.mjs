@@ -217,6 +217,18 @@ const FACTUAL_BY_DEMAND = [
   [/(자녀|아이|아드님|따님|아들|딸)/, "우리 아들은 지금 회사에 있을 텐데요? 아까 통화했어요."],
 ];
 const FACTUAL_CHECK = "일단 끊고 제가 대표번호로 확인 전화 해 볼게요.";
+// 2026-11-25 #616 확인(판정표 HB) — 클라 `src/lib/realtime/stallRecovery.ts` HOSTILE_PARTICIPANT 사본(글자까지 같게). 아래 hostileStreak 대사는 전부 이 정규식에 걸린다(시작 때 검사).
+const PROBE_HOSTILE_PARTICIPANT =
+  /사기|피싱|신고|경찰|거짓말|꺼져|그만\s*(?:해|하)|싫(?:어|습|다)|못\s*(?:믿|알려|주|해요?(?=[\s.?!~,]|$))|어떻게\s*믿|내가\s*왜|너\s*누구|누구(?:냐|야)|누구한테\s*전화|끊(?:을|는다|겠|어요)|안\s*(?:믿|속|알려|불러|줘|한다|해요?(?=[\s.?!~,]|$)|할(?:래|게|\s*거))/;
+// hostileStreak — 본인 확인을 계속 거부하고 매 답이 적대(직전 두 발화 적대 연속이 끊기지 않게).
+const HOSTILE_STREAK_LINES = [
+  "본인 확인은 안 할 거예요. 그쪽이 누군지 어떻게 믿어요?",
+  "사기 전화 같은데요. 제 정보 못 알려 드려요.",
+  "못 믿겠어요. 경찰에 먼저 물어볼 거예요.",
+  "이름이고 생년월일이고 안 알려 줘요. 그만하세요.",
+  "피싱이잖아요. 신고할 거예요.",
+];
+if (!HOSTILE_STREAK_LINES.every((line) => PROBE_HOSTILE_PARTICIPANT.test(line))) throw new Error("hostileStreak 대사가 적대 정규식에 안 걸린다");
 // 2026-11-24 브라우저 A A5 확인(판정표 CD) — 배송 통화 첫 두 답을 라이브 대사 그대로: 신청 안 함 → 카드사에 직접 확인. 그 뒤는 factual.
 const FACT_COURIER_OPEN = ["그 카드 저는 신청 안 했어요.", "카드사에 직접 확인 전화 해 볼게요. 카드 뒷면 번호로요."];
 
@@ -225,7 +237,7 @@ function makeResponder(persona, getOtp = () => undefined) {
   let paid = false, lastReply = "";
   return function respond(lastScammerText, i) {
     if (i === 0) return "여보세요, 네 누구세요?";
-    if (persona !== "refuse" && persona !== "hostile" && persona !== "factual" && persona !== "factCourier" && /인증\s?번호|인증 코드|숫자 여섯|여섯 자리/.test(lastScammerText) && getOtp()) {
+    if (persona !== "refuse" && persona !== "hostile" && persona !== "factual" && persona !== "factCourier" && persona !== "hostileStreak" && /인증\s?번호|인증 코드|숫자 여섯|여섯 자리/.test(lastScammerText) && getOtp()) {
       const r = `${persona === "suspicious" ? "음… 알겠어요. " : ""}${getOtp()}요.`;
       if (r !== lastReply) return (lastReply = r);
     }
@@ -236,6 +248,7 @@ function makeResponder(persona, getOtp = () => undefined) {
       const r = hit && i % 2 === 0 ? hit[1] : HOSTILE_LINES[(i - 1) % HOSTILE_LINES.length];
       return (lastReply = r === lastReply ? HOSTILE_LINES[i % HOSTILE_LINES.length] : r);
     }
+    if (persona === "hostileStreak") return (lastReply = HOSTILE_STREAK_LINES[(i - 1) % HOSTILE_STREAK_LINES.length]);
     if (persona === "factCourier" && i <= FACT_COURIER_OPEN.length) return (lastReply = FACT_COURIER_OPEN[i - 1]);
     if (persona === "factual" || persona === "factCourier") {
       if (i % 5 === 4) return (lastReply = FACTUAL_CHECK);
@@ -261,7 +274,7 @@ function makeResponder(persona, getOtp = () => undefined) {
     return (lastReply = FILLER[i % FILLER.length]);
   };
 }
-const MAX_USER_TURNS = { comply: 16, suspicious: 16, refuse: 9, verbal: 16, verbalInstall: 16, verbalTransfer: 16, truthful: 16, hostile: 12, factual: 14, factCourier: 14 };
+const MAX_USER_TURNS = { comply: 16, suspicious: 16, refuse: 9, verbal: 16, verbalInstall: 16, verbalTransfer: 16, truthful: 16, hostile: 12, factual: 14, factCourier: 14, hostileStreak: 12 };
 // 2026-11-07 — truthful 참가자가 금 거래소 화면 보류 뒤 하는 말(첫 줄 = 보류 직후 1회 · 나머지 = 이후 망설임 반복).
 const GOLD_HELD_FIRST_LINE = "화면에서 구매가 보류됐다고 나와요. 수사기관이 금을 사라고 하지 않는다고, 112에 확인하라던데요?";
 const CASH_HELD_FIRST_LINE = "화면에서 출금 예약이 보류됐다고 나와요. 수사기관이 현금을 찾으라고 하지 않는다고, 112에 확인하라던데요?";
@@ -570,7 +583,11 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
               .map((d) => ({ landingId: findInCallSmsItem(scenarioId, d.smsId).fakeLandingId, consented: true, submitted: false })),
           )
         : undefined;
-      const p = planSmsBackstop({ declared, delivered, userTurns, claimed, ...(installPending !== undefined ? { installPendingSince: installPending } : {}) });
+      // #616 판정표 HB 미러 — 클라 `participantHostileStreak`(직전 두 참가자 발화 둘 다 적대 · 옛 lib는 인자를 무시).
+      const lastTwoUser = turns.filter((t) => t.role === "user" && (t.text ?? "").trim()).slice(-2);
+      const participantHostile = lastTwoUser.length === 2 && lastTwoUser.every((t) => PROBE_HOSTILE_PARTICIPANT.test(t.text));
+      const p = planSmsBackstop({ declared, delivered, userTurns, claimed, ...(installPending !== undefined ? { installPendingSince: installPending } : {}), ...(participantHostile ? { participantHostile: true } : {}) });
+      events.push({ t: now(), ev: "backstop", userTurns, claimed, participantHostile, action: p.action, delivered: delivered.length });
       if (installPending !== undefined) events.push({ t: now(), ev: "installHold", since: installPending, userTurns, action: p.action });
       // R1 미러(2026-11-01) — 앱 `deliverInCallSms` 백스톱 응답 `screenStatusInstruction`처럼 발송 아닌 응답이면 화면 기록 · 재촉 단계 1줄을 맥락 주입(옛 lib = 0).
       if (p.action !== "deliver" && verifyPhase !== "placed" && screenActionLib?.buildLiveScreenStatusInstruction && screenActionLib.screenActionApplies(variantId)) {
