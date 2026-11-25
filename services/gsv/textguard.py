@@ -18,3 +18,19 @@ class Budget:
             return "banned"
         self.left -= len(text)
         return None
+
+
+# GPT 생성 설정(억양 시험 · §143.19) — 토큰(서버가 봉인)에 실린 값만, 허용 범위로 잘라 쓴다. 운영 토큰에는 없다 = 사전학습 기본값.
+GEN_RANGES = {"top_k": (1, 50), "top_p": (0.1, 1.0), "temperature": (0.1, 2.0), "repetition_penalty": (1.0, 2.0)}
+
+
+def gen_params(raw) -> dict:
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for k, (lo, hi) in GEN_RANGES.items():
+        v = raw.get(k)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            v = min(hi, max(lo, v))
+            out[k] = int(v) if k == "top_k" else float(v)
+    return out

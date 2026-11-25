@@ -2,7 +2,7 @@
 import ast, os, unittest
 from gsvtoken import TokenError, open_token, seal_token
 from refpick import pick
-from textguard import Budget
+from textguard import Budget, gen_params
 
 KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="  # 시험 전용(0..31)
 SCRIPT = [("또박또박", "안녕하세요. 지금부터 제 목소리를 천천히 녹음해 보겠습니다."),
@@ -64,6 +64,13 @@ class PickTest(unittest.TestCase):
         r = pick(s, SCRIPT)
         self.assertEqual(r["main"]["line"], 1)
         self.assertGreaterEqual(r["main"]["end"] - r["main"]["start"], 3.0)
+
+
+class GenParamsTest(unittest.TestCase):
+    def test_clamp_and_allowlist(self):
+        self.assertEqual(gen_params(None), {})
+        self.assertEqual(gen_params({"top_k": 99, "temperature": 0, "seed": 1, "top_p": True}), {"top_k": 50, "temperature": 0.1})
+        self.assertEqual(gen_params({"top_k": 15.7, "repetition_penalty": 1.2}), {"top_k": 15, "repetition_penalty": 1.2})
 
 
 class BudgetTest(unittest.TestCase):

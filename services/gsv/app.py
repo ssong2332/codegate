@@ -77,7 +77,7 @@ class Gsv:
         from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
         from gsvtoken import TokenError, open_token
         from refpick import pick
-        from textguard import Budget
+        from textguard import Budget, gen_params
         api = FastAPI()
 
         def auth(token, kind):
@@ -138,7 +138,8 @@ class Gsv:
                     paths.append(p)
                 base = {"text_lang": "ko", "ref_audio_path": paths[0], "prompt_text": t["refs"][0]["text"], "prompt_lang": "ko",
                         "aux_ref_audio_paths": paths[1:], "text_split_method": "cut5", "batch_size": 1, "seed": 1234,
-                        "streaming_mode": True}
+                        "streaming_mode": True, **gen_params(t.get("gen"))}  # §143.19 — 운영 토큰엔 gen 없음 = 기본값
+                asr = bool(t.get("asr"))  # §143.19 시험 전용(실측 클라이언트가 봉인) — 합성 결과 받아쓰기를 done에 싣는다
                 budget = Budget(int(t.get("charBudget", 3000)), t.get("banned", []))
 
                 def prime():  # 참조 특징 추출(첫 합성에 약 5.5초 — M1 실측)을 준비 단계로 옮긴다(벨 울리는 동안)
@@ -174,7 +175,7 @@ class Gsv:
                         await sock.send_text(json.dumps({"type": "rejected", "id": sid, "why": why}))
                         continue
                     cancel.clear()
-                    t0, first = time.time(), None
+                    t0, first, heard = time.time(), None, []
 
                     def gen():
                         nonlocal first
@@ -185,10 +186,19 @@ class Gsv:
                                     break
                                 pcm = (a.clip(-1, 1) * 32767).astype("<i2") if a.dtype.kind == "f" else a.astype("<i2")
                                 asyncio.run_coroutine_threadsafe(sock.send_bytes(struct.pack("<I", sid) + pcm.tobytes()), loop).result()
+                                if asr:
+                                    heard.append(pcm)
                                 first = first or time.time() - t0
 
                     await asyncio.to_thread(gen)
-                    await sock.send_text(json.dumps({"type": "done", "id": sid, "cancelled": cancel.is_set()}))
+                    done = {"type": "done", "id": sid, "cancelled": cancel.is_set()}
+                    if asr and heard:
+                        import numpy as np
+                        a = np.concatenate(heard).astype("float32") / 32768
+                        a = a[: len(a) // 2 * 2].reshape(-1, 2).mean(axis=1)  # 32k → 16k(받아쓰기 입력)
+                        segs = await asyncio.to_thread(lambda: list(self.whisper.transcribe(a, language="ko")[0]))  # 생성기라 스레드 안에서 다 돌린다
+                        done["asr"] = " ".join(x.text.strip() for x in segs)
+                    await sock.send_text(json.dumps(done, ensure_ascii=False))
                     _log("say", chars=len(text), firstSec=round(first or -1, 2), sec=round(time.time() - t0, 2), cancelled=cancel.is_set())
                 reading.cancel()
             except WebSocketDisconnect:
