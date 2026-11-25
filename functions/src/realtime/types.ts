@@ -139,6 +139,11 @@ export type RealtimeCallCredentials = {
    * 세션에도 이제 이 필드가 있다(`endCall` ⇔ `endCallFailureInstruction` 쌍). "도구 0 = 필드 없음"은 메신저 · 중간 leg뿐이다.
    */
   liveTools?: LiveToolNames;
+  /**
+   * §143(Architecture.md) — 복제 목소리 통화. 있으면 클라는 Live 오디오를 재생하지 않고 출력 전사를 이 주소(WSS · GPT-SoVITS)로
+   * 보내 받은 소리를 재생한다. `token`은 암호문(참조 클립 서명 URL을 담는다 — 클라는 읽지 못한다). gemini 경로에서만 붙는다.
+   */
+  cloneTts?: { url: string; token: string };
 };
 
 export interface RealtimeVoiceProvider {

@@ -10,7 +10,7 @@ import { storage } from "@/lib/firebase";
 import { useCurrentUser } from "@/lib/auth";
 import { hasGrantedConsent } from "@/lib/consent";
 import { hasVerifiedAge } from "@/lib/age";
-import { createVoiceClone } from "@/lib/api";
+import { createVoiceClone, warmCloneEngine } from "@/lib/api";
 import {
   MAX_RECORDING_SECONDS,
   MIN_RECORDING_SECONDS,
@@ -90,6 +90,8 @@ export default function RecordPage() {
           return;
         }
         setGateState("ok");
+        // §143.5 W1 — 녹음(최대 1분) · 업로드 동안 복제 합성 서비스 콜드 스타트(약 76초)를 미리 치른다.
+        warmCloneEngine();
       } catch {
         if (!cancelled) setGateState("check-error");
       }

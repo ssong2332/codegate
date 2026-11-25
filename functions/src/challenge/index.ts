@@ -35,6 +35,8 @@ import { denyAnonymous } from "../shared/anonymousGate";
 import { isDocId, readDocId } from "../shared/requestValidation";
 import { voiceInputStoragePath } from "../voice";
 import { getVoiceProvider } from "../voice/provider";
+import { GSV_TOKEN_KEY } from "../shared/config";
+import { gsvKey } from "../voice/gsvKey";
 import { PUBLIC_SCENARIOS, isAdvancedOnlyScenario } from "../scenarios/publicMeta";
 import { assertDifficultyAllowed } from "../session/difficultyAllowance";
 import { resolvePersonaCardRequest } from "../session/personaCard";
@@ -67,6 +69,8 @@ ensureFirebaseAdminApp();
 const ACTIVE_STATUSES = ["pending", "consented", "in_progress"] as const;
 
 export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChallengeResponse>>(
+  // §143 — 챌린지 전용 새 클론 = GSV `/prepare` 다시 실행(콜드 스타트 포함 최대 약 3분).
+  { secrets: [GSV_TOKEN_KEY], timeoutSeconds: 240 },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
@@ -208,7 +212,7 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
       // (c) 챌린지 전용 신규 클론(ADR-0005 스코프 고정) — 원본 세션의 voiceId를 재사용하지 않고
       // 항상 새로 발급한다. MockVoiceProvider는 매 호출 randomUUID 기반 voiceId를 반환하므로 소스
       // 세션의 voiceId와 절대 같을 수 없다(에뮬레이터 검증 대상).
-      const provider = getVoiceProvider();
+      const provider = getVoiceProvider(gsvKey());
       const cloneResult = await provider.createClone({
         sessionId: challengeRef.id,
         uid,
@@ -266,7 +270,9 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
   },
 );
 
+// §143 — 이 파일은 createChallenge가 합성 키를 읽어 같은 파일의 모든 진입점이 같은 시크릿을 선언한다(secretDeclarationGate (i)).
 export const deleteChallenge = onCall<DeleteChallengeRequest, Promise<DeleteChallengeResponse>>(
+  { secrets: [GSV_TOKEN_KEY] },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
@@ -306,7 +312,7 @@ export const deleteChallenge = onCall<DeleteChallengeRequest, Promise<DeleteChal
 export const listMyChallenges = onCall<
   ListMyChallengesRequest,
   Promise<ListMyChallengesResponse>
->(async (request) => {
+>({ secrets: [GSV_TOKEN_KEY] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
@@ -376,7 +382,7 @@ async function purgeChallenge(
  * 신규 복합 인덱스 불필요), "이미 deleted인 문서 제외"는 순수 함수(selectChallengesToPurge)가
  * 한다 — 그래야 스케줄이 매일 돌 때마다 예전에 이미 지운 챌린지를 또 지우려 시도하지 않는다.
  */
-export const purgeExpiredChallenges = onSchedule("every 24 hours", async () => {
+export const purgeExpiredChallenges = onSchedule({ schedule: "every 24 hours", secrets: [GSV_TOKEN_KEY] }, async () => {
   const db = getFirestore();
   const nowMs = Date.now();
   const dueSnap = await db

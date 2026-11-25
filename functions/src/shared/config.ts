@@ -119,3 +119,12 @@ export function isDevRouteOverrideEnabled(): boolean {
     return false;
   }
 }
+
+/**
+ * 복제 목소리 합성 서비스(Modal GPT-SoVITS · Architecture.md §143.8). 둘 다 있어야 복제 통화 · 실제 클론 생성이 켜진다.
+ * `GSV_ENDPOINT_URL` = Modal 웹 엔드포인트 기본 주소(`https://…modal.run` · 끝 `/` 없이). 빈 값 = 꺼짐(종전 Mock).
+ * `GSV_TOKEN_KEY` = 32바이트 base64 — Modal Secret `gsv-token`과 같은 값. ⛔ 선언만으로도 배포가 값을 요구한다(위 LLM_API_KEY 주석) —
+ *   배포 전에 `firebase functions:secrets:set GSV_TOKEN_KEY`(README).
+ */
+export const GSV_ENDPOINT_URL = defineString("GSV_ENDPOINT_URL", { default: "" });
+export const GSV_TOKEN_KEY = defineSecret("GSV_TOKEN_KEY");

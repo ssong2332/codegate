@@ -25167,7 +25167,7 @@ Modal `/prepare`가 GPU에서 한다(faster-whisper small · 단어 타임스탬
 
 ⚠️ 전제 확인(PRD 28행 · AC-057 · DECISIONS #198): 자가 체험(self)은 본인 목소리를 쓰지 않는다(기본 남 · 여 목소리만). ⇒ 복제 목소리 통화가 실제로 일어나는 곳 = **받는 사람 쪽 챌린지 통화**(보이스 clone 시나리오 · 에스컬레이션 메신저 챌린지). 본인 체험에서 복제 통화로 가는 흐름은 메인 세션이 고치는 `clone/wait` 결함과 같은 줄기다.
 
-### 143.15 D6 — 보관 목소리 (기존 규정 그대로: ADR-0005 (B) 수명 클래스 · Database.md `users/{uid}/voices/{voiceId}`)
+### 143.15 ⛔ 보류(2026-11-26 메인 지시 — '목소리 프로필'로 메인 세션이 따로 설계 · 이 절은 기록만) D6 — 보관 목소리 (기존 규정 그대로: ADR-0005 (B) 수명 클래스 · Database.md `users/{uid}/voices/{voiceId}`)
 | # | 규정 출처 | 내용 |
 |---|---|---|
 | V1 | ADR-0005 Decision | 보관은 사용자가 **명시적으로 "보관"을 택했을 때만**(opt-in). 기본은 ADR-0003 즉시 폐기 |
@@ -25185,3 +25185,15 @@ Modal `/prepare`가 GPU에서 한다(faster-whisper small · 단어 타임스탬
 | VS4 | 자동 삭제 | 기존 챌린지 스캐너 옆에 `users/*/voices` `retentionDeleteAt <= now` 스캔 → `deleteVoice` + 문서 삭제 + `deletionLogs` |
 | VS5 | 즉시 삭제 | 새 콜러블 `deleteStoredVoice(voiceId)`(본인만) — voice-select ② 목록에 "삭제" 버튼 |
 | VS6 | 기간 | 규정 기본 30일 그대로. 7~90일 조정 UI는 만들지 않는다(요청 없음) |
+
+### 143.16 구현 기록 (1차 PR — 통화 연결 · D6 보관 목소리는 2차)
+| # | 설계 | 구현에서 정한 것 | 파일 |
+|---|---|---|---|
+| I1 | CH1 챌린지 = 참조 복사 | **복사 대신 `/prepare`를 다시 돌린다** — 종전 `createChallenge` (c) "새 클론" 코드를 그대로 탄다(새 코드 0 · GPU 수 초). 원본 녹음이 남아 있을 때만 성립(종전 조건과 같다) | `challenge/index.ts`(secrets · 240초만) |
+| I2 | P2 deletionLogs kind `clone_voice` | **종전 kind `elevenlabs_voice` 그대로** — 스키마 무변경. 이름이 맞지 않는 것은 후속 정리 | `guardrails/purge.ts` 무변경 |
+| I3 | WS 토큰 | 토큰이 수 KB라 주소가 아니라 **첫 메시지** `{type:"auth"}`로 보낸다 | `services/gsv/app.py` · `src/lib/realtime/cloneTts.ts` |
+| I4 | W3 | 동의(`consentChallenge`) 직후 그 세션 id로 부른다. 서버가 세션(챌린지) voiceId가 `gsv_`일 때만 데운다(판정표 WT0 — generic 챌린지 0) | `voice/warm.ts` · `src/app/challenge/join/page.tsx` |
+| I5 | W4 벨 | 1차는 **연결 중 화면**에서 최대 60초 기다린다(수신 화면 벨 연장은 후속) | `GeminiVoiceSession.tsx` |
+| I6 | D5 | 발급 단계 = `failed-precondition` + 정해진 문구 → 클라 `clone-failed` → `endCall("remote")` 종료 셸에 재시도 안내. 통화 중 = 재연결 1회 뒤 같은 길. **서비스 미설정(주소 없음)이면 종전 동작**(텍스트 폴백 — 운영이 오늘과 같다) | `realtime/index.ts` · `useRealtimeCall.ts` · `session/play/page.tsx` |
+| I7 | 미리 합성(`synthesize` — 오프닝 · 텍스트 경로) | 범위 밖 — GSV 공급자도 종전 Mock(무음)을 돌려준다 | `voice/gsvProvider.ts` |
+| I8 | 시험 | 서비스 `python -m unittest discover -s services/gsv`(토큰 · 참조 고르기 · 글자 상한 · Volume 0) · `voice/__tests__/gsvProvider.test.ts`(토큰 언어 간 벡터 · 저장 · 삭제 · 토큰 내용 · WT · RP3) · `src/lib/realtime/cloneTts.test.ts`(판정표 C · 한 조각씩 · 취소 · 재연결 · 문구 · 대본 대조) | — |

@@ -25,12 +25,13 @@ import {
  * 2. **U1 잠금** — 배너가 떠 있는 동안에는 새 콜러블을 시작하지 않는다(§34.4 U1, AC-007 불변식 보호).
  *    이 상태에서 요청을 보내봐야 서버가 어차피 전부 거절하므로 잃는 기능은 없다.
  */
-export async function callCallable<Req, Res>(name: string, request: Req): Promise<Res> {
+// timeoutMs — 기본(SDK 70초)보다 오래 걸리는 콜러블만(§143 복제 준비 = GPU 콜드 스타트 포함 최대 약 3분).
+export async function callCallable<Req, Res>(name: string, request: Req, timeoutMs?: number): Promise<Res> {
   if (areCallablesBlocked()) {
     throw new AuthInvalidationBlockedError(name);
   }
 
-  const callable = httpsCallable<Req, Res>(functionsClient, name);
+  const callable = httpsCallable<Req, Res>(functionsClient, name, timeoutMs ? { timeout: timeoutMs } : undefined);
   try {
     const { data } = await callable(request);
     return data;
