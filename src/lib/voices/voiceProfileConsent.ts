@@ -35,10 +35,14 @@ export function resolveVoiceSlot(
   return { profiles, canRecordNew: profiles.length < VOICE_PROFILE_CAP, selectedId };
 }
 
-/** "N일 뒤 삭제" — 하루 미만 남으면 "오늘 삭제". */
+/**
+ * 판정표 DL(§146 · 2026-11-26 라이브 "7일 저장 직후 6일 뒤 삭제") — 남은 시간을 **올림**한다.
+ * DL1 남은 시간 ≤ 0 → "오늘 삭제" · DL2 0 < 남음 < 1일 → "오늘 삭제" · DL3 남음 ≥ 1일 → 올림 일수(저장 직후 7일 = "7일 뒤 삭제").
+ */
 export function daysLeftLabel(retentionDeleteAtMs: number, nowMs: number): string {
-  const days = Math.floor((retentionDeleteAtMs - nowMs) / (24 * 60 * 60 * 1000));
-  return days < 1 ? "오늘 삭제" : `${days}일 뒤 삭제`;
+  const DAY = 24 * 60 * 60 * 1000;
+  const left = retentionDeleteAtMs - nowMs;
+  return left < DAY ? "오늘 삭제" : `${Math.ceil(left / DAY)}일 뒤 삭제`;
 }
 
 // --- 녹음 화면 → clone/wait 저장 값(탭 범위 sessionStorage) ---

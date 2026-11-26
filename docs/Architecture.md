@@ -25362,3 +25362,17 @@ Modal 정리 근거: 앱은 Volume · Dict 0(`test_gsv.py` NoPersistTest) · 참
 판정표 B(서버 · `services/gsv/app.py`): B1 첫 합성 초기화를 컨테이너 기동 때(사인파 참조 · 사람 목소리 0 · 끝나면 캐시 비움) — 기동이 그만큼 길어진다(콜드만) · B2 참조 4개 동시 받기 · `ws_ready`에 `fetchSec` · `primeSec`(시간만).
 판정표 HO(클라 · `cloneTts.ts`): HO1 벨 울리는 동안 자격증명 미리 받기 직후 합성 연결을 연다 · HO2 받기 뒤 같은 토큰이면 통화 세션이 넘겨받는다(한 번) · HO3 토큰 다름 = 닫고 새로 · HO4 닫힘 = 새로 · HO5 받지 않고 떠나면 닫는다. 계측 = `[gemini-latency]` `cloneSetup` 한 줄(받기 → 실제 첫 복제 음성 `acceptToCloneFirstAudioMs`).
 예상(추정 · 따뜻한 컨테이너): 받기 → 첫 음성 ≈ 마이크 · Live 연결 2.5 + 오프닝 → 첫 자막 조각 0.6 + 합성 첫 조각 1.2 ≈ 4.5 ~ 5.5초(합성 준비가 벨 동안 끝날 때). 확인 = 배포 뒤 실기 `cloneSetup` 줄.
+
+## 146. (Fix — 2026-11-26 · 브랜치 `claude/clone-fail-notice` = main `a6352393` + 변경 · 메인 라이브 시험 → 사용자 "고치고" · DECISIONS #260) **클론 준비 실패 안내 · 보관 남은 일수**
+
+① 판정표 CF — 쉼 없이 이어 읽은 54초 WAV → Modal `/prepare` `{ok:false}`(로그 readLines 1 · segs 4) → `createVoiceClone` internal → 화면 "다시 시도해 주세요"뿐. 문장마다 0.6초 쉰 파일은 ok(readLines 8).
+| 행 | 조건 | 서버(`createVoiceClone`) | 화면(`cloneFailureMessage`) |
+|---|---|---|---|
+| CF1 | `/prepare` `reason` ∈ {too_little_speech, no_main_ref}(refpick.py 실패 사유 전부) | `failed-precondition` · `details.reason = clone_script_unreadable` | "대본을 문장마다 잠깐 쉬며 또렷이 읽은 녹음이 필요해요 — 다시 녹음하거나 다른 파일을 올려 주세요" |
+| CF2 | 그 밖 `{ok:false}` · 빈 결과 | `internal`(종전) | 종전 문구 |
+| CF3 | 네트워크 · 시간 초과(fetch 예외) | 예외 그대로(종전) | 종전 문구 |
+- 업로드 · 즉석 녹음이 같은 호출이라 둘 다 같은 안내. 업로드 묶음에 "대본을 문장마다 잠깐 쉬며 또렷이 읽은 녹음이어야 해요." 한 줄.
+- 손댄 곳: `voice/provider.ts`(선택 필드 `failureReason` · 상수) · `voice/gsvProvider.ts`(prepare 실패 매핑 3줄만) · `voice/index.ts`. services/gsv · 통화 쪽 무변경.
+
+② 판정표 DL — 7일 저장 직후 "6일 뒤 삭제"(내림). 남은 시간을 올림: DL1 ≤ 0 · DL2 1일 미만 = "오늘 삭제" · DL3 1일 이상 = 올림 일수(저장 직후 = "7일 뒤 삭제").
+- 시험 `functions/src/voice/__tests__/cloneFailReason.test.ts` · `src/lib/recording/cloneFailNotice.test.ts`.
