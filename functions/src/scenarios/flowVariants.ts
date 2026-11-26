@@ -65,6 +65,7 @@ import {
   prosecutionVoucherRoutePersona,
 } from "./prosecutionCooperationCall.prompt";
 import { extractTacticLabel } from "./tacticFlavor";
+import { amountRuleLine } from "./smsAmount";
 import { hasVerifyIntercept } from "./verifyIntercept";
 
 export type SmsPurpose = "identity" | "transfer" | "link";
@@ -2709,7 +2710,7 @@ export function resolveVariantPrompt(
   if (variant.multiCall) return resolveMultiCallLegPrompt(base, variant, legIndex);
   const personaPrompt =
     variant.stages.length === 0
-      ? legPersona
+      ? [legPersona, amountRuleLine(variant)].filter(Boolean).join("\n\n") // `current` 변형은 흐름 블록이 없다 — 요구 금액 줄만(W1)
       : `${legPersona}\n\n${buildFlowBlock(variant)}`;
   return {
     ...base,
@@ -2791,7 +2792,8 @@ function resolveMultiCallLegPrompt(base: ScenarioPromptDoc, variant: FlowVariant
   const endRule = leg.exit === "incoming"
     ? MULTI_CALL_LEG_END_INCOMING
     : leg.exit === "dial" ? MULTI_CALL_LEG_END_DIAL : leg.exit === "transfer" ? MULTI_CALL_LEG_END_TRANSFER : MULTI_CALL_LAST_LEG;
-  const lines = [FLOW_BLOCK_HEADER, FLOW_BLOCK_LEAD, ...(leg.stages ?? []).map((summary, i) => `${i + 1}. ${summary}`), endRule];
+  const amountRule = amountRuleLine(variant, multiCallLegIndex(variant, legIndex)); // W1 — 판정표 M1 · M2 · T6
+  const lines = [FLOW_BLOCK_HEADER, FLOW_BLOCK_LEAD, ...(leg.stages ?? []).map((summary, i) => `${i + 1}. ${summary}`), ...(amountRule ? [amountRule] : []), endRule];
   const brief = leg.caseBrief
     ? [MULTI_CALL_CASE_BRIEF_HEADER, `- ${leg.caseBrief}`, `- ${MULTI_CALL_NO_PRIOR_TALK_RULE}`, `- ${MULTI_CALL_IDENTITY_FIRST_RULE}`].join("\n")
     : undefined;
@@ -2819,6 +2821,8 @@ export function multiCallLegTactics(variant: Pick<FlowVariant, "tactics" | "legs
 function buildFlowBlock(variant: FlowVariant): string {
   const lines = [FLOW_BLOCK_HEADER, FLOW_BLOCK_LEAD];
   variant.stages.forEach((stage, i) => lines.push(`${i + 1}. ${stage.summary}`));
+  const amountRule = amountRuleLine(variant); // W1 — 판정표 M1 · M2 · T6
+  if (amountRule) lines.push(amountRule);
   if (variant.legs.length > 1 && !RELAY_RUNTIME_AVAILABLE) {
     lines.push(
       hasVerifyIntercept(variant.scenarioId)

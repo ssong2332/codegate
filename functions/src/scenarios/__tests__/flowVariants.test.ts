@@ -46,6 +46,7 @@ import { resolveSessionSpeakerGender, speakerGenderFor } from "../../realtime/sc
 import { pickGeminiVoiceName } from "../../realtime/geminiProvider";
 import { revertR3C2 } from "../../roleplay/__tests__/r3NoStallDelta";
 import { revertFullAudit } from "../../roleplay/__tests__/fullAuditDelta";
+import { amountRuleLine } from "../smsAmount";
 
 const SRC_ROOT = path.resolve(__dirname, "../../../../src");
 const FUNCTIONS_SRC = path.resolve(__dirname, "../../../src");
@@ -534,7 +535,11 @@ test("[T191 S5 프롬프트 합성] 가드레일 원문 불변 · 최후미 · '
     // T194-a(§84.4.2) — 0번 leg 페르소나가 있으면 그것이 원본을 대신한다(부재 = 원본 재사용 — 종전 단언 그대로).
     const persona = withPlaceholderNames(v.scenarioId, v.legs[0]?.personaPrompt ?? base.personaPrompt);
     if (v.stages.length === 0) {
-      assert.equal(resolved.personaPrompt, persona, `${v.variantId}: 단계 없는 변형은 페르소나 무변경`);
+      // W1(2026-11-27 · 판정표 M1 · M2) — 단계 없는 변형의 페르소나는 무변경이되, 금액 문자를 선언했으면 끝에 요구 금액 줄 하나만 더한다.
+      const rule = amountRuleLine(v);
+      assert.equal(resolved.personaPrompt, rule ? `${persona}
+
+${rule}` : persona, `${v.variantId}: 단계 없는 변형은 페르소나 무변경(+ 요구 금액 줄)`);
     } else {
       assert.ok(resolved.personaPrompt.startsWith(persona), `${v.variantId}: (leg 또는 원본) 페르소나 보존`);
       assert.ok(resolved.personaPrompt.includes("[이번 통화의 흐름]"));
