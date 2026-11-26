@@ -22,7 +22,7 @@ import { getStorage } from "firebase-admin/storage";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { readDocId } from "../shared/requestValidation";
 import { denyAnonymous } from "../shared/anonymousGate";
-import { getVoiceProvider } from "./provider";
+import { CLONE_SCRIPT_UNREADABLE_REASON, getVoiceProvider } from "./provider";
 import { GSV_TOKEN_KEY } from "../shared/config";
 import { gsvKey } from "./gsvKey";
 import type { CreateVoiceCloneRequest, CreateVoiceCloneResponse } from "./types";
@@ -94,6 +94,12 @@ export const createVoiceClone = onCall<CreateVoiceCloneRequest, Promise<CreateVo
     }
 
     if (cloneStatus !== "ready") {
+      // §146 판정표 CF — 대본 줄 인식 부족은 다시 녹음하면 풀린다 → 화면이 구체 안내를 고르도록 사유를 싣는다.
+      if (result.failureReason === "script_unreadable") {
+        throw new HttpsError("failed-precondition", "녹음에서 대본 문장을 충분히 알아듣지 못했습니다.", {
+          reason: CLONE_SCRIPT_UNREADABLE_REASON,
+        });
+      }
       throw new HttpsError("internal", "음성 클론 생성에 실패했습니다.");
     }
 

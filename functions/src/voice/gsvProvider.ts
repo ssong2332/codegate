@@ -11,6 +11,8 @@ export const isGsvVoiceId = (voiceId: string | undefined): voiceId is string =>
   typeof voiceId === "string" && /^gsv_[0-9a-f-]{36}$/.test(voiceId);
 export const gsvVoicePrefix = (voiceId: string): string => `voices/${voiceId}/`;
 export const GSV_REF_JSON = "ref.json";
+/** `/prepare`의 `{ok:false, reason}` 중 녹음을 다시 하면 풀리는 것(refpick.py `pick`). */
+export const GSV_SCRIPT_UNREADABLE: ReadonlySet<string> = new Set(["too_little_speech", "no_main_ref"]);
 
 export type GsvRefMeta = { clips: { file: string; line: number; text: string; sec: number }[] };
 
@@ -42,7 +44,9 @@ export class GsvVoiceProvider implements VoiceProvider {
     // 콜드 스타트(실측 76초) + 받아쓰기 — 넉넉히 기다린다(콜러블 시간 한도는 voice/index.ts).
     const res = (await d.fetchJson(`${d.endpoint}/prepare`, { token }, 170_000)) as PrepareResponse;
     if (!res || res.ok !== true || !Array.isArray(res.clips) || res.clips.length === 0) {
-      return { voiceId: "", cloneStatus: "failed", isMock: false };
+      // §146 판정표 CF — CF1 대본 줄 인식 부족(services/gsv/refpick.py) = script_unreadable · CF2 그 밖 = 사유 없음.
+      const unreadable = !!res && res.ok === false && GSV_SCRIPT_UNREADABLE.has(res.reason);
+      return { voiceId: "", cloneStatus: "failed", isMock: false, ...(unreadable ? { failureReason: "script_unreadable" as const } : {}) };
     }
     const voiceId = `${GSV_VOICE_ID_PREFIX}${randomUUID()}`;
     const meta: GsvRefMeta = { clips: [] };

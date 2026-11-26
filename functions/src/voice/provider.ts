@@ -27,7 +27,12 @@ export type VoiceCloneResult = {
   cloneStatus: VoiceCloneStatus;
   /** true = 목업 산출물(T19). 실 ElevenLabs 클론이면 반드시 false. */
   isMock: boolean;
+  /** §146 — failed일 때만: 녹음에서 대본 줄을 충분히 알아듣지 못함(다시 녹음하면 풀린다). 없으면 그 밖 실패. */
+  failureReason?: "script_unreadable";
 };
+
+/** §146 판정표 CF — createVoiceClone의 failed-precondition `details.reason`(화면이 같은 글자로 가른다). */
+export const CLONE_SCRIPT_UNREADABLE_REASON = "clone_script_unreadable";
 
 export type SynthesizeInput = {
   sessionId: string;
