@@ -61,11 +61,13 @@ test("[SR3] 화면이 떠나면 이동 · 오류 표시 없음", async () => {
 
 test("[배선] clone/wait 보내기 분기 — 저장은 effect cleanup으로 취소되지 않고 한 번만 시작한다", () => {
   const page = read("src/app/clone/wait/page.tsx");
-  const branch = page.slice(page.indexOf('if (route.kind === "challenge") {'), page.indexOf("let cancelled = false;"));
+  const branch = page.slice(page.indexOf('if (action.kind === "save" && pending) {'), page.indexOf("let cancelled = false;"));
   assert.ok(branch.length > 0, "보내기 분기가 일반 경로의 cancelled 선언보다 앞");
   assert.match(branch, /saveProfileThenReturn\(\{/);
   assert.match(branch, /isMounted: \(\) => mountedRef\.current/);
-  assert.match(branch, /if \(profileSaveStartedRef\.current\) return;\s*profileSaveStartedRef\.current = true;/);
+  assert.match(branch, /profileSaveStartedRef\.current = true;/);
+  // U02 — 한 번만 = Effect 2 머리의 가드(판정 전에 건너뛴다 · 저장 중 CR3 이동 금지).
+  assert.match(page, /if \(cloneState !== "ready" \|\| !sessionId\) return;[\s\S]{0,200}if \(profileSaveStartedRef\.current\) return;/);
   assert.doesNotMatch(branch, /cancelled/, "보내기 분기에 effect 취소 플래그가 남아 있다");
   assert.doesNotMatch(branch, /return \(\) =>/, "보내기 분기가 cleanup을 돌려준다");
   assert.match(page, /mountedRef\.current = true;\s*return \(\) => \{\s*mountedRef\.current = false;/);

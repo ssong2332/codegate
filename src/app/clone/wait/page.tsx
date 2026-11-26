@@ -24,7 +24,12 @@ import {
   getSelectedDifficultyLevel,
   getExperienceMode,
 } from "@/lib/recording";
-import { resolveCloneReadyRoute, saveProfileThenReturn } from "@/lib/recording/cloneReadyRoute";
+import {
+  cloneWaitHeading,
+  resolveCloneReadyAction,
+  resolveCloneReadyRoute,
+  saveProfileThenReturn,
+} from "@/lib/recording/cloneReadyRoute";
 import { createSession, saveVoiceProfile } from "@/lib/api";
 import {
   VOICE_PROFILE_CONSENT_VERSION,
@@ -40,7 +45,7 @@ import {
 } from "@/lib/report/degradedDisclosure";
 
 type CloneState = "checking" | "pending" | "ready" | "failed" | "no-session" | "read-error";
-type StartState = "idle" | "starting" | "start-error" | "no-scenario" | "saving" | "save-error";
+type StartState = "idle" | "starting" | "start-error" | "no-scenario" | "no-voice" | "saving" | "save-error";
 
 // record/page.tsx와 동일한 온보딩 진행 표시(3단계 중 마지막).
 const ONBOARDING_STEPS: ProgressStep[] = [
@@ -105,7 +110,10 @@ export default function CloneWaitPage() {
   // (session/end/page.tsx·report/page.tsx와 동일한 회피 패턴 — effect 본문에서 직접 setState를
   // 호출하면 react-hooks/set-state-in-effect가 "동기 setState"로 오탐한다).
   useEffect(() => {
-    if (cloneState !== "ready" || !sessionId || !voiceId) return;
+    // U02 — voiceId 없음도 판정한다(판정표 CR). 예전엔 여기서 멈춰 "준비됐어요"만 남았다.
+    if (cloneState !== "ready" || !sessionId) return;
+    // 저장이 시작된 뒤엔 saveProfileThenReturn이 이동 · 오류를 맡는다(서버 폐기로 voiceId가 바뀌어 다시 돌아도 CR3로 앞지르지 않음).
+    if (profileSaveStartedRef.current) return;
     // T30(UX-025) — "즉시 녹음" 경로로 메신저 에스컬레이션 목소리 선택 화면에서 온 경우, 이 화면이
     // createSession을 대신 호출하지 않고 voice-select로 복귀시킨다(D-25, 그 화면이 channel=
     // "messenger"/voiceSelectionSource="recorded"로 createSession을 마무리한다). 일반 보이스
@@ -117,46 +125,53 @@ export default function CloneWaitPage() {
       experienceMode: getExperienceMode(),
       scenarioId: getSelectedScenarioId(),
     });
-    if (route.kind === "voice-select") {
-      router.push("/scenarios/messenger/voice-select");
+    // §144(DECISIONS #257) — 보내기 녹음은 녹음 화면에서 받은 이름 · 기간 · 동의로 목소리 프로필을 저장하고, 그 목소리가 골라진
+    // 만들기 화면으로 돌아간다. 저장 값이 없으면(녹음 화면을 거치지 않음) 목소리 없이 만들기로 — 거기서 고르거나 새로 녹음.
+    const pending = peekPendingVoiceProfileSave();
+    const action = resolveCloneReadyAction(route, voiceId, pending !== null);
+    if (action.kind === "go") {
+      if (action.clearPending) clearPendingVoiceProfileSave();
+      router.push(action.href);
       return;
     }
-    if (route.kind === "challenge") {
-      // §144(DECISIONS #257) — 녹음 화면에서 받은 이름 · 기간 · 동의로 목소리 프로필을 저장하고, 그 목소리가 골라진
-      // 만들기 화면으로 돌아간다. 저장 값이 없으면(녹음 화면을 거치지 않음) 목소리 없이 만들기로 — 거기서 고르거나 새로 녹음.
-      const pending = peekPendingVoiceProfileSave();
-      if (!pending) {
-        router.push(route.href);
-        return;
-      }
-      // 한 번만 저장한다(재실행 · StrictMode 이중 실행에서 프로필이 둘 생기지 않게). cleanup으로 취소하지 않는다 — 판정표 SR.
-      if (profileSaveStartedRef.current) return;
+    if (action.kind === "need-record") {
+      // 아래 일반 경로와 같은 async 감쌈(react-hooks/set-state-in-effect 회피).
+      void (async () => setStartState("no-voice"))();
+      return;
+    }
+    if (action.kind === "save" && pending) {
+      // 한 번만 저장한다(재실행 · StrictMode 이중 실행에서 프로필이 둘 생기지 않게 — 위 가드). cleanup으로 취소하지 않는다 — 판정표 SR.
       profileSaveStartedRef.current = true;
-      setStartState("saving");
-      void saveProfileThenReturn({
-        save: () =>
-          saveVoiceProfile({
-            sessionId,
-            label: pending.label,
-            retentionDays: pending.retentionDays,
-            consented: true,
-            consentTextVersion: VOICE_PROFILE_CONSENT_VERSION,
-          }),
-        clearPending: clearPendingVoiceProfileSave,
-        isMounted: () => mountedRef.current,
-        go: (href) => router.push(href),
-        onError: (err) => {
-          const message =
-            err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string"
-              ? (err as { message: string }).message
-              : "목소리를 저장하지 못했습니다.";
-          setSaveBack({ href: route.href, message });
-          setStartState("save-error");
-        },
-        challengeHref: route.href,
-      });
+      // 일반 경로와 같은 async 감쌈(react-hooks/set-state-in-effect 회피).
+      void (async () => {
+        setStartState("saving");
+        await saveProfileThenReturn({
+          save: () =>
+            saveVoiceProfile({
+              sessionId,
+              label: pending.label,
+              retentionDays: pending.retentionDays,
+              consented: true,
+              consentTextVersion: VOICE_PROFILE_CONSENT_VERSION,
+            }),
+          clearPending: clearPendingVoiceProfileSave,
+          isMounted: () => mountedRef.current,
+          go: (href) => router.push(href),
+          onError: (err) => {
+            const message =
+              err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string"
+                ? (err as { message: string }).message
+                : "목소리를 저장하지 못했습니다.";
+            setSaveBack({ href: action.href, message });
+            setStartState("save-error");
+          },
+          challengeHref: action.href,
+        });
+      })();
       return;
     }
+    if (action.kind !== "start") return;
+    const startVoiceId = action.voiceId;
     let cancelled = false;
     (async () => {
       const scenarioId = getSelectedScenarioId();
@@ -173,7 +188,7 @@ export default function CloneWaitPage() {
         const result = await createSession({
           sessionId,
           scenarioId,
-          voiceId,
+          voiceId: startVoiceId,
           ...(difficultyLevel ? { difficultyLevel } : {}),
           // §110.5 — 난이도 화면에서 고른 호칭(이 탭 힌트 · 부재 = 종전 문면).
           ...familyAddressRequestField(scenarioId),
@@ -193,7 +208,11 @@ export default function CloneWaitPage() {
     };
   }, [cloneState, sessionId, voiceId, startAttempt, router]);
 
-  const handleRetryStart = () => setStartAttempt((n) => n + 1);
+  // U02 — 저장 실패 뒤 "다시 시도"가 저장 가드에 막혀 아무 일도 안 했다 → 가드를 풀고 다시 판정한다.
+  const handleRetryStart = () => {
+    profileSaveStartedRef.current = false;
+    setStartAttempt((n) => n + 1);
+  };
   const handleRetryScenarios = () => router.push("/scenarios");
   const handleRetryRecord = () => router.push("/onboarding/record");
 
@@ -223,11 +242,14 @@ export default function CloneWaitPage() {
 
       <div className="flex flex-col gap-3">
         <h1 className="text-[24px] font-bold leading-[1.35] text-ink">
-          {isReady ? "가상 음성이 준비됐어요" : "가상 음성을 만들고 있어요"}
+          {cloneWaitHeading(cloneState, startState)}
         </h1>
-        <p className="text-[17px] leading-[1.6] text-ink-sub">
-          잠시만 기다려 주세요. 훈련용 가상 음성을 준비하고 있어요.
-        </p>
+        {/* U02 — 기다림 문구는 만드는 중에만(준비 뒤 오류 화면에 "잠시만 기다려 주세요"가 남지 않게). */}
+        {isPending && (
+          <p className="text-[17px] leading-[1.6] text-ink-sub">
+            잠시만 기다려 주세요. 훈련용 가상 음성을 준비하고 있어요.
+          </p>
+        )}
         {/* P-31 ⓕ(§48.3, AC-084) — 목소리 축 강등 고지. "준비 완료" 상태(isReady)에만 붙는다.
             부재/elevenlabs면 아무 말도 하지 않는다(긍정 표기 금지, G274와 같은 원칙). */}
         {isReady && isVoiceDegraded(voiceProvider) && (
@@ -344,6 +366,18 @@ export default function CloneWaitPage() {
           </p>
           <Button type="button" variant="secondary" onClick={handleRetryScenarios}>
             시나리오 선택으로
+          </Button>
+        </div>
+      )}
+
+      {isReady && startState === "no-voice" && (
+        <div className="flex flex-col items-center gap-3 text-center">
+          <p role="alert" className="flex items-center gap-2 text-[17px] text-danger">
+            <span aria-hidden="true">⚠</span>
+            <span>녹음한 목소리 정보를 찾을 수 없습니다. 다시 녹음해 주세요.</span>
+          </p>
+          <Button type="button" variant="secondary" onClick={handleRetryRecord}>
+            재녹음으로 돌아가기
           </Button>
         </div>
       )}

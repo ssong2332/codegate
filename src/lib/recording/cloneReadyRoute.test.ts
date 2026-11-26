@@ -35,7 +35,7 @@ test("[판정표] 메신저 복귀 우선 · self/없음은 기존 흐름 · sen
 
 test("[배선] clone/wait — 판정 결과 challenge면 세션 생성 전에 이동한다 · 체험 모드를 읽는다", () => {
   const routeAt = PAGE.indexOf("resolveCloneReadyRoute({");
-  const challengeAt = PAGE.indexOf('route.kind === "challenge"');
+  const challengeAt = PAGE.indexOf("resolveCloneReadyAction(route"); // U02 — 경로 판정 → 할 일 판정표 CR
   const createAt = PAGE.indexOf("await createSession(");
   assert.ok(routeAt > 0 && challengeAt > routeAt, "판정 → challenge 분기");
   assert.ok(createAt > challengeAt, "challenge 분기가 createSession보다 앞");
