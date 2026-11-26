@@ -792,7 +792,7 @@ async function runMultiCall(job, tag) {
       const a = actionFor(key, exit);
       if (!a) { outcome = { kind: "stopped_by_plan", after: key }; break; }
       const dialed = a.numberId ? numberOf(a.numberId) : undefined;
-      const plan = legPlanLib.planLegStart({ variant, relay, action: a.action, dialed, installConsented: installConsented(), userTurns });
+      const plan = legPlanLib.planLegStart({ variant, relay, action: a.action, dialed, installConsented: installConsented(), userTurns, submittedLandings: delivered.filter((d) => d.landingSubmitted).map((d) => findInCallSmsItem(scenarioId, d.smsId)?.fakeLandingId).filter(Boolean) /* W0 — 앱처럼 제출한 화면(대출 신청 등)을 알린다 */ });
       dials.push({ after: key, action: a.action, numberId: a.numberId, dialed, status: plan.status, ...(plan.status === "not_ready" ? { reason: plan.reason } : {}), installConsented: installConsented(), userTurns });
       if (plan.status === "genuine") { outcome = { kind: "genuine", numberId: plan.entry.numberId, notice: plan.entry.genuineNotice }; break; }
       if (plan.status !== "connected") { outcome = { kind: plan.status, after: key }; break; }

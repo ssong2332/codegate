@@ -23,7 +23,25 @@ const { FLOW_VARIANTS, findFlowVariant } = L("scenarios/flowVariants.js");
 const { findInCallSmsItem } = L("scenarios/inCallSms.js");
 const { resolveDeclaredSms } = L("inCallSms/smsGate.js");
 
-const entry = (v, persona) => ({ ch: findFlowVariant(v.variantId)?.multiCall ? "multicall" : "voice", id: v.scenarioId, level: v.level, persona, variant: v.variantId });
+/**
+ * 다통화 변형의 레그 사이 행동(프로브 `dials` — 키 = "start"(첫 레그가 직접 거는 통화) 또는 끝난 레그 번호). 레그의 나가는 방식(`exit`)대로 순응 참가자가 한다:
+ * dial = 다음 레그의 상대 번호(`dialTarget`)로 건다 · incoming = 사기범 전화를 다시 받는다(callback) · transfer = 프로브 기본값(생략).
+ * 이게 없으면 첫 레그 뒤 `stopped_by_plan`으로 끊긴다(기준선 fv-k3dn · fv-r8vb · fv-c5fj).
+ */
+function dialsFor(variant) {
+  const dials = {};
+  const legs = variant.legs;
+  if (legs[0]?.entry === "dial") dials.start = { action: "dial", numberId: legs[0].dialTarget };
+  legs.slice(0, -1).forEach((leg, i) => {
+    if (leg.exit === "dial") dials[i] = { action: "dial", numberId: legs[i + 1].dialTarget };
+    else if (leg.exit === "incoming") dials[i] = { action: "callback" };
+  });
+  return dials;
+}
+const entry = (v, persona) => {
+  const multi = findFlowVariant(v.variantId)?.multiCall;
+  return { ch: multi ? "multicall" : "voice", id: v.scenarioId, level: v.level, persona, variant: v.variantId, ...(multi ? { dials: dialsFor(v) } : {}) };
+};
 const amountsOf = (v) => resolveDeclaredSms(v.scenarioId, v.variantId).declared.map((d) => findInCallSmsItem(v.scenarioId, d.smsId)).filter(Boolean)
   .map((i) => /금액:\s*([\d,]+)\s*원/.exec(i.body)?.[1] ?? i.transferAmount).filter(Boolean);
 const instructionText = (v) => JSON.stringify([v.stages, v.tactics, v.pressure, v.signal, v.exitBlock, v.legs]);
