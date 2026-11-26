@@ -2,8 +2,8 @@ rules_version = '2';
 
 // ADR-0002 · AC-020 — 본인 목소리만 등록의 서버측 원천 차단(Database.md §Storage Layout /
 // §Security Rules 예시를 그대로 구현). 합성 산출물(synth/images)은 Functions(admin SDK)가
-// 이 규칙을 우회해 write한다 — 클라 write 경로는 마이크 녹음(audio/*)뿐이다(파일 업로드 UI
-// 부재와 합쳐 이중 차단, Architecture.md §6.1).
+// 이 규칙을 우회해 write한다 — 클라 write 경로는 녹음 파일(audio/*)뿐이다. 2026-11-26(§145 · DECISIONS #259)부터
+// 지인에게 보내기 화면의 업로드 파일도 같은 경로 · 같은 규칙(16kHz WAV로 바꿔 3MB 안)을 지난다.
 service firebase.storage {
   match /b/{bucket}/o {
     match /users/{uid}/sessions/{sid}/{allPaths=**} {

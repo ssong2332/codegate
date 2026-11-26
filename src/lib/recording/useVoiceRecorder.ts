@@ -2,8 +2,8 @@
 
 // MediaRecorder 래퍼(마이크 전용) — UX-002 본인 목소리 녹음 (Track C, T3, AC-018/AC-020).
 // getUserMedia로 마이크 스트림만 확보하고 MediaRecorder로 오디오를 캡처한다.
-// <input type="file">·드래그드롭 등 업로드 경로는 이 모듈에도, 어떤 화면에도 두지 않는다
-// (Architecture.md §6.1 — "타인 음성 무단 등록 경로가 UI에 없음"이 AC-020 클라이언트측 절반).
+// 업로드 경로는 이 모듈에 두지 않는다. 2026-11-26(§145 · DECISIONS #259) 지인에게 보내기 녹음 화면에만
+// 음성 파일 고르기가 생겼다(uploadedVoice.ts — 본인 · 허락받은 목소리 확인 체크 필수).
 import { useCallback, useEffect, useRef, useState } from "react";
 
 // 대본(SCRIPT_LINES, record 화면)은 상황 11가지 · 약 46~57초 낭독 분량(UX-002) — 1분 도달 시 자동 정지.
