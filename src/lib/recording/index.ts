@@ -1,4 +1,4 @@
-// MediaRecorder 래퍼(마이크 전용, 파일 업로드 UI 없음 — AC-020) (Track C, T3).
+// MediaRecorder 래퍼(마이크 전용 — 파일 업로드는 보내기 녹음 화면만 · uploadedVoice.ts §145) (Track C, T3).
 export {
   useVoiceRecorder,
   MAX_RECORDING_SECONDS,

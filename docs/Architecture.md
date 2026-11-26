@@ -255,7 +255,7 @@ UX-008  reports 읽기 ──▶ 타임라인·수법·대처법 표시(AC-008/0
 
 ### 6.1 본인 목소리만 등록 (AC-020, OQ-U1 확정 → ADR-0002)
 타인 음성 업로드 경로를 **UI와 서버 양쪽에서 원천 제거**한다(단일 자기확인 체크만으로는 보안 배점 근거가 약하다는 OQ-U1 판단 반영 — 서버측 강제를 추가).
-- **클라이언트:** 파일 업로드 UI(`<input type="file">`, 드래그드롭) **어디에도 없음**. 음성 입력은 `getUserMedia`+`MediaRecorder`(마이크 캡처)만. + 본인 확인 체크박스(자기확인, D-5)를 로그로 남김.
+- **클라이언트:** ~~파일 업로드 UI **어디에도 없음**~~ → 2026-11-26 사용자 결정(§145 · DECISIONS #259): **지인에게 보내기 녹음 화면에만** 음성 파일 고르기(본인 · 허락받은 목소리 확인 체크 필수 · 16kHz WAV 변환 뒤 같은 경로). 그 밖 화면은 종전대로 없음. 음성 입력은 `getUserMedia`+`MediaRecorder`(마이크 캡처)만. + 본인 확인 체크박스(자기확인, D-5)를 로그로 남김.
 - **서버(storage.rules) — 원천 차단의 핵심:** `users/{uid}/sessions/{sid}/voice_input.*` 경로에만, `request.auth.uid == uid`이고 `contentType`이 `audio/*`이며 크기 ≤ 3MB(≈30초)일 때만 쓰기 허용. 그 외 경로/타입/크기/타인 uid 업로드는 규칙이 **거부**한다. 합성 산출물은 Functions(admin SDK)만 쓴다.
 - 결론: "타인 음성 무단 등록 경로가 UI에 없음 + Storage 규칙이 소유자·타입·크기로 서버 거부"의 이중 차단. 강한 KYC는 하루 스코프 밖(D-5)이며, 본 조합이 AC-020 의도(무단 타인 등록 차단)를 충족한다.
 
@@ -25328,3 +25328,29 @@ Modal 정리 근거: 앱은 Volume · Dict 0(`test_gsv.py` NoPersistTest) · 참
 | 내가 만든 챌린지 | `fetchMyChallenges` 최근 3 | `/challenge/results` |
 | 내 리포트 | `fetchReportHistory` 최근 3 | `/report?sessionId=` · `/history` · `/report/archive` · `/grade` |
 - 진입점: 로그인 홈 `/scenarios`(로그아웃 위) · 챌린지 만들기 성공 화면. 익명 = 수신 흐름 허용 목록에 없음 → RouteGuard `/login` 안내(AC-090) · 서버 판정 무변경(AC-085). `APP_ROUTE_PATHS` · `DISALLOW_PREFIXES`에 `/me`.
+
+## 145. (Feature — 2026-11-26 · 브랜치 `claude/voice-upload` = main `1fb4172a` + 변경 · 사용자 원문 "즉석 녹음 뿐 아니라 파일 업로드해서 할 수 있도록" → 메인 세션 지시 · DECISIONS #259) **목소리 파일 업로드(지인에게 보내기 녹음)**
+
+| 판정표 | 행 | 입력 | 결과 |
+|---|---|---|---|
+| UF(파일 · 풀기 전) | UF1 | 크기 0 | `empty` |
+| | UF2 | 크기 > 20MB | `too_big` |
+| | UF3 | MIME `audio/*` 또는 확장자 wav · mp3 · m4a · aac · webm · ogg · opus · flac | 다음 단계 |
+| | UF4 | 그 밖 | `not_audio` |
+| 풀기 | — | `AudioContext.decodeAudioData` 실패 | `decode_failed` |
+| UD(길이 · 즉석 녹음과 같은 기준) | UD1 | < 20초 | `too_short` |
+| | UD2 | > 60.5초 | `too_long`(자르지 않고 안내) |
+| | UD3 | 20 ~ 60.5초 | 16kHz 모노 16bit WAV로 변환 |
+| 화면 | UP1 | 보내기 녹음 아님 | 업로드 없음(종전) |
+| | UP2 | 이름 · 보관 동의 · 업로드 확인 체크 중 하나라도 없음 | 고르기 비활성 |
+
+- 이후 경로는 즉석 녹음과 **같은 코드**: `users/{uid}/sessions/{sid}/voice_input.webm`(고정 파일명 · contentType `audio/wav`) → `createVoiceClone` → clone/wait → `saveVoiceProfile`. 서버 · 규칙 무변경 — Modal `/prepare`가 ffmpeg로 형식을 가리지 않고 푼다. 1분 WAV ≈ 1.92MB < storage.rules 3MB(시험이 규칙 값을 읽어 대조).
+- trust boundary: 서버 쪽 검사는 종전 그대로(storage.rules 소유자 · `audio/*` · < 3MB). 길이 · 형식 판정은 클라 — 즉석 녹음도 길이는 클라 판정이었다(무변경).
+- 확인 문구: "이 파일은 제 목소리이거나, 목소리 주인에게 사용 허락을 받은 녹음입니다. 다른 사람의 목소리를 허락 없이 올리지 않습니다." ⚠️ AC-020(본인 목소리만)보다 넓다 — 메인 지시 원문 "본인 목소리(또는 사용 허락받은 목소리)". 확인 문구는 서버에 남지 않는다(즉석 녹음의 본인 확인과 같음).
+- 시험 `src/lib/recording/uploadedVoice.test.ts`(UF · UD · 훅 상수 대조 · WAV 변환 · 규칙 크기 · 배선). ⚠️ 실기기(iOS Safari m4a 풀기 등) 미검증.
+
+### 145.1 실기 결함 — 보내기 녹음 뒤 clone/wait 멈춤(2026-11-26 04:53Z · 같은 브랜치)
+- 증상: "가상 음성이 준비됐어요 / 잠시만 기다려 주세요"에서 챌린지 만들기로 안 넘어감 · 오류 로그 0(createVoiceClone 04:53:45 → saveVoiceProfile 04:53:58 → onSessionEnded 04:54:02).
+- 원인(코드로 확인): `saveVoiceProfile`이 응답 전에 `purgeSession`으로 사전 세션 `voiceId`를 지운다(`functions/src/guardrails/index.ts` voiceId 삭제) → Effect 1 스냅샷 `setVoiceId(null)` → Effect 2 cleanup `cancelled = true` → 저장 성공 뒤 이동 · 실패 뒤 오류 표시를 모두 건너뜀 → 재실행은 voiceId null로 즉시 return. 매번 나는 결함(경합 아님).
+- 수정: 판정표 SR(`saveProfileThenReturn` · `cloneReadyRoute.ts`) — SR1 성공 ∧ 화면 살아 있음 = 이동 · SR2 실패 ∧ 살아 있음 = 오류 표시 · SR3 언마운트 = 아무것도 안 함. 취소 신호는 언마운트뿐(`mountedRef`) · 저장은 한 번만(`profileSaveStartedRef`). 업로드 · 즉석 녹음이 같은 화면이라 둘 다 고쳐진다.
+- 시험 `src/lib/recording/cloneWaitSaveStall.test.ts`(재현 · SR 3행 · 배선) · 역검증 = main 화면 1/4 fail(배선). ⚠️ 실기 재확인 필요.

@@ -23,6 +23,12 @@ import {
 } from "@/lib/recording";
 import { resolveCloneReadyRoute } from "@/lib/recording/cloneReadyRoute";
 import {
+  UPLOAD_ACCEPT,
+  UPLOAD_MESSAGES,
+  UPLOAD_OWNER_CONFIRM_TEXT,
+  prepareUploadedVoice,
+} from "@/lib/recording/uploadedVoice";
+import {
   VOICE_PROFILE_DEFAULT_RETENTION,
   VOICE_PROFILE_LABEL_MAX_LENGTH,
   VOICE_PROFILE_RETENTION_OPTIONS,
@@ -94,6 +100,36 @@ export default function RecordPage() {
   const [retentionConsented, setRetentionConsented] = useState(false);
   const profileFormOk = !isSendRecording || (retentionConsented && profileLabel.trim().length > 0);
 
+  // §145(DECISIONS #259) — 보내기 녹음만: 즉석 녹음 대신 음성 파일. 브라우저에서 16kHz WAV로 바꿔 녹음과 같은 경로로 올린다.
+  const [uploadOwnerChecked, setUploadOwnerChecked] = useState(false);
+  const [uploaded, setUploaded] = useState<{ wav: Blob; seconds: number; url: string } | null>(null);
+  const [preparingFile, setPreparingFile] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const canUpload = isSendRecording && profileFormOk && uploadOwnerChecked && !preparingFile;
+
+  useEffect(
+    () => () => {
+      if (uploaded) URL.revokeObjectURL(uploaded.url);
+    },
+    [uploaded],
+  );
+
+  const handleFile = useCallback(
+    async (file: File | undefined) => {
+      if (!file || !canUpload) return;
+      setPreparingFile(true);
+      setFileError(null);
+      const result = await prepareUploadedVoice(file);
+      setPreparingFile(false);
+      if (!result.ok) {
+        setFileError(UPLOAD_MESSAGES[result.verdict]);
+        return;
+      }
+      setUploaded({ wav: result.wav, seconds: result.seconds, url: URL.createObjectURL(result.wav) });
+    },
+    [canUpload],
+  );
+
   useEffect(() => {
     if (userLoading || !user) return;
     let cancelled = false;
@@ -134,7 +170,13 @@ export default function RecordPage() {
   }, [identityChecked, profileFormOk, recorder]);
 
   const handleCreateClone = useCallback(async () => {
-    if (!user || !recorder.audioBlob || recorder.elapsedSeconds < MIN_RECORDING_SECONDS) return;
+    // 업로드 파일(길이는 prepareUploadedVoice가 이미 판정) 또는 즉석 녹음 — 이 아래는 같은 경로다.
+    const source = uploaded
+      ? { blob: uploaded.wav, contentType: "audio/wav" }
+      : recorder.audioBlob && recorder.elapsedSeconds >= MIN_RECORDING_SECONDS
+        ? { blob: recorder.audioBlob, contentType: recorder.mimeType ?? "audio/webm" }
+        : null;
+    if (!user || !source) return;
     setUploadStatus("uploading");
     setUploadError(null);
     // §144 — clone/wait가 클론 준비 뒤 이 값으로 saveVoiceProfile을 부른다.
@@ -143,9 +185,7 @@ export default function RecordPage() {
     try {
       const path = `users/${user.uid}/sessions/${pendingSessionId}/voice_input.webm`;
       const fileRef = storageRef(storage, path);
-      await uploadBytes(fileRef, recorder.audioBlob, {
-        contentType: recorder.mimeType ?? "audio/webm",
-      });
+      await uploadBytes(fileRef, source.blob, { contentType: source.contentType });
       setIdentityConfirmed(true);
     } catch {
       setUploadStatus("error");
@@ -163,7 +203,7 @@ export default function RecordPage() {
       setUploadStatus("error");
       setUploadError("목소리 클론 생성에 실패했습니다. 다시 시도해 주세요.");
     }
-  }, [user, recorder.audioBlob, recorder.elapsedSeconds, recorder.mimeType, router, isSendRecording, profileLabel, retentionDays]);
+  }, [user, uploaded, recorder.audioBlob, recorder.elapsedSeconds, recorder.mimeType, router, isSendRecording, profileLabel, retentionDays]);
 
   if (gateState !== "ok") {
     return (
@@ -185,10 +225,11 @@ export default function RecordPage() {
 
   const canRecord = identityChecked && profileFormOk;
   const canCreateClone =
-    recorder.status === "stopped" &&
-    recorder.elapsedSeconds >= MIN_RECORDING_SECONDS &&
+    (uploaded !== null || (recorder.status === "stopped" && recorder.elapsedSeconds >= MIN_RECORDING_SECONDS)) &&
     uploadStatus !== "uploading" &&
     uploadStatus !== "cloning";
+  const cloneButtonLabel =
+    uploadStatus === "uploading" ? "업로드 중..." : uploadStatus === "cloning" ? "클론 생성 중..." : "클론 생성";
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-xl flex-col gap-7 bg-page px-6 pb-10 pt-10">
@@ -293,7 +334,7 @@ export default function RecordPage() {
       </p>
 
       <section className="flex flex-col items-center gap-3 rounded-[8px] border-[1.5px] border-line bg-white p-5">
-        {recorder.status === "idle" && (
+        {recorder.status === "idle" && !uploaded && (
           <>
             <button
               type="button"
@@ -314,6 +355,49 @@ export default function RecordPage() {
                   ? "목소리 이름 · 보관 동의 · 본인 확인을 마쳐야 녹음을 시작할 수 있습니다."
                   : "본인 확인 문항에 먼저 동의해야 녹음을 시작할 수 있습니다."}
               </p>
+            )}
+            {isSendRecording && (
+              <div className="mt-2 flex w-full flex-col gap-3 border-t-[1.5px] border-line pt-4">
+                <p className="text-[16px] font-semibold text-ink">또는 녹음해 둔 파일 올리기 (20초 ~ 1분)</p>
+                <label className="flex cursor-pointer select-none items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={uploadOwnerChecked}
+                    onChange={(event) => setUploadOwnerChecked(event.target.checked)}
+                    className="mt-0.5 h-8 w-8 shrink-0 rounded-[10px] accent-brand"
+                  />
+                  <span className="text-[16px] leading-[1.5] text-ink">{UPLOAD_OWNER_CONFIRM_TEXT}</span>
+                </label>
+                <label
+                  aria-disabled={!canUpload}
+                  className={`flex min-h-[56px] w-full items-center justify-center rounded-[8px] border-[1.5px] text-[17px] font-semibold ${
+                    canUpload
+                      ? "cursor-pointer border-line-strong bg-surface text-ink hover:bg-brand-tint"
+                      : "cursor-not-allowed border-transparent bg-neutral-tint text-disabled-ink"
+                  }`}
+                >
+                  {preparingFile ? "파일 확인 중..." : "음성 파일 고르기"}
+                  <input
+                    type="file"
+                    accept={UPLOAD_ACCEPT}
+                    disabled={!canUpload}
+                    onChange={(event) => {
+                      void handleFile(event.target.files?.[0]);
+                      event.target.value = "";
+                    }}
+                    className="sr-only"
+                  />
+                </label>
+                {!canUpload && !preparingFile && (
+                  <p className="text-[15px] text-ink-sub">목소리 이름 · 보관 동의 · 위 확인을 마쳐야 파일을 고를 수 있습니다.</p>
+                )}
+                {fileError && (
+                  <p role="alert" className="flex items-center gap-2 text-[16px] text-danger">
+                    <span aria-hidden="true">⚠</span>
+                    <span>{fileError}</span>
+                  </p>
+                )}
+              </div>
             )}
           </>
         )}
@@ -373,6 +457,33 @@ export default function RecordPage() {
           </>
         )}
 
+        {uploaded && (
+          <>
+            <div className="flex w-full flex-col gap-3 rounded-[8px] bg-brand-tint p-4">
+              <p className="text-[17px] font-semibold text-brand">파일 준비 완료 ({formatTime(uploaded.seconds)})</p>
+              <audio controls src={uploaded.url} className="w-full" />
+            </div>
+            <div className="flex w-full flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => setUploaded(null)}
+                disabled={uploadStatus === "uploading" || uploadStatus === "cloning"}
+                className="text-[16px] font-semibold text-ink-sub underline"
+              >
+                다른 파일 고르기 · 직접 녹음하기
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateClone}
+                disabled={!canCreateClone}
+                className="flex min-h-[56px] w-full items-center justify-center rounded-[8px] bg-brand text-[17px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-neutral-tint disabled:text-disabled-ink"
+              >
+                {cloneButtonLabel}
+              </button>
+            </div>
+          </>
+        )}
+
         {recorder.status === "stopped" && recorder.audioUrl && (
           <>
             <div className="flex w-full flex-col gap-3 rounded-[8px] bg-brand-tint p-4">
@@ -409,11 +520,7 @@ export default function RecordPage() {
                 disabled={!canCreateClone}
                 className="flex min-h-[56px] w-full items-center justify-center rounded-[8px] bg-brand text-[17px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-neutral-tint disabled:text-disabled-ink"
               >
-                {uploadStatus === "uploading"
-                  ? "업로드 중..."
-                  : uploadStatus === "cloning"
-                    ? "클론 생성 중..."
-                    : "클론 생성"}
+                {cloneButtonLabel}
               </button>
             </div>
           </>
