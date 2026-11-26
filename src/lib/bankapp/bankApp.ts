@@ -70,7 +70,7 @@ export function myBankNameFor(seed: string, avoid?: string): string {
 /**
  * BA4 — 세션별 고정 가상 잔액(1만 원 단위 · 결정적). 서버로 가지 않고 사기범도 모른다. 출금 계좌 목록의 첫 계좌 잔액이다.
  * ⭐ 2026-11-23 판정표 Z4(사용자 결정 1b — *"없는데 보내라면 보내지는 거야?"*) — 참가자가 잔액을 말하지 않았으면 큰 돈이 있다고 가정하지 않는다:
- * 종전 1,000만 ~ 3,000만 원 → 100만 ~ 500만 원. 요구액이 있는 화면은 `withdrawAccounts.ts` `belowDemandBalance`가 요구액보다 적게 한 번 더 자른다.
+ * 종전 1,000만 ~ 3,000만 원 → 100만 ~ 500만 원(Z4′ — 요구액 없는 화면). ⭐ 2026-11-27 판정표 M5 — 요구액이 있는 화면은 `withdrawAccounts.ts` `enoughDemandBalance`가 요구액의 110 ~ 150%로 대신한다(2026-11-23 "요구액보다 적게"를 뒤집음).
  */
 export function fictionalBalanceFor(seed: string): number {
   const steps = (500 - 100) + 1; // 만 원 단위 칸 수

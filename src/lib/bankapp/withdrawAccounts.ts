@@ -80,23 +80,18 @@ export function withdrawAccountsFor(input: {
   avoidBankName?: string;
   /** 판정표 C1 — 첫 계좌 하나만(다른 은행 계좌 숨김). 부재 = C2(종전 3개). */
   single?: boolean;
-  /** 판정표 Z5 — 이 화면의 요구액("9,800,000" 꼴 · 부재 = 종전). 다른 은행 계좌 잔액을 요구액의 25% · 15% 이하로 자른다. */
-  demand?: string;
 }): WithdrawAccount[] {
-  const { seed, appBankName, primaryBalance, avoidBankName, single, demand } = input;
+  const { seed, appBankName, primaryBalance, avoidBankName, single } = input;
   const others: string[] = [];
   const start = hash(`other-banks:${seed}`) % BANKS.length;
   for (let i = 0; i < BANKS.length && others.length < 2; i += 1) {
     const name = BANKS[(start + i) % BANKS.length]!;
     if (name !== appBankName && name !== avoidBankName) others.push(name);
   }
-  // 다른 은행 잔액: 1번 = 200만 ~ 900만 · 2번 = 30만 ~ 400만(10만 원 단위) (판정표 Z5 — 요구액이 있으면 그 25% · 15% 이하로 자른다).
-  const demandWon = demand !== undefined ? amountValue(demand) : undefined;
+  // 다른 은행 잔액: 1번 = 200만 ~ 900만 · 2번 = 30만 ~ 400만(10만 원 단위).
   // 첫 계좌보다 늘 적게(첫 계좌의 60% · 30% 이하 — 고정 값이 100만 ~ 500만 원으로 내려간 뒤에도 종전 성질 유지).
-  const otherBalance = (key: string, min: number, max: number, share: number, mainShare: number) => {
-    const value = Math.min((min + (hash(`${key}:${seed}`) % (max - min + 1))) * 100_000, manwonFloor(primaryBalance * mainShare));
-    return demandWon === undefined ? value : Math.min(value, manwonFloor(demandWon * share)); // Z5
-  };
+  const otherBalance = (key: string, min: number, max: number, mainShare: number) =>
+    Math.min((min + (hash(`${key}:${seed}`) % (max - min + 1))) * 100_000, manwonFloor(primaryBalance * mainShare));
   const all: WithdrawAccount[] = [
     { id: "main", bankName: appBankName, productName: "입출금통장", maskedNumber: maskedNumberFor(seed, "main"), balance: primaryBalance, own: true },
     {
@@ -104,7 +99,7 @@ export function withdrawAccountsFor(input: {
       bankName: others[0] ?? appBankName,
       productName: "입출금통장",
       maskedNumber: maskedNumberFor(seed, "other-1"),
-      balance: otherBalance("other-1", 20, 90, 0.25, 0.6),
+      balance: otherBalance("other-1", 20, 90, 0.6),
       own: false,
     },
     {
@@ -112,7 +107,7 @@ export function withdrawAccountsFor(input: {
       bankName: others[1] ?? appBankName,
       productName: "급여통장",
       maskedNumber: maskedNumberFor(seed, "other-2"),
-      balance: otherBalance("other-2", 3, 40, 0.15, 0.3),
+      balance: otherBalance("other-2", 3, 40, 0.3),
       own: false,
     },
   ];
@@ -256,21 +251,27 @@ export type SpokenAccountValues = { bankName?: string; balance?: number; realBan
 // | Z1 | 카드 잔액 있음 | 잔액 = 카드 잔액(종전 A5) |
 // | Z2 | 통화에서 말한 잔액 금액 있음(판정표 S4 ~ S9 · S14) | 잔액 = 말한 잔액(종전 A6) |
 // | Z3 | 마지막으로 '돈이 없다'고 말함(판정표 S13 `noMoney`) | 잔액 = 0(어떤 금액도 W3 '잔액 부족') · C1(계좌 하나) |
-// | Z4 | 그 밖(잔액을 모른다) ∧ 화면에 요구액 있음 | 잔액 = min(고정 값 100만 ~ 500만 원, 요구액의 50% 만 원 내림) — 요구액을 늘 채우지 못한다 |
+// | Z4 | (폐지 → M5) 잔액 = 요구액의 50% 이하였다 | ⛔ 2026-11-27 뒤집음 — 아래 M5 |
 // | Z4′ | 그 밖 ∧ 요구액 없음(금 · 출금 예약 · 상품권 · 대출 화면) | 잔액 = 고정 값 100만 ~ 500만 원(`fictionalBalanceFor` · 종전 1,000만 ~ 3,000만) |
-// | Z5 | Z4 · Z4′ ∧ C2(계좌 3개) ∧ 요구액 있음 | 다른 은행 계좌 = min(종전, 요구액 25% · 15%) — 세 계좌를 다 합쳐도 요구액의 90% 이하 |
+// | Z5 | (폐지) 다른 은행 계좌를 요구액 25% · 15%로 자름 | ⛔ 2026-11-27 폐지 — 요구액을 못 채우게 하던 장치. 다른 계좌는 종전 잔액(첫 계좌의 60% · 30% 이하)만 |
 // | Z6 | 대출금 보관 이체(`loan-safe-transfer`) | 요구액을 넘기지 않는다(Z4′) — 입금된 대출금이 출금 가능 금액에 더해져 그 금액은 보낼 수 있다(종전 PR-B) |
-// 서버 쪽(판정표 BL3′ — `functions/src/session/cardBalanceFit.ts`): Z2 잔액은 문자 발송 요청에 실려 잔액형 문자 금액을 그 잔액에 맞춘다(카드 잔액이 먼저).
+// ⭐ 2026-11-27 사용자 결정(DECISIONS #262 · `docs/research/realism-criteria-2026-11-27.md` 판정표 M5 · 결정 1 "권고대로 진행하자") — Z4 · Z5를 뒤집는다.
+// 원문: *"실제로 돈을 보내는데 항상 나는 원하는 금액보다 적은 돈을 가지고 있어. 그래서 돈 보낼 수 있는 거 다 보내면 항상 보낸 건 확인되는데,
+// 요청한 금액보다 적다 라고 이야기를 하면 내가 그 때 할 수 있는 게 없잖아"*(2026-11-23 원문 "없는데 보내라면 보내지는 거야?"도 기록에 남는다 — 그때 결정은 막다른 대화를 낳았다).
+// | M5 | Z1 · Z2 · Z3 아님(잔액을 말하지도 · 카드에 넣지도 않음) ∧ 화면에 요구액 있음 | 잔액 = 요구액의 110 ~ 150%(만 원 올림 · `enoughDemandBalance`) — 첫 계좌 하나로 다 보낼 수 있다 |
+// M6 · M7 · M8(말한 잔액 = Z2 · '돈 없다' = Z3 · 앱 안 대출 = Z6)은 종전 그대로. 서버 쪽(판정표 BL3′ — `functions/src/session/cardBalanceFit.ts`): Z2 잔액은 문자 발송 요청에 실려 잔액형 문자 금액을 그 잔액에 맞춘다(카드 잔액이 먼저 · M5와 무관).
 
 /** 만 원 단위 내림(1만 원 미만 = 0). */
 function manwonFloor(won: number): number {
   return Math.floor(won / 10_000) * 10_000;
 }
 
-/** 판정표 Z4 — 잔액을 모를 때 요구액("9,800,000")보다 적은 잔액. 요구액 없음 · 판정 불가 = 고정 값 그대로(Z4′). */
-export function belowDemandBalance(fixedBalance: number, demand: string | undefined): number {
+/** 판정표 M5 — 잔액을 모를 때 요구액("9,800,000")의 110 ~ 150%(만 원 올림 · 고정 값에서 결정적). 요구액 없음 · 판정 불가 = 고정 값 그대로(Z4′). */
+export function enoughDemandBalance(fixedBalance: number, demand: string | undefined): number {
   const demandWon = demand !== undefined ? amountValue(demand) : undefined;
-  return demandWon === undefined ? fixedBalance : Math.min(fixedBalance, manwonFloor(demandWon * 0.5));
+  if (demandWon === undefined) return fixedBalance;
+  const percent = 110 + (hash(`m5:${fixedBalance}:${demandWon}`) % 41);
+  return Math.ceil((demandWon * percent) / 100 / 10_000) * 10_000;
 }
 
 /** A5 · S8과 같은 잔액 범위(1만 원 ~ 10억 원). */
@@ -295,7 +296,7 @@ export function resolveMyAccount(input: {
   spoken?: SpokenAccountValues;
   fixedBankName: string;
   fixedBalance: number;
-  /** 판정표 Z4 — 이 화면의 요구액(부재 = Z4′). */
+  /** 판정표 M5 — 이 화면의 요구액(부재 = Z4′). */
   demand?: string;
 }): MyAccount {
   const { card, spoken, fixedBankName, fixedBalance, demand } = input;
@@ -311,7 +312,7 @@ export function resolveMyAccount(input: {
   const spokenBalance = validBalance(spoken?.balance); // A6
   const bankName = cardBank ?? spokenBank ?? namelessBank ?? fixedBankName; // A4
   const noMoney = cardBalance === undefined && spokenBalance === undefined && spoken?.noMoney === true ? 0 : undefined; // Z3
-  const balance = cardBalance ?? spokenBalance ?? noMoney ?? belowDemandBalance(fixedBalance, demand); // Z1 · Z2 · Z3 · Z4 · Z4′
+  const balance = cardBalance ?? spokenBalance ?? noMoney ?? enoughDemandBalance(fixedBalance, demand); // Z1 · Z2 · Z3 · M5 · Z4′
   const single = [cardBank, spokenBank, namelessBank, cardBalance, spokenBalance, noMoney].some((value) => value !== undefined); // C1 · C2
   return { bankName, balance, single };
 }

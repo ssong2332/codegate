@@ -93,17 +93,9 @@ export default function BankAppOverlay({ call, myBankName, balance, singleAccoun
   // 출금 계좌(목록은 세션마다 결정적 · 기본 = 이 은행 입출금) · 열린 시트(계좌 선택 · 생체 인증 — 동시에 하나).
   const ledger = ledgerKey ?? "";
   const accounts = useMemo(
-    // 판정표 Z5 — 다른 은행 계좌도 요구액을 채우지 못하게(첫 계좌 잔액은 호출부가 판정표 Z로 정해 넘긴다).
-    () =>
-      withdrawAccountsFor({
-        seed: ledger,
-        appBankName: myBankName,
-        primaryBalance: balance,
-        avoidBankName: target.bankName,
-        single: singleAccount,
-        demand: target.requestedAmount ?? target.amount,
-      }),
-    [ledger, myBankName, balance, target.bankName, singleAccount, target.requestedAmount, target.amount],
+    // 첫 계좌 잔액은 호출부가 판정표 Z · M5로 정해 넘긴다.
+    () => withdrawAccountsFor({ seed: ledger, appBankName: myBankName, primaryBalance: balance, avoidBankName: target.bankName, single: singleAccount }),
+    [ledger, myBankName, balance, target.bankName, singleAccount],
   );
   const [accountId, setAccountId] = useState<WithdrawAccount["id"]>("main");
   const fromAccount = accounts.find((item) => item.id === accountId) ?? accounts[0]!;
