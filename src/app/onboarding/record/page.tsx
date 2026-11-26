@@ -234,8 +234,10 @@ export default function RecordPage() {
   const cloneButtonLabel =
     uploadStatus === "uploading" ? "업로드 중..." : uploadStatus === "cloning" ? "클론 생성 중..." : "클론 생성";
 
+  // U01 — mx-auto만 두면 main 폭이 내용 최소 폭을 따라가, 목소리 이름 입력칸의 기본 폭(글꼴마다 다름)이 화면보다 넓을 때
+  // 페이지 전체가 오른쪽으로 넘쳤다. w-full로 화면 폭에 묶는다.
   return (
-    <main className="mx-auto flex min-h-dvh max-w-xl flex-col gap-7 bg-page px-6 pb-10 pt-10">
+    <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col gap-7 bg-page px-6 pb-10 pt-10">
       <ProgressSteps steps={ONBOARDING_STEPS} currentIndex={1} />
 
       <div className="flex flex-col gap-3">
