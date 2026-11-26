@@ -86,6 +86,11 @@ export default function RecordPage() {
   const statusMessageRef = useRef<HTMLParagraphElement>(null);
 
   const recorder = useVoiceRecorder();
+  // U04 — 정지하면 결과(듣기 · 클론 생성)가 대본 아래에 생긴다. 대본 위쪽을 읽다 멈춰도 바로 보이게 그쪽으로 옮긴다.
+  const recordResultRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (recorder.status === "stopped") recordResultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [recorder.status]);
 
   // §144(DECISIONS #257 Q2) — 지인에게 보내기 녹음은 목소리 프로필로 저장해야만 쓸 수 있다. 녹음 뒤 어디로 가는지와
   // 같은 판정(cloneReadyRoute)으로 "보내기 녹음"을 가른다 → 이름 · 기간 · 보관 동의를 녹음 전에 받는다.
@@ -251,23 +256,6 @@ export default function RecordPage() {
         </p>
       </div>
 
-      <section
-        aria-labelledby="script-heading"
-        className="rounded-[8px] border-[1.5px] border-line bg-white p-4"
-      >
-        <h2 id="script-heading" className="mb-2 text-[14px] font-bold tracking-[0.08em] text-ink-sub">
-          1분 대본
-        </h2>
-        <ol className="flex flex-col gap-2">
-          {SCRIPT_LINES.map((line) => (
-            <li key={line.cue} className="text-[18px] leading-[1.6] text-ink">
-              <span className="mr-1.5 text-[15px] text-ink-sub">({line.cue})</span>
-              {line.text}
-            </li>
-          ))}
-        </ol>
-      </section>
-
       {/* §144 VP-UI — 보내기 녹음만: 목소리 이름 · 보관 기간 · 보관 동의(필수). 녹음 중에는 바꿀 수 없다. */}
       {isSendRecording && (
         <section aria-labelledby="voice-profile-heading" className="flex flex-col gap-4 rounded-[8px] border-[1.5px] border-line bg-white p-4">
@@ -332,37 +320,116 @@ export default function RecordPage() {
         </span>
       </label>
 
+      <section
+        aria-labelledby="script-heading"
+        className="rounded-[8px] border-[1.5px] border-line bg-white p-4"
+      >
+        <h2 id="script-heading" className="mb-2 text-[14px] font-bold tracking-[0.08em] text-ink-sub">
+          1분 대본
+        </h2>
+        <ol className="flex flex-col gap-2">
+          {SCRIPT_LINES.map((line) => (
+            <li key={line.cue} className="text-[18px] leading-[1.6] text-ink">
+              <span className="mr-1.5 text-[15px] text-ink-sub">({line.cue})</span>
+              {line.text}
+            </li>
+          ))}
+        </ol>
+      </section>
+
       {/* 녹음 상태를 텍스트로도 안내(UX.md Accessibility — Screen Reader "녹음 중/완료"). */}
       <p aria-live="polite" ref={statusMessageRef} className="sr-only">
         {recorder.status === "recording" && "녹음 중입니다."}
         {recorder.status === "stopped" && "녹음이 완료되었습니다."}
       </p>
 
-      <section className="flex flex-col items-center gap-3 rounded-[8px] border-[1.5px] border-line bg-white p-5">
+      {/* U04 — 대본을 읽는 동안 시작 · 정지 버튼과 경과 시간이 늘 보이도록 화면 아래에 붙는 막대(sticky).
+          대본 바로 뒤에 두어, 끝까지 내리면 제자리에 놓여 대본 마지막 줄을 가리지 않는다. */}
+      {(recorder.status === "recording" ||
+        recorder.status === "requesting-permission" ||
+        (recorder.status === "idle" && !uploaded)) && (
+        <section
+          aria-label="녹음 조작"
+          className="sticky bottom-0 z-10 -mx-6 flex flex-col gap-2 border-t-[1.5px] border-line bg-white px-6 pb-[max(12px,env(safe-area-inset-bottom))] pt-3"
+        >
+          {recorder.status === "idle" && (
+            <>
+              <button
+                type="button"
+                onClick={handleStart}
+                disabled={!canRecord}
+                aria-label="녹음 시작"
+                className="flex min-h-[56px] w-full items-center justify-center gap-2.5 rounded-[8px] bg-brand text-[17px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-neutral-tint disabled:text-disabled-ink"
+              >
+                <span
+                  aria-hidden="true"
+                  className="h-[14px] w-[14px] rounded-full border-2 border-white bg-danger"
+                />
+                녹음 시작
+              </button>
+              <p className="text-center text-[15px] leading-[1.5] text-ink-sub">
+                {!canRecord
+                  ? isSendRecording
+                    ? "위에서 목소리 이름 · 보관 동의 · 본인 확인을 마쳐야 녹음을 시작할 수 있습니다."
+                    : "위의 본인 확인 문항에 먼저 동의해야 녹음을 시작할 수 있습니다."
+                  : `누르고 대본을 읽어 주세요 · 최소 ${MIN_RECORDING_SECONDS}초`}
+              </p>
+            </>
+          )}
+
+          {recorder.status === "requesting-permission" && (
+            <p className="flex min-h-[56px] items-center justify-center gap-2 text-[18px] text-ink" role="status">
+              <LoadingDots className="text-brand" />
+              마이크 권한을 요청하는 중입니다
+            </p>
+          )}
+
+          {recorder.status === "recording" && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5" role="status">
+                  <p className="flex items-center gap-2 font-mono text-[18px] font-semibold tabular-nums text-danger">
+                    <span aria-hidden="true" className="h-[10px] w-[10px] shrink-0 animate-pulse rounded-full bg-danger" />
+                    <span className="sr-only">녹음 중</span>
+                    {formatTime(recorder.elapsedSeconds)} / {formatTime(MAX_RECORDING_SECONDS)}
+                  </p>
+                  <p className="text-[14px] leading-[1.4] text-ink-sub">
+                    남은 {formatTime(Math.max(0, MAX_RECORDING_SECONDS - recorder.elapsedSeconds))}
+                    {recorder.elapsedSeconds < MIN_RECORDING_SECONDS &&
+                      ` · 최소까지 ${MIN_RECORDING_SECONDS - recorder.elapsedSeconds}초`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={recorder.stop}
+                  aria-label="녹음 정지"
+                  className="flex min-h-[56px] shrink-0 items-center justify-center gap-2 rounded-[8px] bg-danger px-5 text-[17px] font-semibold text-white transition-colors hover:bg-danger-hover"
+                >
+                  <span aria-hidden="true" className="h-[14px] w-[14px] rounded-[3px] bg-white" />
+                  정지
+                </button>
+              </div>
+              {/* 진행 막대 — 최소 길이 지점에 눈금을 둔다. */}
+              <div aria-hidden="true" className="relative h-1.5 w-full overflow-hidden rounded-full bg-neutral-tint">
+                <div
+                  className="h-full bg-danger transition-[width] duration-1000 ease-linear"
+                  style={{ width: `${Math.min(100, (recorder.elapsedSeconds / MAX_RECORDING_SECONDS) * 100)}%` }}
+                />
+                <span
+                  className="absolute top-0 h-full w-[2px] bg-ink-sub"
+                  style={{ left: `${(MIN_RECORDING_SECONDS / MAX_RECORDING_SECONDS) * 100}%` }}
+                />
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      <section className="flex flex-col items-center gap-3">
         {recorder.status === "idle" && !uploaded && (
           <>
-            <button
-              type="button"
-              onClick={handleStart}
-              disabled={!canRecord}
-              aria-label="녹음 시작"
-              className="flex min-h-[56px] w-full items-center justify-center gap-2.5 rounded-[8px] bg-brand text-[17px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-neutral-tint disabled:text-disabled-ink"
-            >
-              <span
-                aria-hidden="true"
-                className="h-[14px] w-[14px] rounded-full border-2 border-white bg-danger"
-              />
-              녹음 시작
-            </button>
-            {!canRecord && (
-              <p className="text-[16px] text-ink-sub">
-                {isSendRecording
-                  ? "목소리 이름 · 보관 동의 · 본인 확인을 마쳐야 녹음을 시작할 수 있습니다."
-                  : "본인 확인 문항에 먼저 동의해야 녹음을 시작할 수 있습니다."}
-              </p>
-            )}
             {isSendRecording && (
-              <div className="mt-2 flex w-full flex-col gap-3 border-t-[1.5px] border-line pt-4">
+              <div className="flex w-full flex-col gap-3 rounded-[8px] border-[1.5px] border-line bg-white p-5">
                 <p className="text-[16px] font-semibold text-ink">또는 녹음해 둔 파일 올리기 (20초 ~ 1분)</p>
                 <p className="text-[15px] leading-[1.5] text-ink-sub">{UPLOAD_SCRIPT_HINT}</p>
                 <label className="flex cursor-pointer select-none items-start gap-3">
@@ -408,39 +475,6 @@ export default function RecordPage() {
           </>
         )}
 
-        {recorder.status === "requesting-permission" && (
-          <p className="flex items-center gap-2 text-[18px] text-ink" role="status">
-            <LoadingDots className="text-brand" />
-            마이크 권한을 요청하는 중입니다
-          </p>
-        )}
-
-        {recorder.status === "recording" && (
-          <>
-            <div aria-hidden="true" className="mb-1 flex h-[28px] items-end gap-[3px]">
-              {[0, 0.15, 0.3, 0.45, 0.6].map((delay) => (
-                <span
-                  key={delay}
-                  className="call-wave-bar w-[4px] rounded-full bg-danger"
-                  style={{ height: "22px", animationDelay: `${delay}s` }}
-                />
-              ))}
-            </div>
-            <p className="flex items-center gap-2 font-mono text-[17px] tracking-wider text-danger" role="status">
-              <span aria-hidden="true">●</span>
-              녹음 중 {formatTime(recorder.elapsedSeconds)} / {formatTime(MAX_RECORDING_SECONDS)}
-            </p>
-            <button
-              type="button"
-              onClick={recorder.stop}
-              aria-label="녹음 정지"
-              className="flex min-h-[56px] w-full items-center justify-center gap-2.5 rounded-[8px] bg-danger text-[17px] font-semibold text-white transition-colors hover:bg-danger-hover"
-            >
-              <span aria-hidden="true" className="h-[14px] w-[14px] rounded-[3px] bg-white" />
-              녹음 정지
-            </button>
-          </>
-        )}
 
         {(recorder.status === "permission-denied" ||
           recorder.status === "unsupported" ||
@@ -491,7 +525,7 @@ export default function RecordPage() {
         )}
 
         {recorder.status === "stopped" && recorder.audioUrl && (
-          <>
+          <div ref={recordResultRef} className="flex w-full scroll-mt-6 flex-col items-center gap-3">
             <div className="flex w-full flex-col gap-3 rounded-[8px] bg-brand-tint p-4">
               <p className="flex items-center gap-2 text-[17px] font-semibold text-brand">
                 <svg className="text-brand" width="14" height="14" viewBox="0 0 13 13" fill="none" aria-hidden="true">
@@ -529,7 +563,7 @@ export default function RecordPage() {
                 {cloneButtonLabel}
               </button>
             </div>
-          </>
+          </div>
         )}
       </section>
 
