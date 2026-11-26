@@ -4,7 +4,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { EXPIRED_STATUS_LABEL, PENDING_STATUS_LABEL, mapChallengesToListItems } from "./mapChallengeItems.ts";
+import {
+  EXPIRED_STATUS_LABEL,
+  PENDING_STATUS_LABEL,
+  SHARED_COMPLETED_ONLY_LABEL,
+  mapChallengesToListItems,
+  sharedResultLabel,
+} from "./mapChallengeItems.ts";
 import type { ChallengeSource } from "./mapChallengeItems.ts";
 
 test("AC-043: 미완료(pending/consented/in_progress) 챌린지는 '아직 해보지 않았습니다'만 표시한다", () => {
@@ -35,21 +41,52 @@ test("AC-043: 완료+미동의는 상세를 감추고 미동의 안내만 표시
   assert.equal(items[0].statusLabel, "상대가 완료했지만 결과 공유에 동의하지 않았습니다");
 });
 
-test("AC-043: 완료+동의+의심 시점 있음 → '완료 · 의심 시점: 약 N초' 요약만 표시한다", () => {
-  const items = mapChallengesToListItems([
-    {
-      challengeId: "c3",
-      displayName: "동생",
-      status: "completed",
-      resultSharingConsented: true,
-      suspicionTimeLabel: "30초",
-      createdAt: new Date("2026-07-24T10:00:00+09:00"),
-    },
-  ]);
-  assert.equal(items[0].statusLabel, "완료 · 의심 시점: 약 30초");
+// U03(2026-11-26) — 받은 사람이 [공유합니다]를 눌러도 만든 사람 화면에 "완료" 배지뿐이었다(자기 목소리 챌린지 = 라벨 "완료" = 배지와 같아
+// 상세 줄이 숨었다 · 공유 안 함보다 보이는 게 적었다). 사용자 결정 "확대 (B)" · "①~④ 모두" · "세 종류 모두 동일" — 판정표 RS.
+const HELD_HANGUP = { completed: true, outcome: "held", defenseAction: "hangup", suspicionTimeLabel: "130초 시점" } as const;
+
+test("[U03 재현] 자기 목소리 챌린지 공유 동의 + 서버 요약 → 결과 · 대처 시점이 보이고 '완료' 하나가 아니다", () => {
+  const shared = oneItem({ status: "completed", resultSharingConsented: true, voiceMode: "clone", resultSummary: HELD_HANGUP });
+  assert.equal(shared, "끝까지 속지 않았어요 · 130초 시점에 먼저 전화를 끊었어요");
+  assert.notEqual(shared, "완료");
+  assert.notEqual(shared, oneItem({ status: "completed", resultSharingConsented: false, resultSummary: HELD_HANGUP }));
 });
 
-test("AC-043: 완료+동의+의심 시점 없음 → '완료'만 표시한다", () => {
+test("[U03 RS] 넘어감 · 송금 응함 · 화면 보류 · 진짜 번호 확인 · 놓친 신호 2개 문구", () => {
+  assert.equal(
+    sharedResultLabel({
+      completed: true,
+      outcome: "deceived",
+      paymentComplied: true,
+      defenseAction: "screen_held",
+      suspicionTimeLabel: "95초 시점",
+      missedSignals: [
+        { tactic: "다급함 조성", timeLabel: "80초 시점" },
+        { tactic: "송금 요구", timeLabel: "180초 시점" },
+      ],
+    }),
+    "중간에 넘어간 순간이 있었어요 · 송금 요구에 응했어요 · 95초 시점에 확인 질문에 사실대로 답해 거래를 멈췄어요 · 놓친 신호: 다급함 조성(80초 시점), 송금 요구(180초 시점)",
+  );
+  assert.equal(
+    sharedResultLabel({ completed: true, outcome: "held", defenseAction: "official_check" }),
+    "끝까지 속지 않았어요 · 진짜 번호로 직접 확인했어요",
+  );
+});
+
+test("[U03 RS] 세 종류(clone · generic · 메신저) 같은 요약 = 같은 문구 · 요약 없는(이전) 공유 = 완료 문구", () => {
+  const labels = [{ voiceMode: "clone" }, { voiceMode: "generic" }, { channel: "messenger" }].map((extra) =>
+    oneItem({ status: "completed", resultSharingConsented: true, resultSummary: HELD_HANGUP, ...extra } as Parameters<typeof oneItem>[0]),
+  );
+  assert.deepEqual(new Set(labels).size, 1);
+  assert.equal(oneItem({ status: "completed", resultSharingConsented: true }), SHARED_COMPLETED_ONLY_LABEL);
+  assert.equal(oneItem({ status: "completed", resultSharingConsented: true, resultSummary: { completed: true } }), SHARED_COMPLETED_ONLY_LABEL);
+});
+
+test("[U03 배선] fetchMyChallenges가 서버 resultSummary를 넘긴다 · 결과 화면은 배지와 다른 라벨을 상세 줄로 보인다", () => {
+  assert.match(readFileSync("src/lib/challenge/fetchChallenges.ts", "utf8"), /^\s*resultSummary: item\.resultSummary \?\? null,\s*$/m);
+});
+
+test("AC-043: 완료+동의+의심 시점 없음 → 요약 없는 공유는 완료 문구", () => {
   const items = mapChallengesToListItems([
     {
       challengeId: "c4",
@@ -60,7 +97,7 @@ test("AC-043: 완료+동의+의심 시점 없음 → '완료'만 표시한다", 
       createdAt: null,
     },
   ]);
-  assert.equal(items[0].statusLabel, "완료");
+  assert.equal(items[0].statusLabel, SHARED_COMPLETED_ONLY_LABEL);
   assert.equal(items[0].dateLabel, "날짜 미상");
 });
 
@@ -98,7 +135,7 @@ test("AC-055/OQ-31: 메신저 챌린지는 완료+동의라도 의심 시점을 
   assert.equal(items[0].statusLabel, "완료 · 상대가 체험을 마침");
 });
 
-test("channel 생략(부재) → 보이스 챌린지와 동일하게 기존 라벨을 그대로 유지한다(하위호환)", () => {
+test("channel 생략(부재) → 요약 없는 공유는 완료 문구(하위호환)", () => {
   const items = mapChallengesToListItems([
     {
       challengeId: "c7",
@@ -109,7 +146,7 @@ test("channel 생략(부재) → 보이스 챌린지와 동일하게 기존 라�
       createdAt: new Date("2026-07-24T10:00:00+09:00"),
     },
   ]);
-  assert.equal(items[0].statusLabel, "완료");
+  assert.equal(items[0].statusLabel, SHARED_COMPLETED_ONLY_LABEL);
 });
 
 test("AC-058/OQ-32: generic 보이스 챌린지는 완료+동의라도 의심 시점을 절대 노출하지 않고 '완료 · 상대가 체험을 마침'만 표시한다(D-34)", () => {
@@ -129,7 +166,7 @@ test("AC-058/OQ-32: generic 보이스 챌린지는 완료+동의라도 의심 �
   assert.equal(items[0].statusLabel, "완료 · 상대가 체험을 마침");
 });
 
-test("voiceMode 생략(부재→clone) → 기존 clone 챌린지 라벨을 그대로 유지한다(하위호환)", () => {
+test("voiceMode 생략(부재→clone) · 요약 없음 → 완료 문구(하위호환)", () => {
   const items = mapChallengesToListItems([
     {
       challengeId: "c9",
@@ -141,7 +178,8 @@ test("voiceMode 생략(부재→clone) → 기존 clone 챌린지 라벨을 그�
       channel: "voice",
     },
   ]);
-  assert.equal(items[0].statusLabel, "완료 · 의심 시점: 약 15초");
+  // U03 — 라벨은 서버 요약(resultSummary)에서만 만든다. 요약 없는 옛 항목 = 완료 문구.
+  assert.equal(items[0].statusLabel, SHARED_COMPLETED_ONLY_LABEL);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -189,7 +227,7 @@ test("[T181 C-1] 서버 전이 리터럴 + 결과 공유 미동의 ⇒ UX-020 (b
   assert.notEqual(oneItem({ status, resultSharingConsented: false }), "상대가 아직 해보지 않았습니다");
 });
 
-test("[T181 C-1] 서버 전이 리터럴 + 공유 동의 ⇒ 메신저·generic은 (c) '완료 · 상대가 체험을 마침', clone + 의심 시점 없음은 '완료'", () => {
+test("[T181 C-1] 서버 전이 리터럴 + 공유 동의 + 요약 없음 ⇒ 세 종류 모두 '완료 · 상대가 체험을 마침'(U03)", () => {
   const status = serverCompletionStatus();
   assert.equal(
     oneItem({ status, resultSharingConsented: true, channel: "messenger" }),
@@ -201,7 +239,7 @@ test("[T181 C-1] 서버 전이 리터럴 + 공유 동의 ⇒ 메신저·generic�
   );
   assert.equal(
     oneItem({ status, resultSharingConsented: true, channel: "voice", voiceMode: "clone", suspicionTimeLabel: null }),
-    "완료",
+    "완료 · 상대가 체험을 마침",
   );
 });
 

@@ -313,17 +313,17 @@ export const listMyChallenges = onCall<
     const data = doc.data() as ChallengeDoc;
     const channel: MessengerChannel = data.channel ?? "voice";
     const voiceMode: VoiceMode = data.voiceMode ?? "clone";
-    // T56(#23, §14.9.3 2차 하드닝) — generic 보이스 챌린지도 메신저와 동일하게 suspicionTimeLabel을
-    // 절대 표면화하지 않는다(OQ-32/AC-058, 벨트+멜빵 — 1차 강제는 deriveChallengeResultSummary가
-    // 애초에 계산·저장하지 않는 것).
-    const suppressSuspicion = channel === "messenger" || voiceMode === "generic";
+    // U03(2026-11-26 · 사용자 결정 "세 종류 모두 동일") — 종전 메신저(AC-055) · generic(OQ-32) 의심 시점 숨김을 없앴다.
+    // 대신 받은 사람이 공유에 동의한 경우에만 요약을 싣는다(아래 두 줄 · 판정표 RS).
     return {
       challengeId: data.challengeId,
       displayName: data.displayName,
       // D6 — 만료가 지난 미사용 링크는 "expired"(동의 게이트와 같은 판정 · `consentGate.ts`).
       status: listedChallengeStatus(data.status, data.linkExpiresAt.toMillis(), nowMs),
       resultSharingConsented: Boolean(data.resultSharingConsented),
-      suspicionTimeLabel: suppressSuspicion ? null : (data.resultSummary?.suspicionTimeLabel ?? null),
+      suspicionTimeLabel: data.resultSharingConsented ? (data.resultSummary?.suspicionTimeLabel ?? null) : null,
+      // U03 — 공유 동의한 경우에만 요약을 싣는다(채널 · 음성 모드 무관 — 사용자 결정 "세 종류 모두 동일").
+      resultSummary: data.resultSharingConsented ? (data.resultSummary ?? null) : null,
       createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : null,
       channel,
       voiceMode,

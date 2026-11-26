@@ -612,6 +612,16 @@ export type ListMyChallengesItem = {
   voiceMode: "clone" | "generic";
   /** §144 — 소스 목소리 프로필(부재 = null). */
   voiceProfileId: string | null;
+  /** U03 — 공유 동의한 경우에만 결과 요약 · 아니면 null(functions/src/shared/types.ts ChallengeResultSummary와 1:1). */
+  resultSummary: ChallengeResultSummarySource | null;
+};
+export type ChallengeResultSummarySource = {
+  completed: boolean;
+  suspicionTimeLabel?: string;
+  outcome?: "held" | "deceived";
+  paymentComplied?: true;
+  defenseAction?: "hangup" | "screen_held" | "official_check";
+  missedSignals?: { tactic: string; timeLabel: string }[];
 };
 export type ListMyChallengesResponse = { challenges: ListMyChallengesItem[] };
 

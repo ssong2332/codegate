@@ -20,5 +20,6 @@ export async function fetchMyChallenges(): Promise<ChallengeSource[]> {
     channel: item.channel,
     voiceMode: item.voiceMode,
     voiceProfileId: item.voiceProfileId ?? null,
+    resultSummary: item.resultSummary ?? null,
   }));
 }
