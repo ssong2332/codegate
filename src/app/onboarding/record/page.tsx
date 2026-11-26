@@ -24,6 +24,8 @@ import {
 import { resolveCloneReadyRoute } from "@/lib/recording/cloneReadyRoute";
 import {
   UPLOAD_ACCEPT,
+  UPLOAD_SCRIPT_HINT,
+  cloneFailureMessage,
   UPLOAD_MESSAGES,
   UPLOAD_OWNER_CONFIRM_TEXT,
   prepareUploadedVoice,
@@ -199,9 +201,10 @@ export default function RecordPage() {
     try {
       await createVoiceClone({ sessionId: pendingSessionId });
       router.push("/clone/wait");
-    } catch {
+    } catch (err) {
       setUploadStatus("error");
-      setUploadError("목소리 클론 생성에 실패했습니다. 다시 시도해 주세요.");
+      // §146 CF — 대본 줄 인식 부족이면 다시 녹음 · 다른 파일 안내(업로드 · 즉석 녹음 공통), 그 밖은 종전 문구.
+      setUploadError(cloneFailureMessage(err));
     }
   }, [user, uploaded, recorder.audioBlob, recorder.elapsedSeconds, recorder.mimeType, router, isSendRecording, profileLabel, retentionDays]);
 
@@ -359,6 +362,7 @@ export default function RecordPage() {
             {isSendRecording && (
               <div className="mt-2 flex w-full flex-col gap-3 border-t-[1.5px] border-line pt-4">
                 <p className="text-[16px] font-semibold text-ink">또는 녹음해 둔 파일 올리기 (20초 ~ 1분)</p>
+                <p className="text-[15px] leading-[1.5] text-ink-sub">{UPLOAD_SCRIPT_HINT}</p>
                 <label className="flex cursor-pointer select-none items-start gap-3">
                   <input
                     type="checkbox"

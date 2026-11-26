@@ -103,3 +103,21 @@ export async function prepareUploadedVoice(file: File): Promise<PreparedUpload> 
   const wav = encodeWav16kMono(channels, audio.sampleRate);
   return { ok: true, wav: new Blob([wav.buffer as ArrayBuffer], { type: "audio/wav" }), seconds: Math.round(audio.duration) };
 }
+
+// §146 판정표 CF(화면) — createVoiceClone 실패 문구. 서버 짝 = functions/src/voice/provider.ts CLONE_SCRIPT_UNREADABLE_REASON.
+export const CLONE_SCRIPT_UNREADABLE_REASON = "clone_script_unreadable";
+export const CLONE_SCRIPT_UNREADABLE_MESSAGE =
+  "녹음에서 대본 문장을 충분히 알아듣지 못했어요. 대본을 문장마다 잠깐 쉬며 또렷이 읽은 녹음이 필요해요 — 다시 녹음하거나 다른 파일을 올려 주세요.";
+export const CLONE_FAILED_MESSAGE = "목소리 클론 생성에 실패했습니다. 다시 시도해 주세요.";
+export const UPLOAD_SCRIPT_HINT = "대본을 문장마다 잠깐 쉬며 또렷이 읽은 녹음이어야 해요.";
+
+/** CF1 failed-precondition ∧ reason = clone_script_unreadable → 구체 안내 · CF2 그 밖(네트워크 · GPU · 서버 오류) → 종전 문구. */
+export function cloneFailureMessage(err: unknown): string {
+  if (!err || typeof err !== "object") return CLONE_FAILED_MESSAGE;
+  const e = err as { code?: unknown; details?: unknown };
+  const reason =
+    e.details && typeof e.details === "object" ? (e.details as { reason?: unknown }).reason : undefined;
+  return e.code === "functions/failed-precondition" && reason === CLONE_SCRIPT_UNREADABLE_REASON
+    ? CLONE_SCRIPT_UNREADABLE_MESSAGE
+    : CLONE_FAILED_MESSAGE;
+}

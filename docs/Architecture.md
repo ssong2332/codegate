@@ -25354,3 +25354,17 @@ Modal 정리 근거: 앱은 Volume · Dict 0(`test_gsv.py` NoPersistTest) · 참
 - 원인(코드로 확인): `saveVoiceProfile`이 응답 전에 `purgeSession`으로 사전 세션 `voiceId`를 지운다(`functions/src/guardrails/index.ts` voiceId 삭제) → Effect 1 스냅샷 `setVoiceId(null)` → Effect 2 cleanup `cancelled = true` → 저장 성공 뒤 이동 · 실패 뒤 오류 표시를 모두 건너뜀 → 재실행은 voiceId null로 즉시 return. 매번 나는 결함(경합 아님).
 - 수정: 판정표 SR(`saveProfileThenReturn` · `cloneReadyRoute.ts`) — SR1 성공 ∧ 화면 살아 있음 = 이동 · SR2 실패 ∧ 살아 있음 = 오류 표시 · SR3 언마운트 = 아무것도 안 함. 취소 신호는 언마운트뿐(`mountedRef`) · 저장은 한 번만(`profileSaveStartedRef`). 업로드 · 즉석 녹음이 같은 화면이라 둘 다 고쳐진다.
 - 시험 `src/lib/recording/cloneWaitSaveStall.test.ts`(재현 · SR 3행 · 배선) · 역검증 = main 화면 1/4 fail(배선). ⚠️ 실기 재확인 필요.
+
+## 146. (Fix — 2026-11-26 · 브랜치 `claude/clone-fail-notice` = main `a6352393` + 변경 · 메인 라이브 시험 → 사용자 "고치고" · DECISIONS #260) **클론 준비 실패 안내 · 보관 남은 일수**
+
+① 판정표 CF — 쉼 없이 이어 읽은 54초 WAV → Modal `/prepare` `{ok:false}`(로그 readLines 1 · segs 4) → `createVoiceClone` internal → 화면 "다시 시도해 주세요"뿐. 문장마다 0.6초 쉰 파일은 ok(readLines 8).
+| 행 | 조건 | 서버(`createVoiceClone`) | 화면(`cloneFailureMessage`) |
+|---|---|---|---|
+| CF1 | `/prepare` `reason` ∈ {too_little_speech, no_main_ref}(refpick.py 실패 사유 전부) | `failed-precondition` · `details.reason = clone_script_unreadable` | "대본을 문장마다 잠깐 쉬며 또렷이 읽은 녹음이 필요해요 — 다시 녹음하거나 다른 파일을 올려 주세요" |
+| CF2 | 그 밖 `{ok:false}` · 빈 결과 | `internal`(종전) | 종전 문구 |
+| CF3 | 네트워크 · 시간 초과(fetch 예외) | 예외 그대로(종전) | 종전 문구 |
+- 업로드 · 즉석 녹음이 같은 호출이라 둘 다 같은 안내. 업로드 묶음에 "대본을 문장마다 잠깐 쉬며 또렷이 읽은 녹음이어야 해요." 한 줄.
+- 손댄 곳: `voice/provider.ts`(선택 필드 `failureReason` · 상수) · `voice/gsvProvider.ts`(prepare 실패 매핑 3줄만) · `voice/index.ts`. services/gsv · 통화 쪽 무변경.
+
+② 판정표 DL — 7일 저장 직후 "6일 뒤 삭제"(내림). 남은 시간을 올림: DL1 ≤ 0 · DL2 1일 미만 = "오늘 삭제" · DL3 1일 이상 = 올림 일수(저장 직후 = "7일 뒤 삭제").
+- 시험 `functions/src/voice/__tests__/cloneFailReason.test.ts` · `src/lib/recording/cloneFailNotice.test.ts`.
