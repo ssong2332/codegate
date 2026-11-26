@@ -25348,3 +25348,9 @@ Modal 정리 근거: 앱은 Volume · Dict 0(`test_gsv.py` NoPersistTest) · 참
 - trust boundary: 서버 쪽 검사는 종전 그대로(storage.rules 소유자 · `audio/*` · < 3MB). 길이 · 형식 판정은 클라 — 즉석 녹음도 길이는 클라 판정이었다(무변경).
 - 확인 문구: "이 파일은 제 목소리이거나, 목소리 주인에게 사용 허락을 받은 녹음입니다. 다른 사람의 목소리를 허락 없이 올리지 않습니다." ⚠️ AC-020(본인 목소리만)보다 넓다 — 메인 지시 원문 "본인 목소리(또는 사용 허락받은 목소리)". 확인 문구는 서버에 남지 않는다(즉석 녹음의 본인 확인과 같음).
 - 시험 `src/lib/recording/uploadedVoice.test.ts`(UF · UD · 훅 상수 대조 · WAV 변환 · 규칙 크기 · 배선). ⚠️ 실기기(iOS Safari m4a 풀기 등) 미검증.
+
+### 145.1 실기 결함 — 보내기 녹음 뒤 clone/wait 멈춤(2026-11-26 04:53Z · 같은 브랜치)
+- 증상: "가상 음성이 준비됐어요 / 잠시만 기다려 주세요"에서 챌린지 만들기로 안 넘어감 · 오류 로그 0(createVoiceClone 04:53:45 → saveVoiceProfile 04:53:58 → onSessionEnded 04:54:02).
+- 원인(코드로 확인): `saveVoiceProfile`이 응답 전에 `purgeSession`으로 사전 세션 `voiceId`를 지운다(`functions/src/guardrails/index.ts` voiceId 삭제) → Effect 1 스냅샷 `setVoiceId(null)` → Effect 2 cleanup `cancelled = true` → 저장 성공 뒤 이동 · 실패 뒤 오류 표시를 모두 건너뜀 → 재실행은 voiceId null로 즉시 return. 매번 나는 결함(경합 아님).
+- 수정: 판정표 SR(`saveProfileThenReturn` · `cloneReadyRoute.ts`) — SR1 성공 ∧ 화면 살아 있음 = 이동 · SR2 실패 ∧ 살아 있음 = 오류 표시 · SR3 언마운트 = 아무것도 안 함. 취소 신호는 언마운트뿐(`mountedRef`) · 저장은 한 번만(`profileSaveStartedRef`). 업로드 · 즉석 녹음이 같은 화면이라 둘 다 고쳐진다.
+- 시험 `src/lib/recording/cloneWaitSaveStall.test.ts`(재현 · SR 3행 · 배선) · 역검증 = main 화면 1/4 fail(배선). ⚠️ 실기 재확인 필요.

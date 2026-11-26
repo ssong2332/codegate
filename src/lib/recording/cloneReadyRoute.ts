@@ -29,3 +29,29 @@ export function resolveCloneReadyRoute(input: {
 export function withVoiceProfile(challengeHref: string, profileId: string): string {
   return `${challengeHref}&voiceProfileId=${encodeURIComponent(profileId)}`;
 }
+
+/**
+ * 2026-11-26 실기 결함(§145.1) — 보내기 녹음 뒤 clone/wait가 "잠시만 기다려 주세요"에 멈췄다.
+ * saveVoiceProfile이 서버에서 사전 세션을 폐기(purgeSession → voiceId 삭제)하고 나서야 응답한다. 그 voiceId 변화가
+ * 구독 스냅샷 → effect 재실행 → cleanup 취소로 번져, 저장이 끝나도 이동 · 오류 표시를 모두 건너뛰었다.
+ * 판정표 SR: SR1 저장 성공 ∧ 화면 살아 있음 → 저장 힌트 지우고 그 프로필로 이동 · SR2 실패 ∧ 살아 있음 → onError
+ * · SR3 화면이 떠남(언마운트) → 아무것도 안 함(성공이면 힌트는 지운다). 세션 문서의 변화는 취소 신호가 아니다.
+ */
+export async function saveProfileThenReturn(deps: {
+  save: () => Promise<{ profileId: string }>;
+  clearPending: () => void;
+  isMounted: () => boolean;
+  go: (href: string) => void;
+  onError: (err: unknown) => void;
+  challengeHref: string;
+}): Promise<void> {
+  let profileId: string;
+  try {
+    ({ profileId } = await deps.save());
+  } catch (err) {
+    if (deps.isMounted()) deps.onError(err);
+    return;
+  }
+  deps.clearPending();
+  if (deps.isMounted()) deps.go(withVoiceProfile(deps.challengeHref, profileId));
+}

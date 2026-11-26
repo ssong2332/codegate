@@ -11,7 +11,7 @@
 // selectedScenarioId를 읽어 createSession을 대신 호출하고(사용자가 다시 시나리오를 고를 필요
 // 없음), 바로 /session/play로 이동한다. cloneStatus 구독(Effect 1)과 createSession 호출
 // (Effect 2)을 분리해 "다시 시도"가 스냅샷 재발화 없이도 실제로 재호출되게 한다.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -24,7 +24,7 @@ import {
   getSelectedDifficultyLevel,
   getExperienceMode,
 } from "@/lib/recording";
-import { resolveCloneReadyRoute, withVoiceProfile } from "@/lib/recording/cloneReadyRoute";
+import { resolveCloneReadyRoute, saveProfileThenReturn } from "@/lib/recording/cloneReadyRoute";
 import { createSession, saveVoiceProfile } from "@/lib/api";
 import {
   VOICE_PROFILE_CONSENT_VERSION,
@@ -65,6 +65,15 @@ export default function CloneWaitPage() {
   // 구독 중인 같은 스냅샷에서 함께 읽는다(신규 read 0건). 대사 축(`llmProvider`)과는 다른 값이라
   // 섞지 않는다(48.3).
   const [voiceProvider, setVoiceProvider] = useState<VoiceProviderName | null>(null);
+  // §145.1 — 프로필 저장은 화면이 떠날 때만 취소한다(저장 중 서버가 사전 세션 voiceId를 지워 Effect 2가 다시 돌아도 계속).
+  const mountedRef = useRef(true);
+  const profileSaveStartedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Effect 1 — cloneStatus 구독만 담당(클론 진행 상태 표시). voiceId가 확보되면 저장만 하고,
   // 실제 createSession 호출은 Effect 2로 넘긴다.
@@ -112,7 +121,6 @@ export default function CloneWaitPage() {
       router.push("/scenarios/messenger/voice-select");
       return;
     }
-    let cancelled = false;
     if (route.kind === "challenge") {
       // §144(DECISIONS #257) — 녹음 화면에서 받은 이름 · 기간 · 동의로 목소리 프로필을 저장하고, 그 목소리가 골라진
       // 만들기 화면으로 돌아간다. 저장 값이 없으면(녹음 화면을 거치지 않음) 목소리 없이 만들기로 — 거기서 고르거나 새로 녹음.
@@ -121,32 +129,35 @@ export default function CloneWaitPage() {
         router.push(route.href);
         return;
       }
-      (async () => {
-        setStartState("saving");
-        try {
-          const { profileId } = await saveVoiceProfile({
+      // 한 번만 저장한다(재실행 · StrictMode 이중 실행에서 프로필이 둘 생기지 않게). cleanup으로 취소하지 않는다 — 판정표 SR.
+      if (profileSaveStartedRef.current) return;
+      profileSaveStartedRef.current = true;
+      setStartState("saving");
+      void saveProfileThenReturn({
+        save: () =>
+          saveVoiceProfile({
             sessionId,
             label: pending.label,
             retentionDays: pending.retentionDays,
             consented: true,
             consentTextVersion: VOICE_PROFILE_CONSENT_VERSION,
-          });
-          clearPendingVoiceProfileSave();
-          if (!cancelled) router.push(withVoiceProfile(route.href, profileId));
-        } catch (err) {
-          if (cancelled) return;
+          }),
+        clearPending: clearPendingVoiceProfileSave,
+        isMounted: () => mountedRef.current,
+        go: (href) => router.push(href),
+        onError: (err) => {
           const message =
             err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string"
               ? (err as { message: string }).message
               : "목소리를 저장하지 못했습니다.";
           setSaveBack({ href: route.href, message });
           setStartState("save-error");
-        }
-      })();
-      return () => {
-        cancelled = true;
-      };
+        },
+        challengeHref: route.href,
+      });
+      return;
     }
+    let cancelled = false;
     (async () => {
       const scenarioId = getSelectedScenarioId();
       if (!scenarioId) {
