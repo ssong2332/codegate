@@ -99,5 +99,24 @@ class NoPersistTest(unittest.TestCase):
         self.assertFalse(names & {"Volume", "Dict", "Queue", "NetworkFileSystem", "CloudBucketMount"})
 
 
+class FirstAudioTest(unittest.TestCase):  # §143.21 — 첫 음성 지연 판정표 B(서버 쪽)
+    def setUp(self):
+        self.src = open(os.path.join(os.path.dirname(__file__), "app.py"), encoding="utf-8").read()
+
+    def test_b1_boot_warmup_runs_in_enter(self):  # B1 — 첫 합성 초기화를 기동 때(통화 연결 때 0)
+        enter = self.src[self.src.index("def load(self)"):self.src.index("@modal.asgi_app()")]
+        self.assertIn("self._boot_warmup()", enter)
+        warm = self.src[self.src.index("def _boot_warmup(self)"):self.src.index("@modal.asgi_app()")]
+        self.assertIn("sine=frequency", warm)  # 사람 목소리 0
+        self.assertIn('self.tts.prompt_cache["ref_audio_path"] = None', warm)
+
+    def test_b2_refs_fetched_in_parallel_and_timed(self):  # B2 — 참조 동시 받기 · 구간 로그
+        ws = self.src[self.src.index('@api.websocket("/ws")'):]
+        self.assertIn("asyncio.gather(*(asyncio.to_thread(_fetch", ws)
+        self.assertNotIn("await asyncio.to_thread(_fetch, ref[", ws)
+        self.assertIn("fetchSec=", ws)
+        self.assertIn("primeSec=", ws)
+
+
 if __name__ == "__main__":
     unittest.main()

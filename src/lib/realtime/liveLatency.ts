@@ -184,7 +184,12 @@ export type CallSetupMark =
   | "micReady"
   | "connectResolved"
   | "openingSent"
-  | "firstAudio";
+  | "firstAudio"
+  // §143.21 복제 통화 — 합성 연결(새로 엶 · 벨 울리는 동안 미리 연 것을 넘겨받음) · 준비 끝 · 첫 복제 음성(실제 첫 소리)
+  | "cloneOpen"
+  | "clonePrewarmed"
+  | "cloneReady"
+  | "cloneFirstAudio";
 
 /** 받기 시점 자격증명의 출처(reviewer m3) — 완료된 미리 받기 · 진행 중 미리 받기를 기다림 · 받기 뒤 새 발급. */
 export type CredentialSourceTag = "settled" | "inflight" | "mint";
@@ -275,12 +280,37 @@ export function buildCallSetupRecord(
   };
 }
 
+/** §143.21 복제 통화 준비 구간 — 첫 복제 음성 때 한 줄. 실제 첫 소리 = `acceptToCloneFirstAudioMs`(목표 5 ~ 7초). */
+export type CloneSetupRecord = {
+  type: "cloneSetup";
+  clonePrewarmed: boolean;
+  acceptToCloneReadyMs: number | null;
+  /** 받기 → Live 연결 완료(합성 준비와 병렬). */
+  acceptToConnectMs: number | null;
+  /** Live 연결 → 오프닝(복제 통화는 합성 준비를 기다린다 — 판정표 CW1). */
+  connectToOpeningSentMs: number | null;
+  openingSentToCloneFirstAudioMs: number | null;
+  acceptToCloneFirstAudioMs: number | null;
+};
+
+export function buildCloneSetupRecord(marks: CallSetupMarks): CloneSetupRecord {
+  return {
+    type: "cloneSetup",
+    clonePrewarmed: marks.clonePrewarmed !== undefined,
+    acceptToCloneReadyMs: diff(marks.accept, marks.cloneReady),
+    acceptToConnectMs: diff(marks.accept, marks.connectResolved),
+    connectToOpeningSentMs: diff(marks.connectResolved, marks.openingSent),
+    openingSentToCloneFirstAudioMs: diff(marks.openingSent, marks.cloneFirstAudio),
+    acceptToCloneFirstAudioMs: diff(marks.accept, marks.cloneFirstAudio),
+  };
+}
+
 /** 로그 1줄 본문. 호출부는 `console.info(LIVE_LATENCY_LOG_PREFIX, formatLatencyLine(...))`로 남긴다. */
 export const LIVE_LATENCY_LOG_PREFIX = "[gemini-latency]";
 
 export function formatLatencyLine(
   model: string,
-  record: LiveLatencyTurnRecord | LatencySummary | CallSetupRecord,
+  record: LiveLatencyTurnRecord | LatencySummary | CallSetupRecord | CloneSetupRecord,
 ): string {
   return JSON.stringify({ v: 1, model, ...record });
 }
