@@ -23,6 +23,7 @@ export { getBeginnerBriefing } from "./getBeginnerBriefing";
 export { createChallenge } from "./createChallenge";
 export { deleteChallenge } from "./deleteChallenge";
 export { listMyChallenges } from "./listMyChallenges";
+export { saveVoiceProfile, deleteVoiceProfile } from "./voiceProfiles";
 export { getChallengeLanding } from "./getChallengeLanding";
 export { consentChallenge } from "./consentChallenge";
 export { reportChallenge } from "./reportChallenge";

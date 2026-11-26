@@ -45,6 +45,7 @@ export { recordLoanReview } from "./callLegs/loanReview";
 export { getBeginnerBriefing } from "./scenarios/beginnerBriefing";
 // 2인 소셜 챌린지 — 사용자1 생성·클론 스코프·공유 링크(T36, Architecture.md §14, ADR-0005).
 export { createChallenge, deleteChallenge, listMyChallenges } from "./challenge";
+export { saveVoiceProfile, deleteVoiceProfile } from "./challenge/voiceProfiles";
 // 2인 소셜 챌린지 — 사용자2 동의·체험·신고·결과공유(T37, §14.7/ADR-0006). challenge/index.ts와
 // 순환 참조를 피하려고 별도 모듈(userAccess.ts)에서 직접 export한다.
 export {
@@ -60,5 +61,6 @@ export { onSessionEnded } from "./guardrails";
 // Scheduled function(클라 직접 호출 아님, 이 코드베이스 첫 onSchedule) — 챌린지 복제 음성 기간제
 // 자동 삭제(T36, Architecture.md §14.3, ADR-0005 "폐기 기계 재사용").
 export { purgeExpiredChallenges } from "./challenge";
+export { purgeExpiredVoiceProfiles } from "./challenge/voiceProfiles";
 // 2026-11-17 감사 '꼭 고칠 것 5' — 버려진 active 세션을 세션 시간 한도 + 유예 뒤 ended로 바꾼다(정리는 onSessionEnded · `session/staleSweep.ts` 판정표).
 export { endStaleSessions } from "./session/staleSweepSchedule";

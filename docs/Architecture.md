@@ -530,10 +530,10 @@ UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **bes
 ### 14.3 보존기간 기본값 (DECISIONS #22, AC-041/OQ-25)
 | 항목 | 값 |
 |---|---|
-| 기본 보존기간 | **30일**(생성 시각 기준) |
-| 사용자 조정 범위 | **7~90일** |
-| 수동 삭제 | 언제든 가능(UX-020, 즉시 폐기 트리거) |
-| 자동 삭제 | `retentionDeleteAt` 도달 시 스케줄 함수가 폐기(ADR-0003 기계 재사용) |
+| 기본 보존기간 | ~~30일~~ → **3일 = 링크 만료와 같다**(2026-11-26 · DECISIONS #258 · `CHALLENGE_DEFAULT_RETENTION_MS = CHALLENGE_FREE_LINK_EXPIRY_MS`). 같은 목소리 재사용은 목소리 프로필(§144 · 7/30일)이 맡는다 |
+| 사용자 조정 범위 | 없음(챌린지 음성) — 기간 선택은 목소리 프로필에서(7/30일) |
+| 수동 삭제 | 언제든 가능(UX-020 · 목소리 프로필 삭제 때 함께 — 상태 `deleted`) |
+| 자동 삭제 | `retentionDeleteAt` 도달 시 스케줄 함수가 **음성만** 폐기(판정표 RT · `purge.ts`): 클론 · voiceId · 받는 분 정보 삭제 + `retentionPurgedAt`. **상태 · 결과 · 목록 · 신고는 그대로**, 막히는 것은 통화 재개뿐(consentGate · createRealtimeCall의 retentionDeleteAt 검사). 신고는 종전대로 링크 만료까지(`resolved.expired`) |
 
 > 근거: 딥보이스 신뢰 리스크상 무기한 보관 금지, 그러나 비동기 챌린지(무료 링크 3일 + 사용자2 여유)와 "내 목소리 금고"(P-8) 재열람을 감안해 즉시삭제보다 길게. 30일은 링크 만료(3일)보다 충분히 길어 "링크는 만료됐지만 음성은 아직 보존"(AC-048 주석의 별개 개념)을 자연히 표현한다.
 
@@ -25000,3 +25000,68 @@ PR-2 화면 계약(이 PR이 전제하는 것):
 | 3 | 클라 연락처 제거에 맞춰 상담원 · 조사관이 다음 공식 대표번호를 말로 한 자리씩 불러 준다(번호부 값 · 읽는 꼴 `spokenDialNumber`) · "직접 찾아보셔도 같은 번호" — 가로채기 판정(`planLegStart`)은 무변경 | `cardRebuildLegs.prompt.ts` · `dialDirectory.ts` |
 | 4 | R1 문자 3통 발신 = 보낸 곳마다 다른 번호 · 번호만(`CARD_R1_SMS_SENDER` — 배송 02-0767-3051 · 고객센터 02-0762-5513 · 자산보호 070-0462-1593). 클라 계약: 문자함 대화방 키 = `senderLabel` 번호. 그 밖 문자 발신 표시 무변경 | `inCallSms.ts` |
 | 5 | 참가자가 먼저 끊기(메인 승인 계약 — 전화 앱 세션 제안): `startCallLeg({action:"hangup"})` → 판정표 H1~H4(`planLegHangup` — 연결 중이면 relay `connected:false · legEnded · hungUpBy:"participant"` · 응답 `{status:"ended", legIndex}` · 이미 끝난 레그는 쓰기 0). 끊은 레그 뒤 callback · 그 레그 상대 번호(`legCounterpartNumber`) dial = 같은 레그 재연결(`rejoin` · 레그 시작 발화 수 유지) · 그 밖 번호 = 종전 판정(마지막 레그는 진짜 안내 / 없는 번호). 재연결 Live = "끊겼던 통화 · 같은 사람 · 이 통화 대화만" 맥락(`buildLegRejoinContext`) · 폴백 = 재연결 뒤 첫 턴 1줄. 리포트는 `hungUpBy`를 읽지 않는다(판정 영향은 메인 결정 대기) · 재연결은 그 레그의 통화 발급 예산(`issueBudget.ts`)을 함께 쓴다 | `callLegs/legPlan.ts` · `callLegs/index.ts` · `callLegs/request.ts` · `realtime/index.ts` · `roleplay/index.ts` · `shared/types.ts` |
+
+## 144. (Feature — 2026-11-26 · 브랜치 `claude/voice-profile-e23407` = main `f2f27f82` + 변경 · 사용자 결정 → 메인 세션 승인 Q1~Q5 · DECISIONS #257 · UX D-163) **목소리 프로필 · 지인에게 보내기 흐름 단순화** — architect · implementer 기록
+
+### 144.1 금지
+- `functions/src/realtime/*` · 통화 음성 경로 · voiceId · Storage `voices/{voiceId}/`(§143) 계약 무변경. `gsvProvider.ts` 무변경.
+- 프로필은 **원본 녹음 사본만** 갖는다(클론 0) → 챌린지마다 종전 `provider.createClone`으로 새 클론(ADR-0005 스코프 고정 · AC-041).
+- 녹음 다운로드 · 추출 경로 0: Storage `users/{uid}/voiceProfiles/**`는 규칙에 허용 행이 없어 기본 거부(서버 전용). 콜러블은 메타만 반환.
+
+### 144.2 지금 구조 vs 바뀐 점
+| # | 항목 | 이전(main f2f27f82) | 이후 |
+|---|---|---|---|
+| S1 | 보내기 흐름 | 만들기 → (클론 없음) error-clone → 녹음 → clone/wait → 만들기 | 만들기의 **보낼 목소리 칸**에서 고르기 · 새로 녹음 → clone/wait 저장 → 골라진 만들기 |
+| S2 | 챌린지 소스 녹음 | 최근 20세션 중 `cloneStatus:"ready"` 세션 녹음 | 요청 `voiceProfileId` → `voiceProfileRecordingPath(uid, id)` |
+| S3 | `users/{uid}/voices` | 읽기만(사실상 죽은 코드) | 프로필 문서(쓰기 = Functions만) |
+| S4 | 보내기 사전 세션 녹음 | `created`로 남아 **무기한 잔존** | 저장 직후 `purgeSession`(Storage 접두 · 세션 voiceId · deletionLogs) |
+| S5 | 보존 | — | 7/30일(기본 30) · 하루 1회 자동 삭제 · 수동 삭제 |
+| S6 | 규칙 | storage · firestore | **변경 0**(시험이 storage 기본 거부를 고정) |
+
+### 144.3 판정표 (정본 = `functions/src/challenge/voiceProfileRules.ts` · 화면 `src/lib/voices/voiceProfileConsent.ts`)
+**VP-SAVE `saveVoiceProfile({ sessionId, label, retentionDays, consented, consentTextVersion })`** (D 클래스 · 익명 거부)
+| 행 | 조건 | 결과 |
+|---|---|---|
+| VS1 | 동의 아님 · 버전 ≠ `voice-profile-v1` · 기간 ∉ {7,30} · 이름 빈 값/20자 초과 | invalid-argument |
+| VS2 | 세션 소유 아님 · status ≠ `created` · cloneStatus ≠ ready · 녹음 없음 | failed-precondition |
+| VS3 | 만료 전 프로필 ≥ 3(트랜잭션) | resource-exhausted · reason `voice_profile_cap` |
+| VS4 | 통과 | 문서 생성(트랜잭션) → 녹음 복사(실패면 문서 삭제 · internal) → 사전 세션 폐기(실패는 로그만) → `{ profileId }` |
+
+**VP-USE `createChallenge` 보이스 clone**
+| 행 | 조건 | 결과 |
+|---|---|---|
+| VU1 | 프로필 id 형식 아님 · caller 경로에 없음 · 만료 · 녹음 없음 | failed-precondition · reason `voice_profile_required` |
+| VU2 | 통과 | 그 녹음으로 `createClone` · 챌린지 `voiceProfileId` 기록 |
+| VU3 | 메신저 · generic | 종전(프로필 무시) |
+
+**VP-DEL** (`deleteVoiceProfile` 수동 · `purgeExpiredVoiceProfiles` 자동 — 같은 함수 `purgeVoiceProfile`)
+| 행 | 대상 | 동작 |
+|---|---|---|
+| VD2 | `challenges` creatorUid = uid ∧ voiceProfileId = id ∧ status ≠ deleted | `purgeChallenge`(클론 폐기 · status deleted = 링크 무효) |
+| VD1 | Storage `users/{uid}/voiceProfiles/{id}/` | 파일 삭제 · deletionLogs(`voiceProfileId`) |
+| VD3 | 프로필 문서 | VD1 전부 성공 때만 삭제(실패면 남겨 자동 스캐너가 재시도) |
+
+**VP-UI (UX-019 · D-163)**: VI1 0개 = 새로 녹음만 · VI2 1~2개 = 목록 + 새로 녹음 · VI3 3개 = 새로 녹음 비활성 + 안내 · VI4 `?voiceProfileId=` = 골라진 상태 · VI5 선택 없음 = 만들기 비활성. 만료 전 프로필만 표시.
+
+### 144.4 배포 · 겹침
+- **배포 때 `firebase deploy --only firestore:indexes` 필요**(fieldOverrides: `voices.retentionDeleteAt` COLLECTION_GROUP). 진입점 31 → 34(콜러블 +2 · 스케줄 +1).
+- §143(gsv) 브랜치와 겹치는 파일: `challenge/index.ts`(그쪽 데코레이터 옵션 1줄) · `functions/src/index.ts` · `anonymousGate.test.ts`(진입점 수 — 나중 병합이 합산) · `record/page.tsx` · `api/types.ts`. 내용 충돌 없음 추정 — 병합 때 확인.
+- 그대로 둔 것: 챌린지 복제 음성 보존 30일(`CHALLENGE_DEFAULT_RETENTION_MS`) · 링크 만료 3일 — 사용자 별도 질의 중.
+
+### 144.5 챌린지 음성 보존 3일 · 음성만 폐기 (DECISIONS #258 · §14.3 갱신)
+| 행 | 상태 | 만료 스캔 | 폐기 뒤 남는 것 |
+|---|---|---|---|
+| RT1 | deleted(사용자 · 프로필 삭제) | 제외 | — |
+| RT2 | 만료 전 | 제외 | 전부 |
+| RT3 | 만료 · 음성 폐기 전 | 선택 → `purgeChallengeVoice` | 상태 · 결과 · 목록 · 신고 그대로 / 클론 · voiceId · 받는 분 정보 삭제 · `retentionPurgedAt` / 재개 거절 |
+| RT4 | 만료 · `retentionPurgedAt` 있음 | 제외(멱등) | — |
+- 시험 `functions/src/challenge/__tests__/retentionVoiceOnly.test.ts`(상태별 목록 · 신고 · 재개 판정 + 배선).
+- 이미 만든 챌린지의 `retentionDeleteAt`(생성 + 30일)은 백필하지 않는다 — 그 날짜에 음성만 폐기된다.
+
+### 144.6 '내 정보' 허브 `/me` (UX D-164)
+| 묶음 | 데이터(기존 읽기) | 진입 |
+|---|---|---|
+| 저장한 목소리 | `fetchVoiceProfiles` · 사용처 수 = `listMyChallenges`의 새 필드 `voiceProfileId`(본인 프로필 id · 비민감) | 삭제(`VoiceProfileList` 공용 — 만들기 화면과 같은 컴포넌트) |
+| 내가 만든 챌린지 | `fetchMyChallenges` 최근 3 | `/challenge/results` |
+| 내 리포트 | `fetchReportHistory` 최근 3 | `/report?sessionId=` · `/history` · `/report/archive` · `/grade` |
+- 진입점: 로그인 홈 `/scenarios`(로그아웃 위) · 챌린지 만들기 성공 화면. 익명 = 수신 흐름 허용 목록에 없음 → RouteGuard `/login` 안내(AC-090) · 서버 판정 무변경(AC-085). `APP_ROUTE_PATHS` · `DISALLOW_PREFIXES`에 `/me`.

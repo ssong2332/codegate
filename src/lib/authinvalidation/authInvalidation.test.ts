@@ -46,6 +46,7 @@ const ALL_ROUTES = [
   "/faq", // §133 자주 묻는 질문
   "/grade",
   "/history",
+  "/me",
   "/login",
   "/onboarding/age-gate",
   "/onboarding/consent",

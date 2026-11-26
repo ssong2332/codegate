@@ -44,7 +44,9 @@ export const MESSENGER_ESCALATION_MAX_USER_TURNS = 14;
 // 범위 밖(P1) — 이름에 FREE_ 접두를 붙여 나중에 PAID_ 상수를 나란히 추가하기 쉽게 해둔다.
 export const CHALLENGE_FREE_ACTIVE_CAP = 3; // 사용자1당 동시 활성(pending|consented|in_progress·미만료) 챌린지 상한
 export const CHALLENGE_FREE_LINK_EXPIRY_MS = 3 * 24 * 60 * 60 * 1000; // 공유 링크 만료(3일, AC-048)
-export const CHALLENGE_DEFAULT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 복제 음성 보존 기본값(30일, §14.3). 조정 UI(7~90일)는 범위 밖.
+// 복제 음성 보존 = 링크 만료와 같은 3일(DECISIONS #258 · 사용자 결정 "3일로 맞춤" · §14.3). 같은 목소리 재사용은 목소리 프로필(7/30일 · §144)이 맡는다.
+// 기간이 끝나면 **음성만** 폐기한다(판정표 RT — purge.ts). 챌린지 상태 · 결과 · 신고는 남고 통화 재개만 막힌다.
+export const CHALLENGE_DEFAULT_RETENTION_MS = 3 * 24 * 60 * 60 * 1000; // = CHALLENGE_FREE_LINK_EXPIRY_MS(시험이 같음을 고정 · 개인정보처리방침 시험이 이 꼴을 읽는다)
 
 // 자체 감사 결함 5 — 자유 텍스트 상한(architect 설계 불요, 기존 선례 rewind/judge.ts의
 // REWIND_ANSWER_MAX_LENGTH=500 적용). 초과 시 조용히 자르지 않고 거절한다(AC-039와 동일 원칙).

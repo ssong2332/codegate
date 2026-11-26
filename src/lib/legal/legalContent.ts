@@ -51,10 +51,10 @@ export type LegalSection = {
 
 export type LegalDocument = { title: string; intro: string; sections: readonly LegalSection[] };
 
-// 챌린지(가족에게 보내기) 링크 만료 3일 · 보존 30일 — functions/src/shared/constants.ts
+// 챌린지(가족에게 보내기) 링크 만료 3일 · 복제 음성 보존 3일(DECISIONS #258) — functions/src/shared/constants.ts
 // CHALLENGE_FREE_LINK_EXPIRY_MS · CHALLENGE_DEFAULT_RETENTION_MS. 테스트가 두 값을 대조한다.
 export const CHALLENGE_LINK_EXPIRY_DAYS = 3;
-export const CHALLENGE_RETENTION_DAYS = 30;
+export const CHALLENGE_RETENTION_DAYS = 3;
 
 export const PRIVACY_POLICY: LegalDocument = {
   title: "개인정보처리방침",
@@ -93,6 +93,8 @@ export const PRIVACY_POLICY: LegalDocument = {
       items: [
         // functions/src/guardrails/purge.ts — 세션 종료 시 해당 세션 Storage 경로 삭제
         "목소리 녹음 파일: 해당 훈련이 끝나면 바로 삭제합니다",
+        // §144 · DECISIONS #257 — functions/src/challenge/voiceProfiles.ts
+        "가족에게 보내기용 목소리(목소리 프로필): 저장할 때 동의를 받고 고른 기간(7일 또는 30일) 동안만 보관하며, 최대 3개까지 저장합니다. 기간이 끝나면 자동으로 삭제하고(하루 한 번 정리), 언제든 직접 삭제할 수 있습니다. 삭제하면 그 목소리로 만든 훈련 링크도 함께 삭제됩니다",
         `가족에게 보내기: 훈련 링크는 ${CHALLENGE_LINK_EXPIRY_DAYS}일 뒤 만료됩니다. 보낸 지 ${CHALLENGE_RETENTION_DAYS}일이 지나면 연결된 목소리 정보와 받는 분 정보 카드를 삭제합니다(하루 한 번 정리). 받는 분이 동의하면 그 시점에 보낸 쪽 기록의 받는 분 정보 카드를 지우되, 받는 분의 훈련 기록에는 사본이 남습니다`,
         // docs/Database.md — 세션 · 메시지 · 리포트 삭제 코드 없음
         "계정 정보, 훈련 기록, 리포트: 현재는 자동 삭제 기한을 두지 않고 보관합니다. 삭제를 원하시면 아래 문의처로 요청해 주세요",

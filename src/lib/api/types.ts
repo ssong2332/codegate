@@ -569,6 +569,8 @@ export type CreateChallengeRequest = {
   difficultyLevel?: DifficultyLevel;
   /** §88(UX D-131) — 발신자가 넣은 받는 분 정보 원값(선택 · 부재 = 카드 0). 받는 사람에게는 통화가 끝날 때까지 보이지 않는다. */
   personaCardInput?: PersonaCardInput;
+  /** §144 — 보이스 clone 시나리오에서 필수(보낼 목소리 프로필). */
+  voiceProfileId?: string;
 };
 export type CreateChallengeResponse = {
   challengeId: string;
@@ -576,6 +578,17 @@ export type CreateChallengeResponse = {
   linkExpiresAt: string;
 };
 export type DeleteChallengeRequest = { challengeId: string };
+// --- 목소리 프로필(§144 · DECISIONS #257) — functions/src/challenge/types.ts와 1:1 ---
+export type SaveVoiceProfileRequest = {
+  sessionId: string;
+  label: string;
+  retentionDays: 7 | 30;
+  consented: true;
+  consentTextVersion: string;
+};
+export type SaveVoiceProfileResponse = { profileId: string };
+export type DeleteVoiceProfileRequest = { profileId: string };
+export type DeleteVoiceProfileResponse = { status: "deleted"; deletedChallengeCount: number };
 export type DeleteChallengeResponse = { status: "deleted" };
 
 // --- listMyChallenges (Track A/C · T36 · UX-020 · reviewer 리뷰 Critical #1 수정) ---
@@ -595,6 +608,8 @@ export type ListMyChallengesItem = {
   // T56(#23 · MVP #23 · Architecture.md §14.9.3) — 부재→"clone". generic 보이스 챌린지도
   // suspicionTimeLabel이 항상 null임을 화면(UX-020)이 재확인할 수 있게 한다(AC-058/OQ-32).
   voiceMode: "clone" | "generic";
+  /** §144 — 소스 목소리 프로필(부재 = null). */
+  voiceProfileId: string | null;
 };
 export type ListMyChallengesResponse = { challenges: ListMyChallengesItem[] };
 

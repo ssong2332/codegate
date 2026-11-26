@@ -63,6 +63,7 @@ const SESSION_SURFACE_REGISTRY: Record<string, SurfaceRole> = {
   "src/components/LegalDocumentView.tsx": "not-in-session", // 법적 고지 화면 틀(2026-10-21 — 세션 밖 공개 화면)
   "src/components/LegalLinks.tsx": "not-in-session", // 첫 화면 · 로그인 · 고지 화면 하단 링크(세션 밖)
   "src/components/LogoutButton.tsx": "not-in-session", // 훈련 유형 선택 화면 하단 로그아웃(2026-11-01, 세션 밖)
+  "src/components/VoiceProfileList.tsx": "not-in-session", // §144 저장한 목소리 목록(챌린지 만들기 · 내 정보 허브 — 세션 밖)
   "src/components/MessengerFakeLanding.tsx": "in-session", // UX-023 가짜 랜딩
   "src/components/MessengerProfileSheet.tsx": "in-session", // §95 카톡형 상대 프로필 시트(UX D-138)
   "src/components/MessengerStartNotice.tsx": "pre-session", // UX-022 start-notice(T187)
@@ -116,7 +117,8 @@ test("[T187/G436] 세션 표면 등록부 = src/components/*.tsx ∪ src/app/ses
   // → 2026-10-27 33(+OneUiCallControls — One UI 9 통화 버튼 묶음) → 35(+CallExtraSheets · IosCallControls — 통화 부가 기능 · iOS 26)
   // → BA-1 2026-11-01 36(+BankAppOverlay — 통화 중 훈련용 홈 · 내 은행 앱) → 2026-11-01 37(+LogoutButton — 훈련 유형 선택 하단 로그아웃) → §142 38(+CallLegScreens — 통화 사이 화면)
   // → 2026-11-07 40(+BankAuthSheet · WithdrawAccountSheet — 이체 생체 인증 · 출금 계좌 선택 시트) → 2026-11-08 41(+CardAccountFields — 카드 거래 은행 · 잔액 칸)
-  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 41);
+  // → §144 42(+VoiceProfileList — 저장한 목소리 목록)
+  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 42);
 });
 
 // ── G451 — 등록부 2벌(G436 · T86)이 최상위 `src/components/*.tsx`만 훑으므로, 하위 디렉터리에 컴포넌트를 두면

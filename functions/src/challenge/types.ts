@@ -17,7 +17,22 @@ export type CreateChallengeRequest = {
    * 저장하고 `consentChallenge`가 수신자 세션에 복사한다. 랜딩 응답에는 싣지 않는다.
    */
   personaCardInput?: { name?: string; birthYear?: number; birthMonth?: number; birthDay?: number; region?: string };
+  /** §144 — 보이스 clone 시나리오에서 필수(판정표 VU). 메신저 · generic은 무시한다. */
+  voiceProfileId?: string;
 };
+
+// --- 목소리 프로필(§144 · DECISIONS #257) ---
+export type SaveVoiceProfileRequest = {
+  /** 보내기 녹음의 사전 세션 id(clone/wait가 준비 완료를 본 세션). */
+  sessionId: string;
+  label: string;
+  retentionDays: 7 | 30;
+  consented: true;
+  consentTextVersion: string;
+};
+export type SaveVoiceProfileResponse = { profileId: string };
+export type DeleteVoiceProfileRequest = { profileId: string };
+export type DeleteVoiceProfileResponse = { status: "deleted"; deletedChallengeCount: number };
 export type CreateChallengeResponse = {
   challengeId: string;
   /** 평문 토큰 — 이 응답에서 1회만 반환된다. 서버는 SHA-256 해시만 저장한다(§14.4). */
@@ -56,6 +71,8 @@ export type ListMyChallengesItem = {
   /** T56 추가(#23, §14.9.3) — 부재→"clone". generic 보이스 챌린지도 suspicionTimeLabel이 항상
    * null임을 클라 표시 로직(UX-020 D-34)이 재확인할 수 있게 한다. */
   voiceMode: VoiceMode;
+  /** §144 '내 정보' 허브 — 이 챌린지의 소스 목소리 프로필(본인 것 · 부재 = null). 목소리별 사용처 수에 쓴다. */
+  voiceProfileId: string | null;
 };
 export type ListMyChallengesResponse = {
   challenges: ListMyChallengesItem[];

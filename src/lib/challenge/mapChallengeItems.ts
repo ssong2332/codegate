@@ -23,6 +23,8 @@ export type ChallengeSource = {
   channel?: "voice" | "messenger";
   // T56(#23 · MVP #23 · AC-058/OQ-32) — 옵셔널(부재→clone, 기존 호출부·테스트 무회귀).
   voiceMode?: "clone" | "generic";
+  // §144 — 소스 목소리 프로필('내 정보' 허브 사용처 수 · 부재 = 없음).
+  voiceProfileId?: string | null;
 };
 
 export type ChallengeListItem = {

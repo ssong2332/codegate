@@ -2,11 +2,10 @@
 
 // UX-019 챌린지 만들기·공유 링크 (Track A/C, T36, AC-041/044/048/049).
 //
-// Entry: UF-004에서 클론 완료 + 딥보이스(clone) 시나리오 선택 후 이 화면으로 온다
-// (src/app/scenarios/voice/ScenarioListView.tsx의 handleStart가 챌린지 모드일 때
-// `?scenarioId=...`로 이동시킨다 — record/clone/wait를 거치지 않는다, pendingSession.ts의
-// setChallengeMode/consumeChallengeMode 주석 참고). createChallenge가 서버에서 "완료된 클론 보유"
-// 여부를 직접 재확인하므로, 이 화면 자체는 scenarioId 외에 클라 상태를 더 필요로 하지 않는다.
+// Entry: 시나리오 → 난이도(UX-029) → 이 화면(`?scenarioId=...`). §144(DECISIONS #257) — 딥보이스(clone)
+// 시나리오는 이 화면의 '보낼 목소리' 칸에서 저장한 목소리 프로필을 고르거나 '새로 녹음'한다. 녹음 → clone/wait가
+// 프로필을 저장하고 `&voiceProfileId=`로 이 화면에 돌아온다(예전 error-clone 안내 → 녹음 우회 경로는 없앴다).
+// createChallenge가 서버에서 그 프로필(본인 · 만료 전 · 녹음 있음)을 다시 확인한다.
 //
 // D-20(docs/UX.md) — 앱이 카톡/문자를 대신 전송하지 않는다. navigator.share(OS 공유 시트)가 있으면
 // 그걸 쓰고, 없으면 링크 텍스트 노출 + Clipboard API 복사로 폴백한다(P-14, 침묵 실패 금지).
@@ -24,10 +23,17 @@
 // 전에 고지**한다(발신자가 지인에게 무엇을 보내는지 알고 보내게 하는 것 — AC-040 사전 동의 취지의
 // 발신 측 대응). ⚠️ 난이도는 활성 챌린지 상한(AC-049)·링크 토큰(AC-048)·결과 열람 범위(AC-043/055)를
 // 포함해 **어떤 안전·정책 판정도 바꾸지 않는다**(D-42) — 화면 골격·에러 분기 전부 무변경이다.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createChallenge } from "@/lib/api";
-import { getSelectedDifficultyLevel } from "@/lib/recording";
+import { createChallenge, deleteVoiceProfile } from "@/lib/api";
+import { useCurrentUser } from "@/lib/auth";
+import { getSelectedDifficultyLevel, setExperienceMode, setSelectedScenarioId } from "@/lib/recording";
+import { fetchVoiceProfiles } from "@/lib/voices/fetchStoredVoices";
+import {
+  VOICE_PROFILE_CAP,
+  resolveVoiceSlot,
+  type VoiceProfileSummary,
+} from "@/lib/voices/voiceProfileConsent";
 import {
   ADVANCED_ONLY_NOT_CHALLENGEABLE_LINE,
   ADVANCED_ONLY_NOT_CHALLENGEABLE_REASON,
@@ -40,6 +46,7 @@ import {
 import { scenarios } from "@/content/scenarios";
 import { Button, DisplayTitle, LoadingDots } from "@/components/ui";
 import PersonaCardInputFields from "@/components/PersonaCardInputFields";
+import VoiceProfileList from "@/components/VoiceProfileList";
 import {
   EMPTY_PERSONA_CARD_FORM,
   personaCardErrorLine,
@@ -57,7 +64,6 @@ type PageState =
   | "submitting"
   | "success"
   | "error-cap"
-  | "error-clone"
   | "error-escalation"
   | "error-advanced-only"
   | "error-issue"
@@ -126,6 +132,55 @@ export default function ChallengeCreatePage() {
   // §88(UX D-131 (1)) — 받는 분 정보(선택 · 기본 비움). 고급 × 대상 4종일 때만 그린다.
   const [personaForm, setPersonaForm] = useState<PersonaCardForm>(EMPTY_PERSONA_CARD_FORM);
   const [personaError, setPersonaError] = useState<string | null>(null);
+
+  // §144(DECISIONS #257) 판정표 VI — 보낼 목소리 칸(보이스 clone만). 녹음에서 돌아오면 `?voiceProfileId=`가 골라져 있다.
+  const { user } = useCurrentUser();
+  const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfileSummary[] | null>(null);
+  const [profileNowMs, setProfileNowMs] = useState(0);
+  const [wantedProfileId, setWantedProfileId] = useState<string | null>(() => searchParams.get("voiceProfileId"));
+  const [voiceSlotError, setVoiceSlotError] = useState<string | null>(null);
+  const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null);
+  const needsVoice = challengeKind === "clone";
+  const [profileReload, setProfileReload] = useState(0);
+  const loadVoiceProfiles = () => setProfileReload((n) => n + 1);
+  useEffect(() => {
+    if (!needsVoice || !user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await fetchVoiceProfiles(user.uid);
+        if (cancelled) return;
+        setVoiceProfiles(list);
+        setProfileNowMs(Date.now());
+      } catch {
+        if (!cancelled) setVoiceSlotError("저장한 목소리를 불러오지 못했습니다. 새로고침해 주세요.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [needsVoice, user, profileReload]);
+  const voiceSlot = resolveVoiceSlot(voiceProfiles ?? [], wantedProfileId, profileNowMs);
+
+  const handleRecordNew = () => {
+    // 녹음 → clone/wait가 이 시나리오의 만들기 화면으로 돌아오게 하는 두 힌트(cloneReadyRoute 판정표 send 행).
+    if (scenarioId) setSelectedScenarioId(scenarioId);
+    setExperienceMode("send");
+    router.push("/onboarding/record");
+  };
+
+  const handleDeleteProfile = async (profile: VoiceProfileSummary) => {
+    setDeletingProfileId(profile.profileId);
+    try {
+      await deleteVoiceProfile({ profileId: profile.profileId });
+      if (wantedProfileId === profile.profileId) setWantedProfileId(null);
+      loadVoiceProfiles();
+    } catch {
+      setVoiceSlotError("목소리를 지우지 못했습니다. 다시 시도해 주세요.");
+    } finally {
+      setDeletingProfileId(null);
+    }
+  };
   const showPersonaInput = personaCardInputVisible(scenarioId, difficultyLevel, scenario?.channel);
   // §93(UX D-136) — 시나리오 카드 종류가 칸 · 안내 · 오류 문면을 정한다(시나리오를 바꾸면 그 종류 칸만 보낸다).
   const personaKind = personaCardKindFor(scenarioId);
@@ -134,6 +189,7 @@ export default function ChallengeCreatePage() {
 
   const handleCreate = async () => {
     if (!scenarioId || !displayName.trim() || isSubmitting) return;
+    if (needsVoice && !voiceSlot.selectedId) return;
     // §88 — 입력 블록이 보일 때만 읽는다. 형식 오류면 만들지 않고 1줄로 알린다.
     let personaCardInput: PersonaCardInput | undefined;
     if (showPersonaInput) {
@@ -153,6 +209,7 @@ export default function ChallengeCreatePage() {
         displayName: displayName.trim(),
         ...(difficultyLevel ? { difficultyLevel } : {}),
         ...(personaCardInput ? { personaCardInput } : {}),
+        ...(needsVoice && voiceSlot.selectedId ? { voiceProfileId: voiceSlot.selectedId } : {}),
       });
       const origin = typeof window !== "undefined" ? window.location.origin : "";
       // T37이 실제 사용자2 진입 화면(UX-021)을 이 경로에 만들 예정이다 — 지금은 토큰 발급/공유
@@ -178,8 +235,12 @@ export default function ChallengeCreatePage() {
         // T191 S5(D-107 · C-2) — 고급 전용 시나리오 거부. 아래 "error-clone"(클론 미완료)으로 떨어지면 엉뚱한
         // 안내가 나간다 — 같은 failed-precondition이라 `details.reason`으로 먼저 가른다.
         setState("error-advanced-only");
-      } else if (code === "functions/failed-precondition") {
-        setState("error-clone");
+      } else if (code === "functions/failed-precondition" && reason === "voice_profile_required") {
+        // §144 VU1 — 고른 목소리가 없거나 만료 · 삭제됐다. 안내 화면으로 보내지 않고 칸 안에서 다시 고르게 한다.
+        setVoiceSlotError("고른 목소리를 쓸 수 없습니다. 다른 목소리를 고르거나 새로 녹음해 주세요.");
+        setWantedProfileId(null);
+        loadVoiceProfiles();
+        setState("form");
       } else {
         setState("error-issue");
       }
@@ -246,22 +307,6 @@ export default function ChallengeCreatePage() {
           </Button>
           <Button type="button" variant="secondary" onClick={() => router.push("/")}>
             처음으로
-          </Button>
-        </div>
-      </main>
-    );
-  }
-
-  if (state === "error-clone") {
-    return (
-      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
-          <span aria-hidden="true">⚠</span>
-          <span>먼저 본인 목소리 클론을 완료해 주세요.</span>
-        </p>
-        <div className="w-full max-w-xs">
-          <Button type="button" onClick={() => router.push("/onboarding/record")}>
-            목소리 클론하러 가기
           </Button>
         </div>
       </main>
@@ -375,6 +420,9 @@ export default function ChallengeCreatePage() {
           <Button type="button" variant="secondary" onClick={() => router.push("/challenge/results")}>
             내 챌린지 결과 보기
           </Button>
+          <Button type="button" variant="secondary" onClick={() => router.push("/me")}>
+            내 기록 · 목소리
+          </Button>
           <button
             type="button"
             onClick={() => router.push("/")}
@@ -452,6 +500,49 @@ export default function ChallengeCreatePage() {
         />
       )}
 
+      {/* §144 VP-UI — 보낼 목소리(보이스 clone만). VI1 없음 = 새로 녹음만 · VI2 목록 + 새로 녹음 · VI3 3개 = 새로 녹음 막힘. */}
+      {needsVoice && (
+        <fieldset className="flex flex-col gap-3" aria-describedby="voice-slot-help">
+          <legend className="mb-1 text-[15px] font-semibold text-ink">보낼 목소리</legend>
+          <p id="voice-slot-help" className="text-[15px] leading-relaxed text-ink-sub">
+            저장한 목소리 중 하나를 고르거나 새로 녹음해 주세요. 목소리는 {VOICE_PROFILE_CAP}개까지 저장할 수 있어요.
+          </p>
+          {voiceProfiles === null && !voiceSlotError && (
+            <p role="status" className="flex items-center gap-2 text-base text-ink-sub">
+              <LoadingDots /> 저장한 목소리를 불러오는 중
+            </p>
+          )}
+          <VoiceProfileList
+            profiles={voiceSlot.profiles}
+            nowMs={profileNowMs}
+            onDelete={(profile) => void handleDeleteProfile(profile)}
+            deletingId={deletingProfileId}
+            disabled={isSubmitting}
+            select={{
+              selectedId: voiceSlot.selectedId,
+              onSelect: (profileId) => {
+                setWantedProfileId(profileId);
+                setVoiceSlotError(null);
+              },
+            }}
+          />
+          {voiceProfiles !== null && (
+            <Button type="button" variant="secondary" onClick={handleRecordNew} disabled={!voiceSlot.canRecordNew || isSubmitting}>
+              새로 녹음
+            </Button>
+          )}
+          {voiceProfiles !== null && !voiceSlot.canRecordNew && (
+            <p className="text-base text-ink-sub">하나를 지워야 새로 저장할 수 있어요.</p>
+          )}
+          {voiceSlotError && (
+            <p role="alert" className="flex items-center gap-2 text-base text-danger">
+              <span aria-hidden="true">⚠</span>
+              <span>{voiceSlotError}</span>
+            </p>
+          )}
+        </fieldset>
+      )}
+
       {state === "error-persona" && personaError && (
         <p role="alert" className="flex items-center gap-2 text-base text-danger">
           <span aria-hidden="true">⚠</span>
@@ -466,7 +557,11 @@ export default function ChallengeCreatePage() {
         </p>
       )}
 
-      <Button type="button" onClick={() => void handleCreate()} disabled={!displayName.trim() || isSubmitting}>
+      <Button
+        type="button"
+        onClick={() => void handleCreate()}
+        disabled={!displayName.trim() || isSubmitting || (needsVoice && !voiceSlot.selectedId)}
+      >
         {isSubmitting ? (
           <span className="flex items-center justify-center gap-2" role="status">
             <LoadingDots />

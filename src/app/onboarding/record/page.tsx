@@ -17,7 +17,19 @@ import {
   useVoiceRecorder,
   getOrCreatePendingSessionId,
   setIdentityConfirmed,
+  hasMessengerVoiceSelectReturn,
+  getExperienceMode,
+  getSelectedScenarioId,
 } from "@/lib/recording";
+import { resolveCloneReadyRoute } from "@/lib/recording/cloneReadyRoute";
+import {
+  VOICE_PROFILE_DEFAULT_RETENTION,
+  VOICE_PROFILE_LABEL_MAX_LENGTH,
+  VOICE_PROFILE_RETENTION_OPTIONS,
+  setPendingVoiceProfileSave,
+  voiceProfileConsentText,
+  type VoiceProfileRetentionDays,
+} from "@/lib/voices/voiceProfileConsent";
 import { LoadingDots, ProgressSteps, type ProgressStep } from "@/components/ui";
 
 // 지정 대본(1분 안 · 상황 11가지 · 201음절) — 목소리 복제가 억양까지 배우도록 감정 · 말투가 다른 문장을 고루 담는다.
@@ -67,6 +79,21 @@ export default function RecordPage() {
 
   const recorder = useVoiceRecorder();
 
+  // §144(DECISIONS #257 Q2) — 지인에게 보내기 녹음은 목소리 프로필로 저장해야만 쓸 수 있다. 녹음 뒤 어디로 가는지와
+  // 같은 판정(cloneReadyRoute)으로 "보내기 녹음"을 가른다 → 이름 · 기간 · 보관 동의를 녹음 전에 받는다.
+  const [isSendRecording] = useState(
+    () =>
+      resolveCloneReadyRoute({
+        messengerVoiceSelectReturn: hasMessengerVoiceSelectReturn(),
+        experienceMode: getExperienceMode(),
+        scenarioId: getSelectedScenarioId(),
+      }).kind === "challenge",
+  );
+  const [profileLabel, setProfileLabel] = useState("");
+  const [retentionDays, setRetentionDays] = useState<VoiceProfileRetentionDays>(VOICE_PROFILE_DEFAULT_RETENTION);
+  const [retentionConsented, setRetentionConsented] = useState(false);
+  const profileFormOk = !isSendRecording || (retentionConsented && profileLabel.trim().length > 0);
+
   useEffect(() => {
     if (userLoading || !user) return;
     let cancelled = false;
@@ -100,14 +127,16 @@ export default function RecordPage() {
   }, [user, userLoading, router]);
 
   const handleStart = useCallback(() => {
-    if (!identityChecked) return;
+    if (!identityChecked || !profileFormOk) return;
     void recorder.start();
-  }, [identityChecked, recorder]);
+  }, [identityChecked, profileFormOk, recorder]);
 
   const handleCreateClone = useCallback(async () => {
     if (!user || !recorder.audioBlob || recorder.elapsedSeconds < MIN_RECORDING_SECONDS) return;
     setUploadStatus("uploading");
     setUploadError(null);
+    // §144 — clone/wait가 클론 준비 뒤 이 값으로 saveVoiceProfile을 부른다.
+    if (isSendRecording) setPendingVoiceProfileSave({ label: profileLabel.trim(), retentionDays });
     const pendingSessionId = getOrCreatePendingSessionId();
     try {
       const path = `users/${user.uid}/sessions/${pendingSessionId}/voice_input.webm`;
@@ -132,7 +161,7 @@ export default function RecordPage() {
       setUploadStatus("error");
       setUploadError("목소리 클론 생성에 실패했습니다. 다시 시도해 주세요.");
     }
-  }, [user, recorder.audioBlob, recorder.elapsedSeconds, recorder.mimeType, router]);
+  }, [user, recorder.audioBlob, recorder.elapsedSeconds, recorder.mimeType, router, isSendRecording, profileLabel, retentionDays]);
 
   if (gateState !== "ok") {
     return (
@@ -152,7 +181,7 @@ export default function RecordPage() {
     );
   }
 
-  const canRecord = identityChecked;
+  const canRecord = identityChecked && profileFormOk;
   const canCreateClone =
     recorder.status === "stopped" &&
     recorder.elapsedSeconds >= MIN_RECORDING_SECONDS &&
@@ -190,6 +219,56 @@ export default function RecordPage() {
           ))}
         </ol>
       </section>
+
+      {/* §144 VP-UI — 보내기 녹음만: 목소리 이름 · 보관 기간 · 보관 동의(필수). 녹음 중에는 바꿀 수 없다. */}
+      {isSendRecording && (
+        <section aria-labelledby="voice-profile-heading" className="flex flex-col gap-4 rounded-[8px] border-[1.5px] border-line bg-white p-4">
+          <h2 id="voice-profile-heading" className="text-[17px] font-bold text-ink">
+            이 목소리 저장하기
+          </h2>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[15px] font-semibold text-ink">목소리 이름</span>
+            <input
+              type="text"
+              value={profileLabel}
+              maxLength={VOICE_PROFILE_LABEL_MAX_LENGTH}
+              onChange={(event) => setProfileLabel(event.target.value)}
+              placeholder="예: 평소 목소리"
+              disabled={recorder.status === "recording"}
+              className="min-h-[52px] rounded-[8px] border-[1.5px] border-line-strong bg-white px-4 py-3 text-[18px] text-ink focus:border-brand focus-visible:outline-[3px] focus-visible:outline-offset-1 focus-visible:outline-brand disabled:opacity-50"
+            />
+          </label>
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-1 text-[15px] font-semibold text-ink">보관 기간</legend>
+            <div className="flex gap-3">
+              {VOICE_PROFILE_RETENTION_OPTIONS.map((days) => (
+                <label key={days} className="flex min-h-[48px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-[8px] border-[1.5px] border-line-strong px-3 text-[17px] font-semibold text-ink has-[:checked]:border-brand has-[:checked]:bg-brand-tint">
+                  <input
+                    type="radio"
+                    name="voice-retention"
+                    value={days}
+                    checked={retentionDays === days}
+                    onChange={() => setRetentionDays(days)}
+                    disabled={recorder.status === "recording"}
+                    className="h-5 w-5 accent-brand"
+                  />
+                  {days}일
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <label className="flex cursor-pointer select-none items-start gap-3">
+            <input
+              type="checkbox"
+              checked={retentionConsented}
+              onChange={(event) => setRetentionConsented(event.target.checked)}
+              disabled={recorder.status === "recording"}
+              className="mt-0.5 h-8 w-8 shrink-0 rounded-[10px] accent-brand disabled:cursor-not-allowed"
+            />
+            <span className="text-[16px] leading-[1.5] text-ink">{voiceProfileConsentText(retentionDays)}</span>
+          </label>
+        </section>
+      )}
 
       <label className="flex cursor-pointer select-none items-start gap-3 py-1">
         <input
@@ -229,7 +308,9 @@ export default function RecordPage() {
             </button>
             {!canRecord && (
               <p className="text-[16px] text-ink-sub">
-                본인 확인 문항에 먼저 동의해야 녹음을 시작할 수 있습니다.
+                {isSendRecording
+                  ? "목소리 이름 · 보관 동의 · 본인 확인을 마쳐야 녹음을 시작할 수 있습니다."
+                  : "본인 확인 문항에 먼저 동의해야 녹음을 시작할 수 있습니다."}
               </p>
             )}
           </>

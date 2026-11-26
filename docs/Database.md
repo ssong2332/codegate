@@ -314,16 +314,17 @@ VerifyTimelineEntry = {
 
 > **사용자2 접근은 전부 Functions 매개**(무로그인·토큰). 사용자1은 자기 챌린지 문서를 read하되 `resultSummary`는 동의 시에만 채워진다. **대화 전문 컬렉션(사용자2 체험 세션의 messages)에 사용자1 접근은 규칙으로 거부**(AC-043 스키마 강제). 챌린지 음성 스코프·삭제 구조는 ADR-0005.
 
-### `users/{uid}/voices/{voiceId}`  — 유지형 복제 음성 보관함 (P-8·AC-046 재사용, ADR-0005)
+### `users/{uid}/voices/{profileId}`  — 목소리 프로필(§144 · DECISIONS #257 · ADR-0005 (B))
 | Field | Type | Constraints | Description |
 |---|---|---|---|
-| voiceId | string | PK(=doc id) | ElevenLabs 클론 voice id |
-| label | string | | 사용자 지정 라벨("내 목소리 1") |
-| retentionDeleteAt | timestamp | required | 기간제 보존(기본 30일, 조정 7~90일). 자동/수동 삭제 |
-| source | string? | `onboarding`\|`escalation` | 생성 경위 |
-| createdAt | timestamp | | |
+| profileId | string | PK(=doc id) | 프로필 id(**공급자 voiceId 아님** — 프로필은 클론을 갖지 않는다) |
+| label | string | 1~20자 | 사용자 지정 이름 |
+| retentionDays | number | 7 \| 30 | 저장 때 고른 기간 |
+| retentionDeleteAt | timestamp | required | 저장 + 기간. 도달 시 `purgeExpiredVoiceProfiles`(collectionGroup · fieldOverrides)가 삭제 |
+| consentTextVersion | string | `voice-profile-v1` | 보관 동의 문구 버전 |
+| consentedAt · createdAt | timestamp | | |
 
-> **ADR-0003(세션 종료 즉시 폐기)의 예외가 아니라, 사용자가 명시적으로 "보관"을 택한 별도 opt-in 저장소**(ADR-0005). 기본 세션 클론은 여전히 즉시 폐기. AC-046 "기존 목소리 재사용"·P-8 "내 목소리 금고"가 이 컬렉션을 읽는다. **추출·다운로드 콜러블 없음.** MVP 최소는 이 컬렉션 없이 즉시녹음+gendered 폴백만으로 성립(§13.6) — 스키마는 T30 비차단용으로 정의.
+> 쓰기 · 삭제 = Functions만(`saveVoiceProfile` · `deleteVoiceProfile` · 규칙 write false). 본인 read만. 사용자당 만료 전 프로필 최대 3(트랜잭션). 삭제 · 만료 = 녹음 사본 삭제 + `deletionLogs`(`voiceProfileId`) + **이 프로필로 만든 챌린지(`challenges.voiceProfileId`) 폐기**. 추출 · 다운로드 콜러블 없음.
 
 ## Storage Layout
 | Path | Contents | 수명 | Writer |
@@ -331,6 +332,7 @@ VerifyTimelineEntry = {
 | `users/{uid}/sessions/{sid}/voice_input.webm` | 30초 녹음 | 세션 종료 시 폐기 | 클라(rules 강제) |
 | `users/{uid}/sessions/{sid}/synth/{artifactId}.mp3` | 합성 오디오 | 세션 종료 시 폐기 | Functions(admin) |
 | `users/{uid}/sessions/{sid}/images/{artifactId}.png` | 사칭 이미지(P1) | 세션 종료 시 폐기 | Functions/정적 |
+| `users/{uid}/voiceProfiles/{profileId}/voice_input.webm` | 목소리 프로필 원본 녹음 사본(§144) | 7/30일 · 수동 삭제 · 프로필과 함께 | Functions(admin 복사) — 규칙 기본 거부(다운로드 0) |
 | `users/{uid}/challenges/{cid}/voice_input.webm` | 챌린지용 사용자1 30초 녹음 | **기간제 보존**(retentionDeleteAt, 기본 30일)·수동 삭제 | 클라(rules 강제·소유자 uid) |
 | `/public/...`(Next.js) 또는 비-사용자 Storage | 폴백 오디오·표식 프리롤·사칭 이미지 템플릿 | 영구(비민감) | 팀 사전 준비 |
 

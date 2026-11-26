@@ -742,6 +742,7 @@ export type DeletionLogDoc = {
   // 이상 참이 아니므로 함께 옵셔널로 바꿨다(architect 확인/문서 갱신 권장 — 구현 보고서 참고).
   sessionId?: string;
   challengeId?: string; // T36 추가(옵셔널) — ADR-0005 follow-up, Database.md §deletionLogs 주석.
+  voiceProfileId?: string; // §144 — 목소리 프로필 폐기 로그(sessionId · challengeId 없음).
   uid: string;
   deletedAt: FirebaseFirestore.Timestamp;
   targets: DeletionTarget[];
@@ -795,7 +796,8 @@ export type ChallengeDoc = {
   linkTokenHash: string; // 공유 토큰의 SHA-256 해시만(평문 미저장, §14.4)
   linkExpiresAt: FirebaseFirestore.Timestamp; // 무료 생성+3일(AC-048)
   linkConsumedAt?: FirebaseFirestore.Timestamp; // 1회성 소모 시각(동의 통과 시, T37이 세팅)
-  retentionDeleteAt: FirebaseFirestore.Timestamp; // 복제 음성·챌린지 자동 삭제 예정(기본 생성+30일)
+  retentionDeleteAt: FirebaseFirestore.Timestamp; // 복제 음성 폐기 예정(생성 + 3일 = 링크 만료 · DECISIONS #258) — 문서 · 결과는 남는다
+  retentionPurgedAt?: FirebaseFirestore.Timestamp; // DECISIONS #258 RT3 — 보존 만료로 음성만 폐기한 시각(부재 = 아직)
   resultSharingConsented?: boolean; // T37 소관 — 부재=미동의
   resultSummary?: ChallengeResultSummary; // T37 소관 — 동의 시에만 채워짐, 대화 전문 없음(AC-043)
   reportedAt?: FirebaseFirestore.Timestamp; // T37 소관
@@ -812,5 +814,19 @@ export type ChallengeDoc = {
   // §88(DECISIONS #199 · UX D-131) — 발신자가 넣은 받는 분 정보로 서버가 만든 카드(v2 · `inputBy: "sender"`). 부재 = 입력 없음.
   // `consentChallenge`가 수신자 세션에 복사하는 **같은 트랜잭션**에서 지운다 · 폐기(`purgeChallenge`)도 지운다.
   personaCard?: PersonaCard;
+  // §144(DECISIONS #257) — 이 챌린지 클론의 소스 목소리 프로필. 프로필 삭제 · 만료 때 함께 폐기한다(VD2). 부재 = 프로필 이전 챌린지 · 메신저 · generic.
+  voiceProfileId?: string;
+  createdAt: FirebaseFirestore.Timestamp;
+};
+
+// --- users/{uid}/voices/{profileId} — 목소리 프로필(§144 · DECISIONS #257 · Database.md) ---
+// 쓰기는 Functions만(firestore.rules write false). 녹음 바이트는 Storage 서버 전용 경로(`voiceProfileRecordingPath`)에만 있다.
+export type VoiceProfileDoc = {
+  profileId: string;
+  label: string;
+  retentionDays: 7 | 30;
+  retentionDeleteAt: FirebaseFirestore.Timestamp;
+  consentTextVersion: string;
+  consentedAt: FirebaseFirestore.Timestamp;
   createdAt: FirebaseFirestore.Timestamp;
 };
