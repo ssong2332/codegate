@@ -17,14 +17,9 @@
 // voice 채널은 clone·generic 둘 다 허용하고(AC-058), generic이면 클론 블록(아래 (a)(c))을 메신저와
 // 동형으로 전부 스킵한다 — voiceId 미발급·미기록, `voiceMode:"generic"`만 기록한다.
 //
-// ⚠️ Database.md §Storage Layout 편차(구현 보고서에 명시, architect 확인 권장): Database.md는
-// `users/{uid}/challenges/{cid}/voice_input.webm`라는 챌린지 전용 녹음 업로드 경로를 정의하지만,
-// 이 태스크 지시는 "이미 완료된 온보딩 녹음을 재사용"하라고 명시했다. 새 녹음 화면을 만들지 않고
-// 대신 caller의 최근 완료 클론 세션(cloneStatus:"ready")의 기존 voiceInputStoragePath를 소스로
-// 재사용해 챌린지 전용 신규 clone을 발급한다. 알려진 한계: T10(onSessionEnded 즉시 폐기)이 그
-// 원본 세션을 이미 종료·폐기했다면 원본 녹음이 Storage에서 사라져 있을 수 있다 — 이 경우
-// "클론 미완료"와 동일한 failed-precondition으로 안내한다(사용자 관점에서는 결국 "본인 목소리부터
-// 준비해야 한다"는 동일한 요구라 UX 문구를 굳이 나누지 않았다).
+// §144(DECISIONS #257) — 보이스 clone 챌린지의 소스 녹음은 발신자가 고른 **목소리 프로필**(`voiceProfileRules.ts` ·
+// `voiceProfiles.ts`)의 녹음 사본이다. 챌린지마다 그 녹음으로 새 클론을 발급한다(스코프 고정 무변경). 종전의
+// "최근 완료 클론 세션 녹음 재사용"(T36 편차)은 지웠다 — 세션 녹음은 세션 종료 · 프로필 저장 때 폐기된다.
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
@@ -33,8 +28,14 @@ import { getStorage } from "firebase-admin/storage";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { denyAnonymous } from "../shared/anonymousGate";
 import { isDocId, readDocId } from "../shared/requestValidation";
-import { voiceInputStoragePath } from "../voice";
+import {
+  VOICE_PROFILE_REQUIRED_REASON,
+  checkProfileForChallenge,
+  voiceProfileRecordingPath,
+} from "./voiceProfileRules";
 import { getVoiceProvider } from "../voice/provider";
+import { GSV_TOKEN_KEY } from "../shared/config";
+import { gsvKey } from "../voice/gsvKey";
 import { PUBLIC_SCENARIOS, isAdvancedOnlyScenario } from "../scenarios/publicMeta";
 import { assertDifficultyAllowed } from "../session/difficultyAllowance";
 import { resolvePersonaCardRequest } from "../session/personaCard";
@@ -50,7 +51,7 @@ import type { DifficultyLevel } from "../shared/difficulty";
 import { generateShareToken } from "./token";
 import { listedChallengeStatus } from "./consentGate";
 import { purgeChallengeArtifacts, selectChallengesToPurge } from "./purge";
-import type { ChallengeDoc, DeletionLogDoc, MessengerChannel, SessionDoc } from "../shared/types";
+import type { ChallengeDoc, DeletionLogDoc, MessengerChannel, VoiceProfileDoc } from "../shared/types";
 import type {
   CreateChallengeRequest,
   CreateChallengeResponse,
@@ -67,12 +68,14 @@ ensureFirebaseAdminApp();
 const ACTIVE_STATUSES = ["pending", "consented", "in_progress"] as const;
 
 export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChallengeResponse>>(
+  // §143 — 챌린지 전용 새 클론 = GSV `/prepare` 다시 실행(콜드 스타트 포함 최대 약 3분).
+  { secrets: [GSV_TOKEN_KEY], timeoutSeconds: 240 },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     }
     denyAnonymous(request.auth);
-    const { scenarioId, displayName, difficultyLevel, personaCardInput } = request.data ?? {};
+    const { scenarioId, displayName, difficultyLevel, personaCardInput, voiceProfileId } = request.data ?? {};
     // SEC-07 — 숫자 · 객체 displayName은 `.trim()`에서 예외가 났다. 문자열 · 문서 ID 모양을 read 앞에서 판독한다.
     if (!isDocId(scenarioId) || typeof displayName !== "string" || !displayName.trim()) {
       throw new HttpsError("invalid-argument", "scenarioId와 displayName이 필요합니다.");
@@ -166,49 +169,36 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
 
     const challengeRef = db.collection("challenges").doc();
     let voiceId: string | undefined;
+    let usedProfileId: string | undefined;
 
     if (scenarioChannel === "voice" && scenarioVoiceMode === "clone") {
-      // (a) 완료된 클론 보유 확인 — createSession/createVoiceClone과 달리 클라가 voiceId를 직접
-      // 넘기지 않는다(챌린지 voiceId는 항상 서버가 새로 발급하므로, §스코프 고정). 대신 caller의 가장
-      // 최근 cloneStatus:"ready" 세션을 찾아 그 세션의 소스 녹음을 재사용한다(UF-004 Step1 "이미
-      // 클론 보유 시 재사용"). 신규 복합 인덱스를 추가하지 않기 위해 기존 sessions uid+createdAt desc
-      // 인덱스(firestore.indexes.json, T7/T8이 이미 사용 중)만으로 커버되는 최근 20건을 훑어 JS에서
-      // cloneStatus를 판정한다 — 이 규모(개인당 최근 훈련 이력)에서는 충분하다.
-      const recentSessionsSnap = await db
-        .collection("sessions")
-        .where("uid", "==", uid)
-        .orderBy("createdAt", "desc")
-        .limit(20)
-        .get();
-      let sourceSessionId: string | null = null;
-      for (const doc of recentSessionsSnap.docs) {
-        const data = doc.data() as SessionDoc;
-        if (data.cloneStatus === "ready" && data.voiceId) {
-          sourceSessionId = doc.id;
-          break;
-        }
+      // (a) §144 판정표 VU — 보낼 목소리 = 발신자가 고른 **목소리 프로필**의 녹음 사본(`voiceProfileRules.ts`).
+      // 종전 "최근 cloneStatus:ready 세션 녹음" 탐색은 지웠다(DECISIONS #257 Q2 — 저장 필수). 프로필 id는 클라가
+      // 넘기지만 문서는 caller uid 경로에서만 읽으므로 남의 프로필을 고를 수 없다.
+      const profileSnap = isDocId(voiceProfileId)
+        ? await db.collection("users").doc(uid).collection("voices").doc(voiceProfileId).get()
+        : undefined;
+      const profileData = profileSnap?.exists ? (profileSnap.data() as VoiceProfileDoc) : undefined;
+      const profileProblem = checkProfileForChallenge(
+        profileData ? { retentionDeleteAtMs: profileData.retentionDeleteAt.toMillis() } : undefined,
+        now.toMillis(),
+      );
+      if (profileProblem) {
+        throw new HttpsError("failed-precondition", profileProblem, { reason: VOICE_PROFILE_REQUIRED_REASON });
       }
-      if (!sourceSessionId) {
-        throw new HttpsError(
-          "failed-precondition",
-          "먼저 본인 목소리 클론을 완료해 주세요.",
-        );
-      }
-      const storagePath = voiceInputStoragePath(uid, sourceSessionId);
+      const storagePath = voiceProfileRecordingPath(uid, voiceProfileId as string);
       const [recordingExists] = await getStorage().bucket().file(storagePath).exists();
       if (!recordingExists) {
-        // 원본 세션이 이미 종료·즉시폐기(T10 onSessionEnded)되어 녹음이 Storage에서 사라진 경우 —
-        // 알려진 한계(이 파일 상단 주석 참고). 사용자에게는 "클론 미완료"와 동일하게 안내한다.
-        throw new HttpsError(
-          "failed-precondition",
-          "먼저 본인 목소리 클론을 완료해 주세요.",
-        );
+        throw new HttpsError("failed-precondition", "보낼 목소리를 다시 녹음해 주세요.", {
+          reason: VOICE_PROFILE_REQUIRED_REASON,
+        });
       }
+      usedProfileId = voiceProfileId as string;
 
       // (c) 챌린지 전용 신규 클론(ADR-0005 스코프 고정) — 원본 세션의 voiceId를 재사용하지 않고
       // 항상 새로 발급한다. MockVoiceProvider는 매 호출 randomUUID 기반 voiceId를 반환하므로 소스
       // 세션의 voiceId와 절대 같을 수 없다(에뮬레이터 검증 대상).
-      const provider = getVoiceProvider();
+      const provider = getVoiceProvider(gsvKey());
       const cloneResult = await provider.createClone({
         sessionId: challengeRef.id,
         uid,
@@ -246,6 +236,8 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
       retentionDeleteAt,
       createdAt: now,
       ...(voiceId ? { voiceId } : {}),
+      // §144 VD2 — 프로필 삭제 · 만료 때 함께 폐기할 챌린지를 찾는 키.
+      ...(usedProfileId ? { voiceProfileId: usedProfileId } : {}),
       ...(scenarioChannel === "messenger" ? { channel: "messenger" as const } : {}),
       ...(scenarioChannel === "voice" && scenarioVoiceMode === "generic"
         ? { voiceMode: "generic" as const }
@@ -266,7 +258,9 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
   },
 );
 
+// §143 — 이 파일은 createChallenge가 합성 키를 읽어 같은 파일의 모든 진입점이 같은 시크릿을 선언한다(secretDeclarationGate (i)).
 export const deleteChallenge = onCall<DeleteChallengeRequest, Promise<DeleteChallengeResponse>>(
+  { secrets: [GSV_TOKEN_KEY] },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
@@ -306,7 +300,7 @@ export const deleteChallenge = onCall<DeleteChallengeRequest, Promise<DeleteChal
 export const listMyChallenges = onCall<
   ListMyChallengesRequest,
   Promise<ListMyChallengesResponse>
->(async (request) => {
+>({ secrets: [GSV_TOKEN_KEY] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
@@ -333,6 +327,7 @@ export const listMyChallenges = onCall<
       createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : null,
       channel,
       voiceMode,
+      voiceProfileId: data.voiceProfileId ?? null,
     };
   });
 
@@ -345,7 +340,7 @@ export const listMyChallenges = onCall<
  * VoiceProvider 구현을 주입하고, deletionLogs 기록(challengeId 세팅) + challenges.status="deleted"
  * 갱신까지 완료한다.
  */
-async function purgeChallenge(
+export async function purgeChallenge(
   challengeId: string,
   creatorUid: string,
   voiceId: string | undefined,
@@ -369,6 +364,30 @@ async function purgeChallenge(
 }
 
 /**
+ * DECISIONS #258 판정표 RT3 — 보존 만료는 **음성만** 폐기한다: 클론 삭제 · voiceId · 받는 분 정보(카드) 삭제 ·
+ * `retentionPurgedAt` 표식. 상태(status)는 그대로라 목록 · 결과(resultSummary) · 신고가 남는다. 통화 재개는
+ * consentGate · createRealtimeCall의 retentionDeleteAt 검사가 막는다(무변경). "deleted"는 사용자 삭제 · 프로필 삭제만.
+ */
+async function purgeChallengeVoice(
+  challengeId: string,
+  creatorUid: string,
+  voiceId: string | undefined,
+): Promise<void> {
+  const provider = getVoiceProvider();
+  const { targets, overallResult } = await purgeChallengeArtifacts(voiceId, {
+    deleteVoice: (id) => provider.deleteVoice(id),
+  });
+  const db = getFirestore();
+  const deletionLog: DeletionLogDoc = { challengeId, uid: creatorUid, deletedAt: Timestamp.now(), targets, overallResult };
+  await db.collection("deletionLogs").add(deletionLog);
+  await db.collection("challenges").doc(challengeId).update({
+    voiceId: FieldValue.delete(),
+    personaCard: FieldValue.delete(),
+    retentionPurgedAt: Timestamp.now(),
+  });
+}
+
+/**
  * 기간제 자동 삭제 스캔(§14.3 "자동 삭제 = retentionDeleteAt 도달 시 스케줄 함수가 폐기"). 이
  * 코드베이스 첫 onSchedule 함수라 참고할 기존 패턴이 없다 — 하루 1회면 최대 24시간의 보존 초과
  * 지연은 §14.3의 "기본 30일" 스케일에서 무시 가능하다고 판단해 간격을 골랐다(다른 상수처럼 향후
@@ -376,7 +395,7 @@ async function purgeChallenge(
  * 신규 복합 인덱스 불필요), "이미 deleted인 문서 제외"는 순수 함수(selectChallengesToPurge)가
  * 한다 — 그래야 스케줄이 매일 돌 때마다 예전에 이미 지운 챌린지를 또 지우려 시도하지 않는다.
  */
-export const purgeExpiredChallenges = onSchedule("every 24 hours", async () => {
+export const purgeExpiredChallenges = onSchedule({ schedule: "every 24 hours", secrets: [GSV_TOKEN_KEY] }, async () => {
   const db = getFirestore();
   const nowMs = Date.now();
   const dueSnap = await db
@@ -386,7 +405,12 @@ export const purgeExpiredChallenges = onSchedule("every 24 hours", async () => {
 
   const candidates = dueSnap.docs.map((doc) => {
     const data = doc.data() as ChallengeDoc;
-    return { id: doc.id, status: data.status, retentionDeleteAtMs: data.retentionDeleteAt.toMillis() };
+    return {
+      id: doc.id,
+      status: data.status,
+      retentionDeleteAtMs: data.retentionDeleteAt.toMillis(),
+      retentionPurged: data.retentionPurgedAt !== undefined,
+    };
   });
   const idsToPurge = selectChallengesToPurge(candidates, nowMs);
 
@@ -395,8 +419,8 @@ export const purgeExpiredChallenges = onSchedule("every 24 hours", async () => {
     const data = doc?.data() as ChallengeDoc | undefined;
     if (!data) continue;
     try {
-      await purgeChallenge(id, data.creatorUid, data.voiceId);
-      logger.info("purgeExpiredChallenges: 기간제 폐기 완료", { challengeId: id });
+      await purgeChallengeVoice(id, data.creatorUid, data.voiceId);
+      logger.info("purgeExpiredChallenges: 보존 만료 음성 폐기", { challengeId: id });
     } catch (err) {
       // 개별 챌린지 폐기 실패가 나머지 스캔을 막지 않는다(ADR-0003과 동일한 부분 실패 원칙) —
       // 다음 스케줄 실행에서 retentionDeleteAt이 여전히 과거이므로 자연히 재시도된다.

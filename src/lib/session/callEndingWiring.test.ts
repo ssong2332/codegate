@@ -54,7 +54,8 @@ test("[G510 · R4 · R5] 준비 신호는 승인 응답 전송 뒤 첫 turnCompl
   const toolBlock = slice(sessionCode, "const responses = await collectToolResponses(", 'dispatchClientTurn({ type: "toolResponseSent"');
   assert.ok(toolBlock.indexOf("session.sendToolResponse(") < toolBlock.indexOf("armHangupDrain();"), "대기가 응답 전송 앞에서 걸린다");
   // R4 해제 지점 3곳(turnComplete · interrupted · onclose)이 모두 beginHangupDrain을 부른다.
-  assert.equal((sessionCode.match(/beginHangupDrain\(\);/g) ?? []).length, 3, "R4 해제 지점이 3곳(turnComplete · 끼어들기 · close)이 아니다");
+  // §143 UI3 — 복제 목소리 통화는 합성 대기 조각이 다 끝난 때(cloneTts onIdle)도 해제 지점이다(그 전엔 beginHangupDrain이 기다린다).
+  assert.equal((sessionCode.match(/beginHangupDrain\(\);/g) ?? []).length, 4, "R4 해제 지점이 4곳(turnComplete · 끼어들기 · close · 복제 합성 끝)이 아니다");
   const tc = slice(sessionCode, "if (hasTurnComplete) {", "onerror:");
   assert.ok(tc.indexOf('dispatchClientTurn({ type: "turnComplete"') < tc.indexOf("beginHangupDrain();"));
   // R5 — 잔여 재생 계산은 순수 함수 하나.

@@ -24,3 +24,8 @@ export function resolveCloneReadyRoute(input: {
   }
   return { kind: "self-session" };
 }
+
+// §144 — 보내기 녹음은 clone/wait가 목소리 프로필로 저장한 뒤, 그 목소리가 골라진 만들기 화면으로 돌아간다.
+export function withVoiceProfile(challengeHref: string, profileId: string): string {
+  return `${challengeHref}&voiceProfileId=${encodeURIComponent(profileId)}`;
+}

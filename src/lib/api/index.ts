@@ -1,5 +1,6 @@
 export * from "./types";
 export { createVoiceClone } from "./createVoiceClone";
+export { warmCloneEngine } from "./warmCloneEngine";
 export { createSession } from "./createSession";
 export { sendMessage } from "./sendMessage";
 export { createRealtimeCall } from "./createRealtimeCall";
@@ -23,6 +24,7 @@ export { getBeginnerBriefing } from "./getBeginnerBriefing";
 export { createChallenge } from "./createChallenge";
 export { deleteChallenge } from "./deleteChallenge";
 export { listMyChallenges } from "./listMyChallenges";
+export { saveVoiceProfile, deleteVoiceProfile } from "./voiceProfiles";
 export { getChallengeLanding } from "./getChallengeLanding";
 export { consentChallenge } from "./consentChallenge";
 export { reportChallenge } from "./reportChallenge";

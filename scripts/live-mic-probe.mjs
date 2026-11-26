@@ -208,7 +208,10 @@ const session = await ai.live.connect({
         inputText += sc.inputTranscription.text;
         notify("input");
       }
-      if (sc.outputTranscription?.text) scammerText += sc.outputTranscription.text;
+      if (sc.outputTranscription?.text) {
+        scammerText += sc.outputTranscription.text;
+        events.push({ t: now(), ev: "outText", text: sc.outputTranscription.text }); // §143 M2 — 자막 도착 시각(복제 합성 첫 조각 시점 계산용)
+      }
       for (const part of sc.modelTurn?.parts ?? []) {
         const data = part.inlineData?.data;
         if (!data || part.thought) continue;

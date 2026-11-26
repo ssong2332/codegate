@@ -19,6 +19,8 @@ import { LIVE_MIC_CONSTRAINTS, liveMicHandoff, requestMicrophone, stopStream } f
 import { markCallSetup, markCredentialsPrefetched, resetCallSetupMarks } from "./liveLatency";
 import { noteAccept, noteCredentialSource } from "./audioDiagnostics";
 import { SCREEN_OFF_COPY } from "./backgroundCall";
+import { CLONE_CALL_FAILED_MESSAGE, isCloneCallFailedError } from "./cloneCallFailed";
+import { connectTimeoutMs } from "./cloneTts";
 
 export type RealtimeCallStatus =
   | "idle"
@@ -30,7 +32,9 @@ export type RealtimeCallStatus =
   | "fallback"
   | "permission-denied"
   | "unsupported"
-  | "error";
+  | "error"
+  // §143 D5 — 복제 목소리 합성 연결 실패. 기본 음성 · 텍스트로 넘어가지 않고 통화를 끝내고 재시도를 안내한다.
+  | "clone-failed";
 
 export type RealtimeCallState = {
   status: RealtimeCallStatus;
@@ -77,6 +81,7 @@ export type RealtimeCallControls = {
   handleActive: () => void;
   handleEnded: () => void;
   handleError: () => void;
+  handleCloneTtsFailed: () => void;
   handleSpeakingChange: (speaking: boolean) => void;
   /** RealtimeVoiceSession/GeminiVoiceSession이 사용자 발화 파형 신호를 올려주는 콜백. */
   handleUserSpeakingChange: (speaking: boolean) => void;
@@ -162,7 +167,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
         setStatus("error");
         setErrorMessage("통화 연결이 지연되어 텍스트로 진행합니다.");
       }
-    }, 12000);
+    }, connectTimeoutMs(Boolean(credentials.cloneTts))); // §143 CW — 복제 통화는 합성 준비(최대 150초)를 "연결 중"으로 기다린다
     return () => clearTimeout(timer);
   }, [credentials, status]);
 
@@ -245,13 +250,20 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     } else {
       try {
         issued = await createRealtimeCall({ sessionId });
-      } catch {
+      } catch (err) {
         // 마이크 거부가 먼저다(종전 순서 — 거부면 권한 안내, 허용이면 발급 실패 안내).
         const stream = await mic;
         stopStream(stream);
         if (!mountedRef.current) return;
         if (!stream) {
           denyMicrophone(null);
+          return;
+        }
+        // §143 D5 — 서버가 복제 목소리 자격을 못 만들었다 → 텍스트로 넘어가지 않고 통화를 끝내고 재시도 안내.
+        if (isCloneCallFailedError(err)) {
+          liveMicHandoff.release();
+          setStatus("clone-failed");
+          setErrorMessage(CLONE_CALL_FAILED_MESSAGE);
           return;
         }
         setStatus("error");
@@ -380,6 +392,13 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     }
   }, []);
 
+  // §143 D5 — 통화 중 복제 합성이 끊겼다(재연결 1회 뒤) 또는 시작 상한 안에 연결 못 함.
+  const handleCloneTtsFailed = useCallback(() => {
+    if (!mountedRef.current) return;
+    setStatus("clone-failed");
+    setErrorMessage(CLONE_CALL_FAILED_MESSAGE);
+  }, []);
+
   const handleError = useCallback(() => {
     if (!mountedRef.current) return;
     setStatus("error");
@@ -411,6 +430,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     startLeg,
     handleActive,
     handleEnded,
+    handleCloneTtsFailed,
     handleError,
     handleSpeakingChange,
     handleUserSpeakingChange,

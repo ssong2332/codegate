@@ -16,5 +16,6 @@ export async function createVoiceClone(
   return callCallable<CreateVoiceCloneRequest, CreateVoiceCloneResponse>(
     "createVoiceClone",
     request,
+    240_000, // §143 GPU 준비(콜드 스타트 포함) — 서버 timeoutSeconds 240과 같다
   );
 }

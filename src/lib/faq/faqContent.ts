@@ -8,7 +8,7 @@
 // 가족 링크 만료 · 보존 일수 — `../legal/legalContent.ts`의 CHALLENGE_LINK_EXPIRY_DAYS · CHALLENGE_RETENTION_DAYS와 같아야 한다
 // (값 import는 Next 타입 검사에서 `.ts` 확장자가 막혀 복사해 두고, `siteEssentials.test.ts`가 대조한다).
 export const FAQ_LINK_EXPIRY_DAYS = 3;
-export const FAQ_RETENTION_DAYS = 30;
+export const FAQ_RETENTION_DAYS = 3; // 챌린지 복제 음성 보존(DECISIONS #258)
 
 export type FaqItem = { question: string; answer: readonly string[] };
 
@@ -36,7 +36,7 @@ export const FAQ_ITEMS: readonly FaqItem[] = [
     question: "녹음과 사진은 어디로 가나요?",
     answer: [
       "대화방에서 보낸 사진은 서버로 보내지 않습니다. 내 휴대전화 화면에만 보여 주고, 훈련이 끝나면 지웁니다.",
-      `목소리 녹음 파일은 그 훈련이 끝나면 바로 삭제합니다. 가족에게 훈련을 보낼 때 쓴 목소리 정보는 보낸 지 ${FAQ_RETENTION_DAYS}일이 지나면 삭제합니다.`,
+      `목소리 녹음 파일은 그 훈련이 끝나면 바로 삭제합니다. 가족에게 보내려고 저장한 목소리는 저장할 때 고른 기간(7일 또는 30일)이 지나면 삭제하고, 언제든 직접 지울 수 있습니다. 훈련 링크에 연결된 목소리 정보는 보낸 지 ${FAQ_RETENTION_DAYS}일이 지나면 삭제합니다.`,
       "통화하는 동안의 목소리는 AI가 대답할 수 있도록 AI 처리 업체로 전달됩니다. 대화 내용은 글로 옮겨 훈련 기록으로 남기고, 전화번호 · 계좌번호 같은 정보는 자동으로 가립니다.",
     ],
   },

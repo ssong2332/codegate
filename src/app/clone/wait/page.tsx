@@ -24,8 +24,13 @@ import {
   getSelectedDifficultyLevel,
   getExperienceMode,
 } from "@/lib/recording";
-import { resolveCloneReadyRoute } from "@/lib/recording/cloneReadyRoute";
-import { createSession } from "@/lib/api";
+import { resolveCloneReadyRoute, withVoiceProfile } from "@/lib/recording/cloneReadyRoute";
+import { createSession, saveVoiceProfile } from "@/lib/api";
+import {
+  VOICE_PROFILE_CONSENT_VERSION,
+  clearPendingVoiceProfileSave,
+  peekPendingVoiceProfileSave,
+} from "@/lib/voices/voiceProfileConsent";
 import { familyAddressRequestField } from "@/lib/familyAddress";
 import { Button, LoadingDots, ProgressSteps, type ProgressStep } from "@/components/ui";
 import {
@@ -35,7 +40,7 @@ import {
 } from "@/lib/report/degradedDisclosure";
 
 type CloneState = "checking" | "pending" | "ready" | "failed" | "no-session" | "read-error";
-type StartState = "idle" | "starting" | "start-error" | "no-scenario";
+type StartState = "idle" | "starting" | "start-error" | "no-scenario" | "saving" | "save-error";
 
 // record/page.tsx와 동일한 온보딩 진행 표시(3단계 중 마지막).
 const ONBOARDING_STEPS: ProgressStep[] = [
@@ -53,6 +58,8 @@ export default function CloneWaitPage() {
   const [voiceId, setVoiceId] = useState<string | null>(null);
   const [startState, setStartState] = useState<StartState>("idle");
   const [startAttempt, setStartAttempt] = useState(0);
+  // §144 — 보내기 녹음 저장 실패 시 돌아갈 만들기 화면 · 서버 문구.
+  const [saveBack, setSaveBack] = useState<{ href: string; message: string } | null>(null);
   // T158(§48.3, AC-084, P-31 ⓕ) — 목소리 축 강등 신호. `createVoiceClone`이 항상 write하는
   // `sessions/{sid}.voiceProvider`(functions/src/voice/index.ts:77)를 아래 Effect 1이 이미
   // 구독 중인 같은 스냅샷에서 함께 읽는다(신규 read 0건). 대사 축(`llmProvider`)과는 다른 값이라
@@ -105,11 +112,41 @@ export default function CloneWaitPage() {
       router.push("/scenarios/messenger/voice-select");
       return;
     }
-    if (route.kind === "challenge") {
-      router.push(route.href);
-      return;
-    }
     let cancelled = false;
+    if (route.kind === "challenge") {
+      // §144(DECISIONS #257) — 녹음 화면에서 받은 이름 · 기간 · 동의로 목소리 프로필을 저장하고, 그 목소리가 골라진
+      // 만들기 화면으로 돌아간다. 저장 값이 없으면(녹음 화면을 거치지 않음) 목소리 없이 만들기로 — 거기서 고르거나 새로 녹음.
+      const pending = peekPendingVoiceProfileSave();
+      if (!pending) {
+        router.push(route.href);
+        return;
+      }
+      (async () => {
+        setStartState("saving");
+        try {
+          const { profileId } = await saveVoiceProfile({
+            sessionId,
+            label: pending.label,
+            retentionDays: pending.retentionDays,
+            consented: true,
+            consentTextVersion: VOICE_PROFILE_CONSENT_VERSION,
+          });
+          clearPendingVoiceProfileSave();
+          if (!cancelled) router.push(withVoiceProfile(route.href, profileId));
+        } catch (err) {
+          if (cancelled) return;
+          const message =
+            err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string"
+              ? (err as { message: string }).message
+              : "목소리를 저장하지 못했습니다.";
+          setSaveBack({ href: route.href, message });
+          setStartState("save-error");
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
     (async () => {
       const scenarioId = getSelectedScenarioId();
       if (!scenarioId) {
@@ -252,6 +289,28 @@ export default function CloneWaitPage() {
           <LoadingDots className="text-brand" />
           목소리 클론이 준비됐습니다. 훈련을 시작하는 중입니다
         </p>
+      )}
+
+      {isReady && startState === "saving" && (
+        <p className="flex items-center justify-center gap-2.5 text-[17px] text-ink-sub" role="status">
+          <LoadingDots className="text-brand" />
+          목소리를 저장하는 중입니다
+        </p>
+      )}
+
+      {isReady && startState === "save-error" && saveBack && (
+        <div className="flex flex-col items-center gap-3 text-center">
+          <p role="alert" className="flex items-center gap-2 text-[17px] text-danger">
+            <span aria-hidden="true">⚠</span>
+            <span>{saveBack.message}</span>
+          </p>
+          <Button type="button" onClick={handleRetryStart}>
+            다시 시도
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => router.push(saveBack.href)}>
+            챌린지 만들기로 돌아가기
+          </Button>
+        </div>
       )}
 
       {isReady && startState === "start-error" && (

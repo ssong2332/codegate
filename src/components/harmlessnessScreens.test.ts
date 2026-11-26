@@ -131,6 +131,7 @@ const CLIENT_SCREEN_INVENTORY: Record<string, boolean> = {
   "OneUiCallControls.tsx": false, // 2026-10-27 One UI 9 통화 버튼 묶음 · 더 보기 시트 — 기기 통화 앱 버튼 이름만(녹음 · 스피커 등), 사기 표면 아님
   "PhoneIcon.tsx": false, // T190-1 단색 라인 아이콘(장식 SVG · 텍스트 노드 0) — 문구가 없어 사기 표면이 아니다
   "SyntheticLabel.tsx": false, // 합성 음성 표식
+  "VoiceProfileList.tsx": false, // §144 저장한 목소리 목록(이름 · 남은 기간 · 삭제) — 앱 자신의 관리 부품, 사기 표면 아님
   "ThemeDebugPanel.tsx": false, // ?themedebug=1 화면 색 진단 패널(2026-10-21 웨일 다크) — 영문 키·색 견본만 그리는 앱 자신의 진단 부품, 사기 표면 아님
 };
 

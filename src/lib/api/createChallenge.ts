@@ -9,5 +9,5 @@ import type { CreateChallengeRequest, CreateChallengeResponse } from "./types";
 export async function createChallenge(
   request: CreateChallengeRequest,
 ): Promise<CreateChallengeResponse> {
-  return callCallable<CreateChallengeRequest, CreateChallengeResponse>("createChallenge", request);
+  return callCallable<CreateChallengeRequest, CreateChallengeResponse>("createChallenge", request, 240_000); // §143 복제 준비
 }

@@ -25,7 +25,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { getChallengeLanding, consentChallenge, reportChallenge } from "@/lib/api";
+import { getChallengeLanding, consentChallenge, reportChallenge, warmCloneEngine } from "@/lib/api";
 import type { ChallengeReportReason } from "@/lib/api";
 import {
   setPendingSessionId,
@@ -159,6 +159,8 @@ export default function ChallengeJoinPage() {
       }
       const result = await consentChallenge({ token });
       setPendingSessionId(result.sessionId);
+      // §143.5 W3 — 복제 목소리 챌린지면 통화 전에 합성 서비스를 띄운다(서버가 세션 voiceId로 판정 · generic은 0).
+      if (channel === "voice") warmCloneEngine(result.sessionId);
       setChallengeToken(token);
       if (result.openingAudioUrl) setOpeningAudioUrl(result.openingAudioUrl);
       // 사용자 신고(2026-07-24) — 실시간 통화 "AI가 먼저 말해야" 수정, ScenarioListView.tsx와

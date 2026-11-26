@@ -19,5 +19,6 @@ export async function fetchMyChallenges(): Promise<ChallengeSource[]> {
     createdAt: item.createdAt ? new Date(item.createdAt) : null,
     channel: item.channel,
     voiceMode: item.voiceMode,
+    voiceProfileId: item.voiceProfileId ?? null,
   }));
 }

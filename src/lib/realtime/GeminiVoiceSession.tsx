@@ -66,6 +66,7 @@ import { INITIAL_UNHEARD_REPLY_STATE, UNHEARD_REPLY_TEXT, stepUnheardReply } fro
 import { appendScammerChunk, claimedScammerTranscriptTurns, shouldMarkToolBoundary } from "./toolTurnTranscript";
 import { INITIAL_THOUGHT_LEAK_GATE_STATE, pickLiveAudioData, stepThoughtLeakGate, stripLeakedThought, type LiveContentPart } from "./thoughtLeak";
 import { guardLiveScammerLine, guardLiveUserLine } from "./liveTranscriptGuard";
+import { CLONE_TTS_SAMPLE_RATE, CloneTtsStream } from "./cloneTts";
 import { participantSaidSent } from "./transferClaim";
 import {
   AWAIT_RESPONSE_TIMEOUT_MS,
@@ -314,6 +315,8 @@ export type GeminiVoiceSessionProps = {
   onScammerHangupAccepted: (legEnd?: CallLegEnd) => void;
   /** R5 — 응답 뒤 첫 `turnComplete`(또는 끼어들기 · close · 상한) + 잔여 재생 + 꼬리가 지난 뒤 1회(부모: `endCall("scammer")`). */
   onScammerHangupReady: () => void;
+  /** §143 D5 — 복제 목소리 합성 연결 실패(시작 상한 · 통화 중 재연결 1회 뒤). 부모는 통화를 끝내고 재시도를 안내한다. */
+  onCloneTtsFailed?: () => void;
   /**
    * ⭐ §99(화면 꺼짐 신고) — 다시 연결된 세션의 첫 턴. 있으면 오프닝 트리거 대신 이것을 보낸다(지금까지의 대화 맥락 ·
    * `buildResumeTurn`). 부재 = 종전 오프닝. 전사에 기록하지 않는다(오프닝과 같은 오케스트레이션 신호).
@@ -426,6 +429,7 @@ export default function GeminiVoiceSession({
   isHangupLatched,
   onScammerHangupAccepted,
   onScammerHangupReady,
+  onCloneTtsFailed,
   resumeTurn,
   onConnectionLost,
   onScammerSmsClaim,
@@ -457,6 +461,7 @@ export default function GeminiVoiceSession({
     isHangupLatched,
     onScammerHangupAccepted,
     onScammerHangupReady,
+    onCloneTtsFailed,
     onConnectionLost,
     onScammerSmsClaim,
     onRelayGreetingSent,
@@ -505,6 +510,7 @@ export default function GeminiVoiceSession({
       isHangupLatched,
       onScammerHangupAccepted,
       onScammerHangupReady,
+      onCloneTtsFailed,
       onConnectionLost,
       onScammerSmsClaim,
       onRelayGreetingSent,
@@ -531,6 +537,7 @@ export default function GeminiVoiceSession({
     isHangupLatched,
     onScammerHangupAccepted,
     onScammerHangupReady,
+    onCloneTtsFailed,
     onConnectionLost,
     onScammerSmsClaim,
     onRelayGreetingSent,
@@ -608,6 +615,16 @@ export default function GeminiVoiceSession({
     let torndown = false;
     // goAway 재판정(아래 IIFE가 채운다 — turnComplete에서 부른다).
     let recheckGoAway: () => void = () => {};
+    // ⭐ §143 — 복제 목소리 통화(`credentials.cloneTts`)면 Live 오디오는 재생하지 않고 출력 전사를 GPT-SoVITS로 보내 받은 PCM을 재생한다.
+    let cloneTts: CloneTtsStream | null = null;
+    /** 판정표 CW — 복제 통화의 합성 준비(true = 준비 · false = 상한 실패). 복제 아닌 통화는 즉시 true. */
+    let cloneReady: Promise<boolean> = Promise.resolve(true);
+    let cloneFailedReported = false;
+    const reportCloneFailed = () => {
+      if (cloneFailedReported || cancelled) return;
+      cloneFailedReported = true;
+      handlersRef.current.onCloneTtsFailed?.();
+    };
     // 받은 오디오를 이어붙일 다음 재생 시작 시각(출력 컨텍스트 시간축 기준).
     let nextPlayTime = 0;
     // 현재 예약/재생 중인 오디오 소스들 — interrupted 시 이걸 전부 멈추지 않으면 이전 응답의
@@ -623,6 +640,7 @@ export default function GeminiVoiceSession({
       });
       scheduledSources.clear();
       nextPlayTime = 0;
+      cloneTts?.cancel(); // §143 — 끼어들기 · 사고 문장 차단 · 정리 = 대기 · 진행 중 합성도 버린다
     };
     // §137 E2 ~ E4 — 최종 노드 → 스트림 목적지 → 숨긴 `<audio>`. 재생 실패 · 상한 초과면 함수 안에서 즉시 `ctx.destination`으로 되돌린다.
     // 이미 정리된 실행(취소)이면 요소를 만들지 않는다(정리 뒤에 붙은 요소가 문서에 남지 않게).
@@ -700,6 +718,8 @@ export default function GeminiVoiceSession({
     // R4 → R5 — 잔여 재생 `max(0, nextPlayTime − currentTime)` + 꼬리 뒤 준비 신호(재생 도중 절단 0 — AC-103 (c)).
     const beginHangupDrain = () => {
       if (hangupDrain !== "awaitingTurnEnd") return;
+      if (cloneTts?.busy()) return; // §143 UI3 — 합성 대기 조각이 남았다 → 다 오면(onIdle) 다시 부른다. 전체 상한(15초)은 그대로
+
       hangupDrain = "draining";
       if (hangupFinalTurnTimer) clearTimeout(hangupFinalTurnTimer);
       hangupFinalTurnTimer = null;
@@ -1251,6 +1271,8 @@ export default function GeminiVoiceSession({
         turnInProgress: turnInProgressForDelay,
       });
       speakingTimer = setTimeout(() => {
+        // §143 UI3 — Live 턴이 끝나도 복제 합성이 남았으면 사기범은 아직 말하는 중이다(마이크 막음 유지 · onIdle이 다시 잡는다).
+        if (cloneTts?.busy()) return;
         // §71.5 — 턴이 아직 진행 중인데 게이트가 닫혔다 = 서버가 turnComplete 없이 멈췄다(stall). 보류
         // 큐와 지연 계측도 이 턴을 끝난 것으로 본다(안 그러면 보류분이 다음 turnComplete까지 갇힌다).
         const stalled = turnInProgress;
@@ -1276,6 +1298,24 @@ export default function GeminiVoiceSession({
     const stopSpeaking = () => {
       turnInProgress = false;
       scheduleGateClose({ remainingPlaybackMs: 0, turnInProgress: false });
+    };
+    // §143 UI1 — 복제 합성 PCM을 Live 오디오와 같은 재생 큐(정규화 · 이어 붙이기 · 끼어들기 정지)에 넣는다.
+    const scheduleClonePcm = (samples: Float32Array) => {
+      if (!outputContext || cancelled || samples.length === 0) return;
+      const scaled = normalizeChunk(samples, loudness);
+      loudness = scaled.state;
+      const clip = outputContext.createBuffer(1, samples.length, CLONE_TTS_SAMPLE_RATE);
+      clip.copyToChannel(scaled.out, 0);
+      const node = outputContext.createBufferSource();
+      node.buffer = clip;
+      node.connect(outputGain ?? outputContext.destination);
+      const at = Math.max(outputContext.currentTime, nextPlayTime);
+      node.start(at);
+      nextPlayTime = at + clip.duration;
+      scheduledSources.add(node);
+      node.onended = () => scheduledSources.delete(node);
+      markSpeaking();
+      scheduleGateClose();
     };
 
     // ⭐ §99(화면 꺼짐 신고) — 화면이 가려졌다 돌아오면 오디오 컨텍스트를 다시 깨우고, 마이크 트랙이 끝났거나 음소거로 남았으면
@@ -1380,6 +1420,8 @@ export default function GeminiVoiceSession({
     let micLogTimer: ReturnType<typeof setInterval> | null = null;
     const cleanup = () => {
       torndown = true;
+      cloneTts?.close();
+      cloneTts = null;
       turnsAwaitingResume.length = 0;
       if (micLogTimer) clearInterval(micLogTimer);
       micLogTimer = null;
@@ -1447,6 +1489,25 @@ export default function GeminiVoiceSession({
         // 연결 중 거부돼도 처리되지 않은 rejection이 남지 않게 한다(실제 처리는 아래 await).
         micRequest.catch(() => {});
         pendingMic = micRequest;
+        // ⭐ §143 — 복제 목소리 합성 연결(콜드 스타트면 최대 150초 · 판정표 CW). 실패 = 기본 음성으로 넘어가지 않는다(D5).
+        // CW1 · CW2 — 준비될 때까지 화면은 "연결 중"(onActive 보류) · 오프닝 · 마이크 전송도 보류(아래 `cloneReady`).
+        if (credentials.cloneTts) {
+          const stream = new CloneTtsStream(credentials.cloneTts.url, credentials.cloneTts.token, {
+            onPcm: scheduleClonePcm,
+            onIdle: () => {
+              scheduleGateClose();
+              beginHangupDrain();
+            },
+            onFatal: reportCloneFailed,
+            guard: guardScammer,
+          });
+          cloneTts = stream;
+          // Live 연결과 병렬(연결을 기다리지 않는다) — 기다리는 쪽은 통화 연결 알림 · 오프닝뿐이다.
+          cloneReady = stream.open().then((ok) => {
+            if (!ok) reportCloneFailed(); // CW3
+            return ok;
+          });
+        }
 
         // 서버 메시지 1건의 모양(아래 `handleLiveMessage` · 연결 콜백이 함께 쓴다).
         type LiveServerMessageLike = {
@@ -1582,6 +1643,8 @@ export default function GeminiVoiceSession({
             stopAllPlayback();
             console.info("[gemini-thought-leak]", JSON.stringify({ suppressed: true }));
           }
+          // §143 UI2 — 사고 문장 구간이 아닌 대사만 복제 합성으로 보낸다(실존 기관명 가드는 보내기 직전 `guardScammer`).
+          if (cloneTts && !thoughtGate.suppressing) cloneTts.push(sc.outputTranscription.text);
         }
 
         // 사용자가 말을 끊으면 예약된 재생을 전부 멈춰 새 응답과 겹치지 않게 한다.
@@ -1622,19 +1685,22 @@ export default function GeminiVoiceSession({
             samples.length,
             GEMINI_OUTPUT_SAMPLE_RATE,
           );
-          buffer.copyToChannel(normalized.out, 0);
-          const source = outputContext.createBufferSource();
-          source.buffer = buffer;
-          source.connect(outputGain ?? outputContext.destination);
-          // §135 진단 — 턴 진행 중인데 앞 청크가 이미 다 재생됐으면 그 사이 소리가 비었다(`play.gaps`).
-          notePlayGap(playGapMs({ turnInProgress, nextPlayTime, currentTime: outputContext.currentTime }));
-          // 이전 청크가 끝나는 시점에 이어붙인다(겹침·끊김 방지).
-          const startAt = Math.max(outputContext.currentTime, nextPlayTime);
-          source.start(startAt);
-          noteChunkScheduled(performance.now());
-          nextPlayTime = startAt + buffer.duration;
-          scheduledSources.add(source);
-          source.onended = () => scheduledSources.delete(source);
+          // §143 UI1 — 복제 목소리 통화는 Live 음성을 재생하지 않는다(소리는 `scheduleClonePcm`). 턴 진행 · 지연 판정은 그대로 이 청크를 따른다.
+          if (!cloneTts) {
+            buffer.copyToChannel(normalized.out, 0);
+            const source = outputContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(outputGain ?? outputContext.destination);
+            // §135 진단 — 턴 진행 중인데 앞 청크가 이미 다 재생됐으면 그 사이 소리가 비었다(`play.gaps`).
+            notePlayGap(playGapMs({ turnInProgress, nextPlayTime, currentTime: outputContext.currentTime }));
+            // 이전 청크가 끝나는 시점에 이어붙인다(겹침·끊김 방지).
+            const startAt = Math.max(outputContext.currentTime, nextPlayTime);
+            source.start(startAt);
+            noteChunkScheduled(performance.now());
+            nextPlayTime = startAt + buffer.duration;
+            scheduledSources.add(source);
+            source.onended = () => scheduledSources.delete(source);
+          }
           markSpeaking();
           // §71.6 — 첫 청크 도착 시각(앵커 → 첫 오디오). 반이중 억제 때문에 이 시점의 `lastLoudAt`은
           // 응답 직전 참가자 발화 끝이다.
@@ -1698,6 +1764,8 @@ export default function GeminiVoiceSession({
           // 타이핑은 여기서야 userBuffer에 적립돼 다음 턴의 사용자 발화로 기록된다.
           closeLatencyTurn("turnComplete");
           dispatchClientTurn({ type: "turnComplete", nowMs: performance.now() });
+          // §143 C3 — 이 턴의 남은 글을 복제 합성으로 다 보낸다(끊기 대기는 합성이 끝날 때까지 미뤄진다 — beginHangupDrain).
+          cloneTts?.endTurn();
           // T192 C5(§79.8 R4) — 승인 응답 뒤 첫 turnComplete = 마지막 대사가 다 왔다 → 잔여 재생을 기다린다(R5).
           // 오디오를 먼저 예약했으므로(위) `nextPlayTime`에 이 턴의 마지막 청크까지 들어 있다.
           beginHangupDrain();
@@ -1780,7 +1848,10 @@ export default function GeminiVoiceSession({
                 if (cancelled || generation !== liveGeneration) return;
                 if (generation === 0) {
                   firstOpenAtMs = performance.now();
-                  handlersRef.current.onActive();
+                  // §143 CW1 · CW2 — 복제 통화는 합성이 준비된 뒤에 "통화 연결"을 알린다(그때까지 화면은 "연결 중").
+                  void cloneReady.then((ok) => {
+                    if (ok && !cancelled && generation === liveGeneration) handlersRef.current.onActive();
+                  });
                 }
               },
               onmessage: (message: LiveServerMessageLike) => {
@@ -2110,6 +2181,11 @@ export default function GeminiVoiceSession({
         // 권한이 이미 있으면 마이크가 연결보다 먼저 끝나 기다림 0이다(`connectToOpeningSentMs`로 관찰).
         const micStream = await micRequest;
         if (cancelled || !micStream) {
+          stopStream(micStream);
+          return;
+        }
+        // §143 CW1 — 복제 통화는 합성이 준비될 때까지 오프닝 · 마이크 전송을 보류한다(실패 = CW3 · 부모가 통화를 끝낸다).
+        if (!(await cloneReady) || cancelled) {
           stopStream(micStream);
           return;
         }

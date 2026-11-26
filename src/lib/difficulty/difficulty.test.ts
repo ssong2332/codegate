@@ -147,8 +147,11 @@ test("[T191 S5 · D-107 · m6] UX-019는 고급 전용 챌린지 거부를 클�
   const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   const page = strip(fs.readFileSync(path.join(root, "src/app/challenge/create/page.tsx"), "utf8"));
   const branch = page.indexOf("reason === ADVANCED_ONLY_NOT_CHALLENGEABLE_REASON");
-  const cloneFallback = page.indexOf('setState("error-clone")');
-  assert.ok(branch > 0 && branch < cloneFallback, "고급 전용 분기가 클론 미완료 분기보다 먼저여야 한다");
+  // §144(DECISIONS #257) — "클론 미완료" 뭉뚱그림 분기(error-clone)는 없앴다. 목소리 문제는 사유 코드로만 가른다
+  // (`voice_profile_required`) → 고급 전용 거부가 목소리 안내로 떨어질 길이 없다.
+  const voiceBranch = page.indexOf('reason === "voice_profile_required"');
+  assert.ok(branch > 0 && voiceBranch > 0, "고급 전용 · 목소리 분기는 각각 사유 코드로 가른다");
+  assert.ok(!page.includes('setState("error-clone")'), "사유 없는 failed-precondition을 목소리 안내로 보내면 안 된다");
   assert.ok(page.includes("{ADVANCED_ONLY_NOT_CHALLENGEABLE_LINE}"));
   assert.match(ADVANCED_ONLY_NOT_CHALLENGEABLE_LINE, /챌린지를 지원하지 않습니다/);
 });

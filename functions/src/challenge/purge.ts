@@ -46,10 +46,22 @@ export async function purgeChallengeArtifacts(
 /** 기간제 자동 삭제 스캔(스케줄 함수, §14.3)이 "어떤 챌린지를 지울지" 판정하는 순수 로직만 분리했다
  * — Cloud Scheduler를 에뮬레이터에서 실제로 트리거하기 어려워(구현 보고서 참고), 이 함수만 fake
  * "now"로 유닛테스트하고 onSchedule 본체는 이 함수 + Firestore 쿼리 배선만 담당하게 했다. */
-export type PurgeCandidate = { id: string; status: string; retentionDeleteAtMs: number };
+export type PurgeCandidate = {
+  id: string;
+  status: string;
+  retentionDeleteAtMs: number;
+  /** DECISIONS #258 — 보존 만료로 음성을 이미 폐기한 챌린지(부재 = 아직). */
+  retentionPurged?: boolean;
+};
 
+// 판정표 RT(DECISIONS #258 · §14.3) — 보존 만료 스캔이 고르는 챌린지와 그 뒤 남는 것.
+// | 행  | 상태                                   | 스캔 | 폐기 뒤 남는 것 |
+// | RT1 | deleted(사용자 · 프로필 삭제)          | 제외 | — |
+// | RT2 | 만료 전                                | 제외 | 전부 |
+// | RT3 | 만료 · 아직 음성 폐기 전               | 선택 | 상태 · 결과 · 신고 그대로 / 음성 · voiceId · 받는 분 정보 삭제 / 재개 거절 |
+// | RT4 | 만료 · 이미 음성 폐기(retentionPurged) | 제외 | (재실행 멱등) |
 export function selectChallengesToPurge(candidates: readonly PurgeCandidate[], nowMs: number): string[] {
   return candidates
-    .filter((c) => c.status !== "deleted" && c.retentionDeleteAtMs <= nowMs)
+    .filter((c) => c.status !== "deleted" && !c.retentionPurged && c.retentionDeleteAtMs <= nowMs)
     .map((c) => c.id);
 }

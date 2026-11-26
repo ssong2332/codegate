@@ -27,7 +27,7 @@
 // UX-026으로 간다 — 방식·시나리오·최종 목적지는 전부 UX-026 하류에서 갈린다.
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { PanelBadge, PanelList } from "@/components/ui";
+import { Button, PanelBadge, PanelList } from "@/components/ui";
 import SelectScreenHeader from "@/components/SelectScreenHeader";
 import LogoutButton from "@/components/LogoutButton";
 import {
@@ -70,7 +70,12 @@ export default function ScenarioTypeSelectPage() {
           { key: "messenger", icon: "chat", title: "메신저피싱", description: "카카오톡·문자로 오는 사기", badge: lastPick("messenger") },
         ]}
       />
-      <LogoutButton className="mt-auto pb-6 pt-8" />
+      <div className="mt-auto px-5 pt-8">
+        <Button type="button" variant="secondary" onClick={() => router.push("/me")}>
+          내 기록 · 목소리
+        </Button>
+      </div>
+      <LogoutButton className="pb-6 pt-4" />
     </main>
   );
 }

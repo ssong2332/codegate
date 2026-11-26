@@ -6,6 +6,8 @@
 // synthesizeDeepvoice는 2026-07-22에 제거됐다 — UX-014 통합 이후 호출하는 화면이 없고 본문이
 // placeholder를 반환하는 상태였다(functions/src/voice/index.ts 상단 제거 이력 참고).
 export { createVoiceClone } from "./voice";
+// §143 — 복제 합성 서비스 미리 띄우기(녹음 화면 · 챌린지 입장).
+export { warmCloneEngine } from "./voice/warm";
 export { createSession, endSession, updateMessengerSkin, requestEscalation } from "./session";
 // 보이스→메신저 역방향 전이(T40 fast-follow, AC-039) — session 모듈에 함수 자체는 이미 있으므로
 // export만 추가한다(기존 줄은 건드리지 않음, 다른 태스크와의 diff 충돌 회피).
@@ -45,6 +47,7 @@ export { recordLoanReview } from "./callLegs/loanReview";
 export { getBeginnerBriefing } from "./scenarios/beginnerBriefing";
 // 2인 소셜 챌린지 — 사용자1 생성·클론 스코프·공유 링크(T36, Architecture.md §14, ADR-0005).
 export { createChallenge, deleteChallenge, listMyChallenges } from "./challenge";
+export { saveVoiceProfile, deleteVoiceProfile } from "./challenge/voiceProfiles";
 // 2인 소셜 챌린지 — 사용자2 동의·체험·신고·결과공유(T37, §14.7/ADR-0006). challenge/index.ts와
 // 순환 참조를 피하려고 별도 모듈(userAccess.ts)에서 직접 export한다.
 export {
@@ -60,5 +63,6 @@ export { onSessionEnded } from "./guardrails";
 // Scheduled function(클라 직접 호출 아님, 이 코드베이스 첫 onSchedule) — 챌린지 복제 음성 기간제
 // 자동 삭제(T36, Architecture.md §14.3, ADR-0005 "폐기 기계 재사용").
 export { purgeExpiredChallenges } from "./challenge";
+export { purgeExpiredVoiceProfiles } from "./challenge/voiceProfiles";
 // 2026-11-17 감사 '꼭 고칠 것 5' — 버려진 active 세션을 세션 시간 한도 + 유예 뒤 ended로 바꾼다(정리는 onSessionEnded · `session/staleSweep.ts` 판정표).
 export { endStaleSessions } from "./session/staleSweepSchedule";
