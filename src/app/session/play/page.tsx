@@ -2801,7 +2801,7 @@ export default function SessionCallPage() {
       spoken: spokenAccountFrom([...messages, ...unsubmittedTurns()], realBankMentionsIn),
       fixedBankName: myBankNameFor(sid, target.bankName),
       fixedBalance: fictionalBalanceFor(sid),
-      // ⭐ 2026-11-23 판정표 Z4 — 잔액을 모르면 문자 요구액보다 적게.
+      // ⭐ 2026-11-27 판정표 M5 — 잔액을 모르면 문자 요구액의 110 ~ 150%로.
       demand: target.requestedAmount ?? target.amount,
     });
     setBankTransfer({ smsId, target, mine });
