@@ -12,6 +12,7 @@ import { getStorage } from "firebase-admin/storage";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { denyAnonymous } from "../shared/anonymousGate";
 import { readDocId } from "../shared/requestValidation";
+import { GSV_TOKEN_KEY } from "../shared/config";
 import { voiceInputStoragePath } from "../voice";
 import { purgeSession } from "../guardrails";
 import { purgeChallenge } from "./index";
@@ -36,7 +37,9 @@ import type {
 
 ensureFirebaseAdminApp();
 
+// GSV_TOKEN_KEY — 사전 세션 · 챌린지 클론 폐기가 getVoiceProvider().deleteVoice를 거친다(§143 · challenge/index.ts와 같은 선언).
 export const saveVoiceProfile = onCall<SaveVoiceProfileRequest, Promise<SaveVoiceProfileResponse>>(
+  { secrets: [GSV_TOKEN_KEY] },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     denyAnonymous(request.auth);
@@ -153,6 +156,7 @@ async function purgeVoiceProfile(uid: string, profileId: string): Promise<number
 }
 
 export const deleteVoiceProfile = onCall<DeleteVoiceProfileRequest, Promise<DeleteVoiceProfileResponse>>(
+  { secrets: [GSV_TOKEN_KEY] },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     denyAnonymous(request.auth);
@@ -167,7 +171,7 @@ export const deleteVoiceProfile = onCall<DeleteVoiceProfileRequest, Promise<Dele
 );
 
 // 하루 1회(purgeExpiredChallenges와 같은 간격). collectionGroup 범위 쿼리 = firestore.indexes.json fieldOverrides.
-export const purgeExpiredVoiceProfiles = onSchedule("every 24 hours", async () => {
+export const purgeExpiredVoiceProfiles = onSchedule({ schedule: "every 24 hours", secrets: [GSV_TOKEN_KEY] }, async () => {
   const due = await getFirestore()
     .collectionGroup("voices")
     .where("retentionDeleteAt", "<=", Timestamp.now())

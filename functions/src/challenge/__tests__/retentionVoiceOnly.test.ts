@@ -11,7 +11,7 @@ import { decideConsentGate, listedChallengeStatus } from "../consentGate";
 import type { ChallengeStatus } from "../../shared/types";
 
 const DAY = 24 * 60 * 60 * 1000;
-const SRC = readFileSync(path.resolve(__dirname, "../../../src/challenge/index.ts"), "utf-8");
+const SRC = readFileSync(path.resolve(__dirname, "../../../src/challenge/index.ts"), "utf-8").replace(/\r\n/g, "\n"); // core.autocrlf 체크아웃 무관
 
 test("[보존] 복제 음성 보존 = 링크 만료 = 3일", () => {
   assert.equal(CHALLENGE_FREE_LINK_EXPIRY_MS, 3 * DAY);
