@@ -14,6 +14,8 @@
 //   · verbalInstall(U2 실측 2026-11-01 — comply와 같되 통화 중 문자 설치 화면의 권한 허용을 누르지 않고 "설치했어요"라고 말로만 답한다 · 이체 화면은 comply처럼 제출)
 //   · verbalTransfer(#463 확인 실측 2026-11-01 — comply와 같되 설치 화면은 허용하고, 이체 화면은 제출하지 않은 채 "네, 보냈어요"라고 말로만 답한다)
 //   · hostile · factual(2026-11-23 페르소나 점검 P3 · P4 — makeResponder 위 주석)
+//   · allIn · asker(2026-11-27 W0 — 체험 품질 채점 `scripts/realism-score.mjs`용. allIn = 잔액을 말하지 않고 화면에 있는 돈을 요구액에 닿을 때까지 계좌를 바꿔 가며 다 보낸다 ·
+//     asker = comply와 같되 대답마다 질문을 붙인다 · 둘 다 아래 '화면 제출 미러'로 보낸 금액 · 비교 결과 · 남은 합계를 이벤트에 남긴다)
 //   · truthful(2026-11-07 앱 안 금 구매 · 출금 예약 — comply와 같되 금 거래소 화면의 고액 구매 확인 · 출금 예약 화면의 문진표에 사실대로 "예"라 답해 보류된다 ·
 //     앱의 `landing_held` 기록 · `GOLD_HELD_INSTRUCTION` / `CASH_HELD_INSTRUCTION` 맥락 주입을 흉내 내고, 그 뒤로는 화면 안내를 들어 망설인다. 그 밖 화면은 comply와 같다)
 //
@@ -25,7 +27,7 @@
 import { createRequire } from "node:module";
 import { readFileSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..");
@@ -108,6 +110,63 @@ const ESCALATED_CALL_OPENING_TURN =
   "(방금 네가 건 전화가 연결됐다. 이 통화는 시스템 지시에 적힌 메시지 대화에 이어서 거는 전화다. 처음부터 다시 소개하거나 같은 사정을 다시 설명하지 말고, 메시지로 하던 이야기 때문에 전화했다는 짧은 첫 마디(5초 안팎)로 시작한 뒤 멈춰서 상대의 대답을 기다려라.)";
 const withOtp = (item, sid) => (sessionOtpLib && item ? sessionOtpLib.withSessionOtp(item, sid) : item);
 const sessionIdFor = (tag, scenarioId, level, persona) => `full-audit-${tag}-${scenarioId}-${level}-${persona}`;
+
+// ── W0(2026-11-27) 체험 품질 채점 보강 — 통화 번호 · 문자 발신 번호 · 화면 제출 미러 ────────────────────────────────────
+// ⛔ 앱 코드가 아니다. 채점기(`scripts/realism-score.mjs`)가 읽을 사실만 이벤트에 더한다. 클라 모듈(`src/lib/bankapp/*.ts` — 값 import 0인 잎 모듈)은
+// Node 22 타입 제거로 그대로 import한다(복사 0 — 제품 코드가 바뀌면 이 미러도 같이 바뀐다). 못 불러오면 `bankMirror = null`(제출 이벤트에 금액 필드만 빠진다).
+const senderNumberLib = optionalLib("inCallSms/senderLabel.js");
+const senderNumberOf = (label) => senderNumberLib?.senderNumberOf?.(label) ?? String(label ?? "").split(" (")[0].trim();
+const camel = (id) => id.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+/** 통화 화면 번호(`callerLabel`) — 변형 레그에 번호가 있으면 그것 · 아니면 시나리오 콘텐츠 파일(클라 TS라 글자만 읽는다). 모르면 undefined. */
+function callNumberFor(scenarioId, variantId) {
+  const legLabel = findFlowVariant(variantId)?.legs?.[0]?.callerLabel;
+  if (legLabel && /\d/.test(legLabel)) return legLabel;
+  try {
+    return /callerLabel:\s*"([^"]*)"/.exec(readFileSync(path.join(repoRoot, "src/content/scenarios", `${camel(scenarioId)}.ts`), "utf8"))?.[1];
+  } catch { return undefined; }
+}
+/** 문자 이벤트에 붙일 발신 정보 · 화면 id · 요구액 필드 · 전사 위치(채점기가 '이 문자 뒤 대사'를 가른다). */
+function smsMeta(scenarioId, smsId, turnIdx, transferAmount) {
+  const item = findInCallSmsItem(scenarioId, smsId);
+  return { senderLabel: item?.senderLabel, senderNumber: item?.senderLabel ? senderNumberOf(item.senderLabel) : undefined, landingId: item?.fakeLandingId, ...(transferAmount ? { transferAmount } : {}), turnIdx };
+}
+const bankMirror = await (async () => {
+  try {
+    const b = await import(pathToFileURL(path.join(repoRoot, "src/lib/bankapp/bankApp.ts")).href);
+    const w = await import(pathToFileURL(path.join(repoRoot, "src/lib/bankapp/withdrawAccounts.ts")).href);
+    return b.smsDemandAmount && w.withdrawAccountsFor ? { b, w } : null;
+  } catch (e) { console.error(`[W0] 클라 은행 모듈 import 실패 — 화면 미러 없음: ${String(e?.message ?? e).replace(/key=[^&\s]+/gi, "key=***")}`); return null; }
+})();
+const WON_ONCE_LIMIT = 10_000_000; // 판정표 W2(1회 1,000만 원) — `amountInput.ts`와 같은 값(잎 모듈이라 import하지 않았다)
+/**
+ * 문자가 연 이체 화면 제출 1회의 미러(앱 `MessengerFakeLanding` · `BankAppOverlay`와 같은 모듈 호출: 요구액 RA · 내 계좌 Z · 계좌 목록 · 출금 가능 · 장부 · 비교 C).
+ * 보낼 금액: comply · asker 등 = min(요구액, 첫 계좌 출금 가능) 한 번 · allIn = 계좌를 바꿔 가며 요구액에 닿을 때까지 다 보낸다(제출마다 한 계좌).
+ * 반환: 이벤트에 남길 필드(`blocked` = 보낼 돈이 없어 화면이 '잔액 부족'으로 막음 → 제출 아님).
+ */
+function mirrorSubmit({ sid, ledgerKey, scenarioId, variantId, persona, turns, smsBody, transferAmount }) {
+  if (!bankMirror) return null;
+  const { b, w } = bankMirror;
+  const scammerTexts = turns.filter((t) => t.role === "scammer" && t.kind !== "interrupted").map((t) => t.text ?? "");
+  const demand = b.smsDemandAmount({ transferAmount, body: smsBody ?? "" }, () => b.latestDemandAmount(scammerTexts));
+  const spoken = b.spokenAccountFrom(turns.filter((t) => (t.role === "user" || t.role === "scammer") && t.kind !== "interrupted").map((t) => ({ role: t.role, text: t.text ?? "" })), w.realBankMentionsIn);
+  const my = w.resolveMyAccount({ spoken, fixedBankName: b.myBankNameFor(sid), fixedBalance: b.fictionalBalanceFor(sid), demand });
+  const accounts = w.withdrawAccountsFor({ seed: sid, appBankName: my.bankName, primaryBalance: my.balance, single: my.single, demand });
+  const demandWon = demand ? Number(demand.replace(/\D/g, "")) : undefined;
+  const avail = (a) => w.availableBalance(ledgerKey, a);
+  const remainingAll = () => accounts.reduce((sum, a) => sum + avail(a), 0);
+  const sentSoFar = (accounts.reduce((sum, a) => sum + (a.balance - avail(a)), 0)); // 이 세션에서 이미 보낸 합계(장부)
+  const need = demandWon === undefined ? undefined : Math.max(0, demandWon - sentSoFar);
+  const pick = persona === "allIn" ? accounts.find((a) => avail(a) > 0) : accounts[0];
+  const base = { demand, balanceBefore: remainingAll(), accountCount: accounts.length, mainBalance: accounts[0] ? avail(accounts[0]) : 0, spokenBalance: spoken.balance, noMoney: spoken.noMoney === true };
+  const amount = pick ? Math.min(avail(pick), WON_ONCE_LIMIT, need ?? avail(pick)) : 0;
+  if (!pick || amount <= 0) return { ...base, blocked: true, sentAmount: 0, remaining: remainingAll() };
+  const raw = String(amount);
+  const err = w.withdrawError(ledgerKey, pick, raw);
+  if (err) return { ...base, blocked: true, sentAmount: 0, remaining: remainingAll(), error: err };
+  const comparison = b.recordTransferAndCompare(ledgerKey, { accountNumber: routeAccountNumber(scenarioId, variantId), amount: transferAmount, requestedAmount: demand }, raw);
+  w.recordWithdrawal(ledgerKey, pick.id, raw);
+  return { ...base, blocked: false, sentAmount: amount, accountId: pick.id, comparison, remaining: remainingAll() };
+}
 
 // §104 — Live 클라 반복 · 대기 정체 주입(`src/lib/realtime/stallRecovery.ts` §4)의 미러. 클라 모듈은 TS라 여기서 못 불러 판정표를 옮겼다 —
 // 5 · 6행(인적사항 · 유사도)은 서버 lib `decideRepeatBreak`(클라와 같은 정규식 — 루트 `[§104 짝]` 테스트)를 쓰고, 4행(대기 말)만 옮긴다.
@@ -234,12 +293,19 @@ const FACT_COURIER_OPEN = ["그 카드 저는 신청 안 했어요.", "카드사
 
 // getOtp — 도착한 문자 속 인증번호(있으면 순응 참가자는 그 번호를 부른다 · 2026-10-24). 없으면 종전 고정값.
 function makeResponder(persona, getOtp = () => undefined) {
-  let paid = false, lastReply = "";
+  let paid = false, lastReply = "", askerBase;
   return function respond(lastScammerText, i) {
     if (i === 0) return "여보세요, 네 누구세요?";
     if (persona !== "refuse" && persona !== "hostile" && persona !== "factual" && persona !== "factCourier" && persona !== "hostileStreak" && /인증\s?번호|인증 코드|숫자 여섯|여섯 자리/.test(lastScammerText) && getOtp()) {
       const r = `${persona === "suspicious" ? "음… 알겠어요. " : ""}${getOtp()}요.`;
       if (r !== lastReply) return (lastReply = r);
+    }
+    // W0 allIn — comply와 같되 잔액을 말하지 않는다(화면에 있는 돈을 그냥 다 보낸다). asker — comply 대답에 질문 하나를 붙인다.
+    if (persona === "allIn" && /(얼마|잔액|자산|예금|금액|통장)/.test(lastScammerText) && !/이체|송금|입금|보내/.test(lastScammerText)) return (lastReply = "잔액은 잘 몰라요. 통장에 있는 건 다 보낼게요.");
+    if (persona === "asker") {
+      askerBase ??= makeResponder("comply", getOtp);
+      const r = askerBase(lastScammerText, i);
+      return (lastReply = i === 0 ? r : `${r} ${ASKER_QUESTIONS[(i - 1) % ASKER_QUESTIONS.length]}`);
     }
     if (persona === "refuse") return i === 1 ? "네? 무슨 소리예요?" : REFUSE_LINES[(i - 2) % REFUSE_LINES.length];
     if (persona === "hostile") {
@@ -264,7 +330,7 @@ function makeResponder(persona, getOtp = () => undefined) {
       if (/(이체|송금|입금|보내|넣어)/.test(lastScammerText)) return FILLER[i % FILLER.length];
     }
     for (const [re, reply] of RESPONDER) {
-      if (re.test(lastScammerText)) {
+      if (re.test(lastScammerText) && !(persona === "allIn" && reply === "한 삼천만 원 정도 있어요.")) {
         // 1차 측정 교훈 — "인증번호 확인되었습니다"에도 같은 번호를 다시 불렀다. 직전과 같은 값 답은 되풀이하지 않는다.
         if (prefix + reply === lastReply) break;
         if (reply === PAID_LINE || /보냈어요|찾아 놨어요/.test(reply)) paid = true;
@@ -274,7 +340,9 @@ function makeResponder(persona, getOtp = () => undefined) {
     return (lastReply = FILLER[i % FILLER.length]);
   };
 }
-const MAX_USER_TURNS = { comply: 16, suspicious: 16, refuse: 9, verbal: 16, verbalInstall: 16, verbalTransfer: 16, truthful: 16, hostile: 12, factual: 14, factCourier: 14, hostileStreak: 12 };
+// W0 — asker가 대답마다 붙이는 질문(질문에 답하는지 Q5 수동 채점용 · 같은 질문을 되풀이하지 않게 순서대로).
+const ASKER_QUESTIONS = ["그런데 이거 정말 안전한 거 맞아요?", "제 아들은 지금 어디 있어요?", "왜 제가 직접 해야 되는 건데요?", "지금 어디서 전화하시는 거예요?", "다른 사람한테 얘기하면 안 돼요?", "확인하려면 어떻게 해야 해요?"];
+const MAX_USER_TURNS = { allIn: 16, asker: 16, comply: 16, suspicious: 16, refuse: 9, verbal: 16, verbalInstall: 16, verbalTransfer: 16, truthful: 16, hostile: 12, factual: 14, factCourier: 14, hostileStreak: 12 };
 // 2026-11-07 — truthful 참가자가 금 거래소 화면 보류 뒤 하는 말(첫 줄 = 보류 직후 1회 · 나머지 = 이후 망설임 반복).
 const GOLD_HELD_FIRST_LINE = "화면에서 구매가 보류됐다고 나와요. 수사기관이 금을 사라고 하지 않는다고, 112에 확인하라던데요?";
 const CASH_HELD_FIRST_LINE = "화면에서 출금 예약이 보류됐다고 나와요. 수사기관이 현금을 찾으라고 하지 않는다고, 112에 확인하라던데요?";
@@ -358,6 +426,8 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
     ...(job.priorChatContext ? { turnInstruction: job.priorChatContext } : {}),
   });
   const sid = job.sessionId ?? sessionIdFor(tag, scenarioId, level, persona);
+  const ledgerKey = job.ledgerKey ?? `${sid}:${variantId}:${t0}`; // 화면 미러 장부(같은 세션 id의 다른 변형 · 반복 실행과 섞이지 않게)
+  let pendingUserLine = null; // 화면이 막은 참가자가 다음 발화로 하는 말
   const otpOf = () => { for (const e of [...events].reverse()) { const m = e.ev === "sms" && /(?<!\d)(\d{6})(?!\d)/.exec(e.body ?? ""); if (m) return m[1]; } return undefined; };
   const tools = buildLiveToolDeclarations(scenarioId, level, variantId, endCallScope);
   const verifyItem = verifyEnabled ? findVerifyInterceptItem(scenarioId) : undefined;
@@ -423,7 +493,7 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
           status = "delivered";
           const r = smsResponse(item);
           guidance = r.announceInstruction;
-          events.push({ t: now(), ev: "sms", by: "model", smsId: item.smsId, body: r.body, scammerTurns, userTurns }); // U2 채점 — 도착 시점 계수
+          events.push({ t: now(), ev: "sms", by: "model", smsId: item.smsId, body: r.body, scammerTurns, userTurns, ...smsMeta(scenarioId, item.smsId, turns.length, r.transferAmount) }); // U2 채점 — 도착 시점 계수
         } else if (leg && g.status === "not_allowed") {
           // §142 D1 미러 — 앱 `inCallSms/index.ts`처럼 뒤 레그 문자면 넘김 거절 문면 · 그 밖 not_allowed는 앱 문면.
           guidance = legHandoffLib?.isLaterLegSmsPurpose(findFlowVariant(variantId), leg.relay, c.args?.purpose)
@@ -510,7 +580,7 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
   for (let i = job.startIndex ?? 0; i < (job.startIndex ?? 0) + (job.maxTurns ?? MAX_USER_TURNS[persona]); i += 1) {
     if (closed) break;
     // §115 — 순응 참가자는 링크 이체 화면을 연 문자가 도착한 다음 발화에서 제출한다(앱의 landingSubmittedAt 흉내 · C-1 입력).
-    if (persona === "comply" || persona === "verbalInstall" || persona === "verbalTransfer" || persona === "truthful") {
+    if (persona === "comply" || persona === "allIn" || persona === "asker" || persona === "verbalInstall" || persona === "verbalTransfer" || persona === "truthful") {
       for (const d of delivered) {
         const landingId = findInCallSmsItem(scenarioId, d.smsId)?.fakeLandingId;
         if (!d.landingSubmitted && !d.landingHeld && d.userTurnsAtArrival < userTurns && landingId) {
@@ -536,14 +606,30 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
             sendText(cashLanding ? mockScreensLib.CASH_HELD_INSTRUCTION : mockScreensLib.GOLD_HELD_INSTRUCTION, false, "landing_held_ctx");
             continue;
           }
-          d.landingSubmitted = true;
-          events.push({ t: now(), ev: "landingSubmitted", smsId: d.smsId, userTurns, ...(goldLanding ? { gold: true } : {}), ...(cashLanding ? { cash: true } : {}) });
-          // §132.7 — 앱처럼 제출 사실을 맥락 주입(새 lib에만 상수가 있다 — 옛 lib = 주입 0).
+          // W0 — 돈을 옮기는 이체 화면은 앱처럼 잔액 · 요구액을 계산해 보낼 금액을 정한다(화면 제출 미러). 대출 신청 · 입력 화면 · 금 · 출금 예약은 종전 경로.
+          const smsEvent = [...events].reverse().find((e) => e.ev === "sms" && e.smsId === d.smsId);
+          const mirror = !goldLanding && !cashLanding && landingId !== "loan-apply" && mockScreensLib?.isMoneyMoveLanding?.(landingId)
+            ? mirrorSubmit({ sid, ledgerKey, scenarioId, variantId, persona, turns, smsBody: smsEvent?.body, transferAmount: smsEvent?.transferAmount })
+            : null;
+          d.landingSubmitted = true; // 막혀도 같은 화면을 되풀이 시도하지 않는다(잔액 0 = 시도해도 같다)
+          if (mirror?.blocked) {
+            events.push({ t: now(), ev: "submitBlocked", smsId: d.smsId, landingId, userTurns, turnIdx: turns.length, ...mirror });
+            pendingUserLine = "화면에서 잔액이 부족하다고 나와서 못 보내요.";
+            continue;
+          }
+          d.submitCount = (d.submitCount ?? 0) + 1;
+          events.push({ t: now(), ev: "landingSubmitted", smsId: d.smsId, landingId, userTurns, turnIdx: turns.length, ...(mirror ?? {}), ...(goldLanding ? { gold: true } : {}), ...(cashLanding ? { cash: true } : {}) });
+          // allIn — 모자라게 보냈고 다른 계좌에 돈이 남았으면 다음 발화에 이어서 보낸다(최대 4번 제출).
+          if (persona === "allIn" && mirror?.comparison === "less" && mirror.remaining > 0 && d.submitCount < 4) { d.landingSubmitted = false; d.resubmitted = true; d.userTurnsAtArrival = userTurns; }
+          // §132.7 — 앱처럼 제출 사실을 맥락 주입(새 lib에만 상수가 있다 — 옛 lib = 주입 0). 이체 화면은 앱 `landingSubmittedInstructionFor`(비교 결과 · 다시 제출)로 고른다.
+          const confirmLib = optionalLib("inCallSms/confirmResult.js");
           const landingText = goldLanding
             ? mockScreensLib.GOLD_PURCHASED_INSTRUCTION
             : cashLanding
               ? mockScreensLib.CASH_RESERVED_INSTRUCTION
-              : optionalLib("inCallSms/confirmResult.js")?.LANDING_SUBMITTED_INSTRUCTION;
+              : confirmLib?.landingSubmittedInstructionFor
+                ? confirmLib.landingSubmittedInstructionFor(mirror?.comparison, d.resubmitted === true, landingId)
+                : confirmLib?.LANDING_SUBMITTED_INSTRUCTION;
           if (landingText) sendText(landingText, false, "landing_ctx");
         }
       }
@@ -563,7 +649,8 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
     const lastUserText = userTexts.at(-1);
     const rb = probeLiveRepeatBreak(scammerTexts[scammerTexts.length - 2], scammerTexts[scammerTexts.length - 1] ?? "", userTurns > 0, lastUserText, userTexts.at(-2));
     if (rb) { sendText(rb.text, false, "repeat_ctx"); events.push({ t: now(), ev: "repeatBreak", kind: rb.kind, scammerTurns, userTurns }); }
-    const u = leg?.firstLine && i === (job.startIndex ?? 0) ? leg.firstLine : respond(lastScammer, i);
+    const u = pendingUserLine ?? (leg?.firstLine && i === (job.startIndex ?? 0) ? leg.firstLine : respond(lastScammer, i));
+    pendingUserLine = null;
     userTurns += 1;
     sendText(u, true, "user");
     await waitTurn(45000);
@@ -610,7 +697,7 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
           const item = findInCallSmsItem(scenarioId, g.item.smsId);
           delivered.push({ smsId: item.smsId, userTurnsAtArrival: userTurns, by: "backstop" });
           const r = smsResponse(item);
-          events.push({ t: now(), ev: "sms", by: "backstop", smsId: item.smsId, body: r.body, scammerTurns, userTurns }); // U2 채점 — 도착 시점 계수
+          events.push({ t: now(), ev: "sms", by: "backstop", smsId: item.smsId, body: r.body, scammerTurns, userTurns, ...smsMeta(scenarioId, item.smsId, turns.length, r.transferAmount) }); // U2 채점 — 도착 시점 계수
           sendText(r.announceInstruction ?? item.announceInstruction, false, "sms_ctx");
           if (pendingConfirm && !confirmInjected) { confirmInjected = true; sendText(pendingConfirm, false, "confirm_ctx"); pendingConfirm = null; }
         }
@@ -640,7 +727,7 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
   await sleep(800);
   try { session.close(); } catch {}
   await sleep(400);
-  return { model: GEMINI_LIVE_MODEL, sessionId: sid, variantId, fictionalBankName, userTurns, closed, tools: tools.flatMap((t) => (t.functionDeclarations ?? []).map((d) => d.name)), declaredSms: declared.map((d) => d.smsId), delivered, verifyPhase, ended, turns, events, wallMs: now() };
+  return { model: GEMINI_LIVE_MODEL, sessionId: sid, variantId, callNumber: callNumberFor(scenarioId, variantId), fictionalBankName, userTurns, closed, tools: tools.flatMap((t) => (t.functionDeclarations ?? []).map((d) => d.name)), declaredSms: declared.map((d) => d.smsId), delivered, verifyPhase, ended, turns, events, wallMs: now() };
 }
 
 // ── multicall(§142 카드사 고급 재구성 확인 실측 · 2026-11-02) ─────────────────────────────────────────
@@ -744,7 +831,7 @@ async function runMultiCall(job, tag) {
     key = legIndex;
     await sleep(3000);
   }
-  return { model: GEMINI_LIVE_MODEL, sessionId: sid, variantId: variant.variantId, legs, dials, outcome, delivered, relay, turns, events, wallMs: Date.now() - t0 };
+  return { model: GEMINI_LIVE_MODEL, sessionId: sid, variantId: variant.variantId, callNumber: callNumberFor(scenarioId, variant.variantId), legs, dials, outcome, delivered, relay, turns, events, wallMs: Date.now() - t0 };
 }
 
 // ── messenger(텍스트 · sendMessage 재현) ─────────────────────────────────────────────────────────
@@ -807,7 +894,7 @@ async function runMessenger(scenarioId, level, persona, tag, job = {}) {
           dueItem = findInCallSmsItem(scenarioId, g.item.smsId);
           deliveredSmsId = g.item.smsId;
           delivered.push({ smsId: g.item.smsId, userTurnsAtArrival: userTurnsNow });
-          events.push({ ev: "sms", by: "backstop", smsId: deliveredSmsId, userTurns: userTurnsNow });
+          events.push({ ev: "sms", by: "backstop", smsId: deliveredSmsId, userTurns: userTurnsNow, ...smsMeta(scenarioId, deliveredSmsId, turns.length) });
         }
       } else if (plan.action === "nudge") nudge = buildSmsNudgeInstruction(plan.item.purpose);
     }
@@ -858,7 +945,7 @@ async function runMessenger(scenarioId, level, persona, tag, job = {}) {
     turns.push({ role: "scammer", n: scammerTurnNumber, cause: [ti && "sms_announce", confirmPlan?.instruction && "confirm_result", nudge && "nudge", effect.end && `ENDED:${effect.kind}`].filter(Boolean).join("+") || "user", raw, text: cleaned.text, attachments: cleaned.attachments });
   }
   void channel;
-  return { model: GEMINI_TEXT_MODEL, variantId, fictionalBankName, declaredSms: declared.map((d) => d.smsId), delivered, ended, escalated, turns, events, wallMs: now() };
+  return { model: GEMINI_TEXT_MODEL, variantId, callNumber: callNumberFor(scenarioId, variantId), fictionalBankName, declaredSms: declared.map((d) => d.smsId), delivered, ended, escalated, turns, events, wallMs: now() };
 }
 // ── messenger(앱 체인 · 2026-10-24) — `--claude-key-var`가 있을 때. sendMessage(`roleplay/index.ts`)의 턴 지시 조립 · 후처리 순서를 그대로 따른다.
 // 재현하지 않는 것: Firestore 상태(모의 화면 응낙 · 확인 무력화 — 메신저 4종에는 없다) · 사진 턴 · 링크 칩 중복 제거(표시 전용).
@@ -969,7 +1056,7 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
           dueItem = withOtp(findInCallSmsItem(scenarioId, g.item.smsId), sid);
           deliveredSmsId = g.item.smsId;
           delivered.push({ smsId: g.item.smsId, userTurnsAtArrival: userTurnsNow, by: "backstop" });
-          events.push({ ev: "sms", by: "backstop", smsId: deliveredSmsId, userTurns: userTurnsNow, body: applyFictionalBank(dueItem.body, fictionalBankName) });
+          events.push({ ev: "sms", by: "backstop", smsId: deliveredSmsId, userTurns: userTurnsNow, body: applyFictionalBank(dueItem.body, fictionalBankName), ...smsMeta(scenarioId, deliveredSmsId, turns.length) });
         }
       } else if (plan.action === "nudge") nudge = buildSmsNudgeInstruction(plan.item.purpose);
     }
@@ -1068,7 +1155,7 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
       if (g.status === "allowed") {
         const item = withOtp(findInCallSmsItem(scenarioId, g.item.smsId), sid);
         delivered.push({ smsId: g.item.smsId, userTurnsAtArrival: userTurnsNow, by: "marker" });
-        events.push({ ev: "sms", by: "marker", smsId: g.item.smsId, userTurns: userTurnsNow, body: applyFictionalBank(item.body, fictionalBankName) });
+        events.push({ ev: "sms", by: "marker", smsId: g.item.smsId, userTurns: userTurnsNow, body: applyFictionalBank(item.body, fictionalBankName), ...smsMeta(scenarioId, g.item.smsId, turns.length) });
       }
     }
     if (pp.dropped) events.push({ ev: "signalDropped", ...pp.dropped, userTurns: userTurnsNow });
@@ -1115,7 +1202,7 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
       }
     }
   }
-  return { model: "app-chain(claude-haiku-5-5→gemini-fallback)", sessionId: sid, variantId, fictionalBankName, declaredSms: declared.map((d) => d.smsId), delivered, ended, escalated, liveLeg: liveLeg ? { model: liveLeg.model, ended: liveLeg.ended, tools: liveLeg.tools } : null, turns, events, wallMs: now() };
+  return { model: "app-chain(claude-haiku-5-5→gemini-fallback)", sessionId: sid, variantId, callNumber: callNumberFor(scenarioId, variantId), fictionalBankName, declaredSms: declared.map((d) => d.smsId), delivered, ended, escalated, liveLeg: liveLeg ? { model: liveLeg.model, ended: liveLeg.ended, tools: liveLeg.tools } : null, turns, events, wallMs: now() };
 }
 function cleanMessengerOutput(text, scenarioId, variantId, level) {
   try {
@@ -1125,6 +1212,13 @@ function cleanMessengerOutput(text, scenarioId, variantId, level) {
 }
 
 // ── 실행 ───────────────────────────────────────────────────────────────────────────────────────
+// 화면 제출 미러 자체 점검(실 키 0 · 네트워크 0) — `--mirror-selftest`. 채점기 시험(`realism-score.test.mjs`)이 불변식만 본다(Z4 · Z5 · SF가 바뀌어도 통과해야 한다).
+if (process.argv.includes("--mirror-selftest")) {
+  const turns = [{ role: "scammer", n: 1, text: "합의금 오십만 원을 보내세요." }];
+  const run = (persona, ledgerKey, times) => Array.from({ length: times }, () => mirrorSubmit({ sid: "selftest-sid", ledgerKey, scenarioId: "family-accident-deepvoice", variantId: undefined, persona, turns, smsBody: "금액: 500,000원", transferAmount: "500,000" }));
+  console.log(JSON.stringify({ mirror: Boolean(bankMirror), comply: run("comply", "selftest-a", 1), allIn: run("allIn", "selftest-b", 4) }));
+  process.exit(0);
+}
 const plan = JSON.parse(readFileSync(argVal("--plan", ""), "utf8"));
 const outDir = path.resolve(argVal("--out", path.join(repoRoot, "full-audit-out")));
 const tag = argVal("--tag", "s");
