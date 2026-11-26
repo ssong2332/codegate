@@ -1,3 +1,5 @@
+import type { ChallengeResultSummarySource } from "@/lib/api/types";
+
 // 챌린지 결과 열람(UX-020) 목록 표시용 순수 매핑 (Track A/C, T36, AC-043).
 // Firestore Timestamp 등 SDK 타입에 의존하지 않는 순수 함수로 분리해 node:test로 검증한다
 // (src/lib/history/mapHistoryItems.ts와 동일한 "부수효과와 로직 분리" 관례). 정렬은 호출부가
@@ -25,6 +27,8 @@ export type ChallengeSource = {
   voiceMode?: "clone" | "generic";
   // §144 — 소스 목소리 프로필('내 정보' 허브 사용처 수 · 부재 = 없음).
   voiceProfileId?: string | null;
+  // U03 — 받은 사람이 공유에 동의했을 때만 서버가 싣는 요약(판정표 RS). 부재 · null = 없음.
+  resultSummary?: ChallengeResultSummarySource | null;
 };
 
 export type ChallengeListItem = {
@@ -68,24 +72,27 @@ function resolveStatusLabel(challenge: ChallengeSource): string {
   if (!COMPLETION_STATUSES.has(challenge.status)) {
     return PENDING_STATUS_LABEL;
   }
-  // AC-043 — 사용자2가 결과 공유에 동의한 경우에만 상세(의심 시점)를 보여준다. 대화 전문은 이
-  // 스키마에 애초에 없다(ChallengeDoc.resultSummary는 completed/suspicionTimeLabel 요약뿐).
+  // AC-043 — 사용자2가 결과 공유에 동의한 경우에만 요약을 보여준다. 대화 전문은 이 스키마에 애초에 없다.
   if (!challenge.resultSharingConsented) {
     return "상대가 완료했지만 결과 공유에 동의하지 않았습니다";
   }
-  // T49(#20 · AC-055/OQ-31 · D-29) — 메신저 챌린지는 의심 시점을 절대 노출하지 않는다(완료
-  // 여부만). 서버(deriveChallengeResultSummary)가 애초에 suspicionTimeLabel을 채우지 않지만,
-  // 이 화면 텍스트 자체도 채널로 재확인해 "완료" 단독이 아닌 명시적 문구를 보여준다.
-  // T56(#23 · AC-058/OQ-32 · D-34) — generic 보이스 챌린지도 메신저와 동일하게 완료 여부만
-  // 표시한다(의심 시점 절대 노출 금지). clone 보이스 챌린지만 의심 시점 문구가 유효하다.
-  const channel = challenge.channel ?? "voice";
-  const voiceMode = challenge.voiceMode ?? "clone";
-  if (channel === "messenger" || (channel === "voice" && voiceMode === "generic")) {
-    return "완료 · 상대가 체험을 마침";
-  }
-  return challenge.suspicionTimeLabel
-    ? `완료 · 의심 시점: 약 ${challenge.suspicionTimeLabel}`
-    : "완료";
+  return sharedResultLabel(challenge.resultSummary);
+}
+
+/** U03 판정표 RS 표시 — 공유 요약 → 한 줄. 요약이 없거나 U03 이전 공유(완료 여부만)면 종전 완료 문구.
+ * 채널 · 음성 모드로 갈리지 않는다(사용자 결정 "세 종류 모두 동일" · 종전 AC-055 · OQ-32 숨김을 대체). */
+export const SHARED_COMPLETED_ONLY_LABEL = "완료 · 상대가 체험을 마침";
+export function sharedResultLabel(summary: ChallengeResultSummarySource | null | undefined): string {
+  if (!summary?.outcome) return SHARED_COMPLETED_ONLY_LABEL;
+  const parts = [summary.outcome === "held" ? "끝까지 속지 않았어요" : "중간에 넘어간 순간이 있었어요"];
+  if (summary.paymentComplied) parts.push("송금 요구에 응했어요");
+  const t = summary.suspicionTimeLabel;
+  if (summary.defenseAction === "hangup" && t) parts.push(`${t}에 먼저 전화를 끊었어요`);
+  if (summary.defenseAction === "screen_held" && t) parts.push(`${t}에 확인 질문에 사실대로 답해 거래를 멈췄어요`);
+  if (summary.defenseAction === "official_check") parts.push("진짜 번호로 직접 확인했어요");
+  const missed = summary.missedSignals ?? [];
+  if (missed.length > 0) parts.push(`놓친 신호: ${missed.map((m) => `${m.tactic}(${m.timeLabel})`).join(", ")}`);
+  return parts.join(" · ");
 }
 
 function formatDateLabel(date: Date | null): string {

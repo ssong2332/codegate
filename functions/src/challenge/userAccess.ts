@@ -14,7 +14,7 @@
 // VoiceProvider.synthesize에 바로 넘기고, 그 값을 SessionDoc 어디에도 assign하지 않는다.
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { maskPII } from "../guardrails";
 import { generateOpeningLine } from "../roleplay";
@@ -392,34 +392,46 @@ export const reportChallenge = onCall<ReportChallengeRequest, Promise<ReportChal
   },
 );
 
-/** T9 리포트에서 챌린지 결과 요약을 파생한다(순수 함수 — Firestore 없이 테스트 가능).
- * suspicionTimeLabel/suspicionTurnIndex는 의도적으로 채우지 않는다 — "의심(저항) 시점" 판정은
- * DECISIONS #26의 별도 후속(resistedMoments, 아직 미구현)이 필요하고 이 태스크 범위 밖이다
- * (T9의 deceivedMoments는 "속은 시점"이지 "의심한 시점"이 아니라 대체 근거로 쓸 수 없다).
- *
- * T47 증분(#20, §14.8.3, AC-055/OQ-31) — channel 파라미터로 "메신저 챌린지는 의심 시점을 절대
- * 계산·저장하지 않는다"를 **구조적으로 고정**한다. 오늘은 보이스도 아직 suspicion 필드를 채우지
- * 않지만(위 known gap), 장래 보이스 쪽에 resistedMoments가 추가되어도 이 분기(messenger)는
- * 절대 값을 채우지 않는다 — 쓰기 시점 강제가 읽기 필터보다 안전하다(store-nothing-sensitive).
- *
- * T56 증분(#23, §14.9.3, AC-058/OQ-32) — voiceMode 파라미터를 추가해 "channel==='messenger' 또는
- * voiceMode==='generic'이면 {completed:true}만 파생"한다(OQ-32 planner default="완료 여부만",
- * D-34 — 메신저 챌린지와 동일 계층). clone 보이스 챌린지만 장래 의심-타이밍 확장 여지를 유지한다. */
+/** U03(2026-11-26 · 사용자 결정 "확대 (B)" · "①~④ 모두" · "세 종류 모두 동일") — 받은 사람이 결과 공유에 동의했을 때 만든 사람에게
+ * 보일 요약을 T9 리포트에서 파생한다(순수 함수 — Firestore 없이 테스트 가능). 판정표 RS:
+ *   ① outcome       = wasDeceived ? "deceived" : "held"
+ *   ② paymentComplied = 속은 순간 중 tacticCategory "payment_demand"가 있으면 true(금액 · 계좌 0)
+ *   ③ 의심 · 대처    = participantHangup · screenHeld 중 가장 이른 시각(defenseAction · suspicionTimeLabel) · 둘 다 없고 officialCheck면 "official_check"(시각 없음)
+ *   ④ missedSignals  = 속은 순간 앞에서부터 수법 이름이 다른 것 최대 2개(수법 이름 · 시각만)
+ * ⛔ 싣지 않는다: 대화 전문 · 참가자 발화 · 입력값 · 금액(amountComparison) · riskSignals · personaBlock(AC-043).
+ * 채널 · 음성 모드 무관 — 종전 메신저(AC-055) · generic(OQ-32) 차단 분기는 이 결정으로 없앴다. */
 export function deriveChallengeResultSummary(
-  report: Pick<ReportDoc, "sessionId">,
-  channel: ChallengeDoc["channel"] = "voice",
-  voiceMode: ChallengeDoc["voiceMode"] = "clone",
+  report: Pick<ReportDoc, "wasDeceived" | "deceivedMoments"> &
+    Partial<Pick<ReportDoc, "participantHangup" | "screenHeld" | "officialCheck">>,
 ): ChallengeResultSummary {
-  void report; // 현재는 존재 자체(=완료)만 반영한다. 추후 resistedMoments 도입 시 이 함수를 확장.
-  if (channel === "messenger" || voiceMode === "generic") {
-    // AC-055/OQ-31/OQ-32 — 스미싱 링크 탭·가짜 랜딩 입력·에스컬레이션 도달·통화 의심 시점 등
-    // "의심 시점"은 어떤 형태로도 계산·포함하지 않는다. 이 분기는 앞으로도 절대 확장하지 않는다
-    // (구조적 고정).
-    return { completed: true };
+  const moments = report.deceivedMoments ?? [];
+  const summary: ChallengeResultSummary = {
+    completed: true,
+    outcome: report.wasDeceived ? "deceived" : "held",
+  };
+  if (moments.some((m) => m.tacticCategory === "payment_demand")) summary.paymentComplied = true;
+
+  const sec = (label: string) => Number.parseInt(label, 10);
+  const defenses = [
+    report.participantHangup?.timeLabel ? { action: "hangup" as const, timeLabel: report.participantHangup.timeLabel } : null,
+    report.screenHeld?.timeLabel ? { action: "screen_held" as const, timeLabel: report.screenHeld.timeLabel } : null,
+  ]
+    .filter((d) => d !== null)
+    .sort((a, b) => sec(a.timeLabel) - sec(b.timeLabel));
+  if (defenses.length > 0) {
+    summary.defenseAction = defenses[0].action;
+    summary.suspicionTimeLabel = defenses[0].timeLabel;
+  } else if (report.officialCheck) {
+    summary.defenseAction = "official_check";
   }
-  // clone 보이스 챌린지 — DECISIONS #26 resistedMoments 도입 시 이 분기에서만 suspicionTimeLabel
-  // 등을 채우도록 확장한다(messenger/generic 분기는 위에서 이미 구조적으로 차단됨).
-  return { completed: true };
+
+  const missed: { tactic: string; timeLabel: string }[] = [];
+  for (const m of moments) {
+    if (missed.length >= 2) break;
+    if (!missed.some((x) => x.tactic === m.tactic)) missed.push({ tactic: m.tactic, timeLabel: m.timeLabel });
+  }
+  if (missed.length > 0) summary.missedSignals = missed;
+  return summary;
 }
 
 // setChallengeResultSharing — 사용자2 결과 공유 동의(AC-043 게이트) (T37 · UX-018)
@@ -457,7 +469,8 @@ export const setChallengeResultSharing = onCall<
 
   if (!share) {
     // 명시 거부 — 부재(§14.1 "기본 부재=미동의")와 구분되는 "명시적으로 아니오"를 남긴다(감사 목적).
-    await challengeRef.update({ resultSharingConsented: false });
+    // U03 — 거부하면 앞서 공유했던 요약도 지운다(목록 콜러블도 동의 여부로 한 번 더 거른다).
+    await challengeRef.update({ resultSharingConsented: false, resultSummary: FieldValue.delete() });
     return { shared: false };
   }
 
@@ -468,7 +481,7 @@ export const setChallengeResultSharing = onCall<
     throw new HttpsError("failed-precondition", "아직 결과가 준비되지 않았습니다.");
   }
   const report = reportSnap.data() as ReportDoc;
-  const resultSummary = deriveChallengeResultSummary(report, resolved.channel, resolved.voiceMode);
+  const resultSummary = deriveChallengeResultSummary(report);
 
   await challengeRef.update({
     resultSharingConsented: true,

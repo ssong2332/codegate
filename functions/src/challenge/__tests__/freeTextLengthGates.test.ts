@@ -72,7 +72,7 @@ test("[소스 스캔] reportChallenge — note 길이 검사가 존재하고 inv
 test("[소스 스캔] reportChallenge — 길이 검사가 resolveChallengeByTokenHash(Firestore 조회)보다 앞이다", () => {
   const src = readFileSync(USER_ACCESS_SRC, "utf8");
   const start = src.indexOf("export const reportChallenge = onCall<");
-  const nextExport = src.indexOf("/** T9 리포트에서 챌린지 결과 요약을 파생한다");
+  const nextExport = src.indexOf("export function deriveChallengeResultSummary"); // U03 — 옛 주석 앵커가 사라져 함수 정의로
   assert.ok(start > -1 && nextExport > start, "reportChallenge 정의를 찾을 수 없다");
   const body = src.slice(start, nextExport);
   const lengthCheckIdx = body.indexOf("if (note && note.length > CHALLENGE_REPORT_NOTE_MAX_LENGTH)");

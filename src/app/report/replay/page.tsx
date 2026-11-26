@@ -736,8 +736,9 @@ export default function ReplayPage() {
           </p>
           <p className="text-base leading-relaxed text-ink-sub">
             {/* 리포트 검수(2026-10-22) — 내부 요구사항 번호("(AC-043)")가 화면에 그대로 나오던 것을 뺐다. */}
-            동의하면 완료 여부만 {challenge.displayName}님에게 전달됩니다. 대화 내용은 전달되지
-            않습니다.
+            {/* U03(2026-11-26 · 사용자 결정 "확대 (B)") — 전달 범위 = 서버 판정표 RS(userAccess.ts deriveChallengeResultSummary). */}
+            동의하면 {challenge.displayName}님에게 이것만 전달됩니다: 끝까지 속지 않았는지, 의심하고 대처한
+            시점, 놓친 신호 최대 2개(수법 이름만). 대화 내용과 내가 말한 정보는 전달되지 않습니다.
           </p>
 
           {!challengeToken ? (

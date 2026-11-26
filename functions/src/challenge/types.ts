@@ -1,7 +1,7 @@
 // challenge 모듈 요청/응답 타입 — src/lib/api/types.ts(클라 계약)와 1:1 대응
 // (Architecture.md §14, ADR-0005, T36). API.md에는 아직 반영 안 됨 — architect 확인/문서 갱신 권장
 // (createSession의 sessionId 필드 등 기존 선례와 동일한 "서버 코드가 문서보다 먼저 나간" 패턴).
-import type { ChallengeReportReason, ChallengeStatus, MessengerChannel } from "../shared/types";
+import type { ChallengeReportReason, ChallengeResultSummary, ChallengeStatus, MessengerChannel } from "../shared/types";
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { VoiceMode } from "../scenarios/publicMeta";
 
@@ -73,6 +73,8 @@ export type ListMyChallengesItem = {
   voiceMode: VoiceMode;
   /** §144 '내 정보' 허브 — 이 챌린지의 소스 목소리 프로필(본인 것 · 부재 = null). 목소리별 사용처 수에 쓴다. */
   voiceProfileId: string | null;
+  /** U03 — 받은 사람이 공유에 동의했을 때만 결과 요약(판정표 RS) · 아니면 null. */
+  resultSummary: ChallengeResultSummary | null;
 };
 export type ListMyChallengesResponse = {
   challenges: ListMyChallengesItem[];

@@ -772,6 +772,14 @@ export type ChallengeResultSummary = {
   completed: boolean;
   suspicionTimeLabel?: string;
   suspicionTurnIndex?: number;
+  /** U03(판정표 RS ①) — 끝까지 속지 않음 / 넘어간 순간 있음. 부재 = U03 이전 공유(완료 여부만). */
+  outcome?: "held" | "deceived";
+  /** U03 ② — 송금 요구에 응한 순간이 있다(금액 · 계좌 0). 부재 = 없음. */
+  paymentComplied?: true;
+  /** U03 ③ — 가장 이른 대처 행동(시각 = suspicionTimeLabel · official_check는 시각 없음). */
+  defenseAction?: "hangup" | "screen_held" | "official_check";
+  /** U03 ④ — 놓친 신호 최대 2개(수법 이름 · 시각만). */
+  missedSignals?: { tactic: string; timeLabel: string }[];
 };
 export type ChallengeTier = "free" | "paid"; // 부재=free(§14.6, AC-050 — tier는 용량 축에만 영향)
 export type ChallengeDoc = {
