@@ -70,7 +70,28 @@ class Gsv:
         self.whisper = WhisperModel("small", device="cuda", compute_type="float16")
         self.key = os.environ["GSV_TOKEN_KEY"]
         self.lock = threading.Lock()  # TTS 객체는 한 번에 하나
-        _log("loaded", sec=round(time.time() - t0, 1))
+        t1 = time.time()
+        self._boot_warmup()
+        _log("loaded", sec=round(time.time() - t0, 1), warmupSec=round(time.time() - t1, 1))
+
+    def _boot_warmup(self):
+        """§143.21 B1 — 첫 합성에만 드는 초기화(nltk 사전 내려받기 · 한국어 형태소기 · CUDA 그래프 · GPT 가중치 다시 읽기 —
+        실측 약 9초)를 컨테이너 기동 때 치른다. 참조 = 합성한 4초 사인파(사람 목소리 0) · 결과는 버리고 캐시도 비운다."""
+        from textguard import gen_params
+        tmp = tempfile.mkdtemp()
+        try:
+            ref = os.path.join(tmp, "warm.wav")
+            subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=220:duration=4",
+                            "-ar", str(SR_OUT), "-ac", "1", ref], check=True)
+            base = {"text_lang": "ko", "ref_audio_path": ref, "prompt_text": "안녕하세요. 반갑습니다.", "prompt_lang": "ko",
+                    "text_split_method": "cut5", "batch_size": 1, "seed": 1234, **gen_params(None)}
+            with self.lock:
+                for streaming in (False, True):  # 준비(prime)는 비스트리밍 · 통화 합성은 스트리밍 — 둘 다 한 번씩
+                    for _ in self.tts.run({**base, "text": "네, 알겠습니다.", "streaming_mode": streaming}):
+                        pass
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+            self.tts.prompt_cache["ref_audio_path"] = None
 
     @modal.asgi_app()
     def web(self):
@@ -131,11 +152,10 @@ class Gsv:
             cancel = threading.Event()
             started = time.time()
             try:
-                paths = []
-                for i, ref in enumerate(t["refs"]):  # refs[0] = 기본 참조(글 포함), 나머지 = 보조
-                    p = os.path.join(tmp, f"r{i}.wav")
-                    await asyncio.to_thread(_fetch, ref["url"], p)
-                    paths.append(p)
+                # §143.21 B2 — 참조 4개를 한꺼번에 받는다(순차일 때 서명 URL 왕복이 4번 쌓였다 · refs[0] = 기본 참조(글 포함), 나머지 = 보조)
+                paths = [os.path.join(tmp, f"r{i}.wav") for i in range(len(t["refs"]))]
+                await asyncio.gather(*(asyncio.to_thread(_fetch, ref["url"], p) for ref, p in zip(t["refs"], paths)))
+                fetched = time.time()
                 base = {"text_lang": "ko", "ref_audio_path": paths[0], "prompt_text": t["refs"][0]["text"], "prompt_lang": "ko",
                         "aux_ref_audio_paths": paths[1:], "text_split_method": "cut5", "batch_size": 1, "seed": 1234,
                         "streaming_mode": True, **gen_params(t.get("gen"))}  # §143.20 판정표 G — 운영 토큰엔 gen 없음 = 조합 C
@@ -149,7 +169,8 @@ class Gsv:
 
                 await asyncio.to_thread(prime)
                 await sock.send_text(json.dumps({"type": "ready", "sr": SR_OUT}))
-                _log("ws_ready", prepSec=round(time.time() - started, 2))
+                _log("ws_ready", prepSec=round(time.time() - started, 2), fetchSec=round(fetched - started, 2),
+                     primeSec=round(time.time() - fetched, 2))  # §143.21 구간 계측(시간만 — 음성 · 글 0)
                 loop = asyncio.get_running_loop()
                 inbox: asyncio.Queue = asyncio.Queue()
 

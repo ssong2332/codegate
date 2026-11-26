@@ -2,7 +2,8 @@
 import { mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CALL_CONNECT_TIMEOUT_MS, CLONE_TTS_READY_TIMEOUT_MS, CLONE_TTS_RETRY_MS, CloneTtsStream, connectTimeoutMs, takeTtsChunk } from "./cloneTts.ts";
+import { CALL_CONNECT_TIMEOUT_MS, CLONE_TTS_READY_TIMEOUT_MS, CLONE_TTS_RETRY_MS, CloneTtsStream, connectTimeoutMs, createCloneTtsHandoff, takeTtsChunk } from "./cloneTts.ts";
+import { buildCloneSetupRecord } from "./liveLatency.ts";
 import { CLONE_CALL_FAILED_MESSAGE, isCloneCallFailedError } from "./cloneCallFailed.ts";
 
 test("[§143 판정표 C] 첫 조각 · 다음 조각 · 턴 끝 · 기다림", () => {
@@ -207,4 +208,73 @@ test("[§143 CW1 · CW2 배선] 통화 연결 알림 · 오프닝은 합성 준�
   const hook = src("./useRealtimeCall.ts");
   assert.ok(hook.includes("}, connectTimeoutMs(Boolean(credentials.cloneTts)));"));
   assert.equal(/\}, 12000\);/.test(hook), false);
+});
+
+// ── §143.21 판정표 HO — 벨 울리는 동안 미리 연 합성 연결을 받기 뒤 넘겨받는다(첫 음성 5 ~ 7초) ──
+
+function makeHandoff() {
+  FakeSock.all = [];
+  const made: CloneTtsStream[] = [];
+  const h = createCloneTtsHandoff((url, token, handlers) => {
+    const s = new CloneTtsStream(url, token, handlers, () => new FakeSock() as never);
+    made.push(s);
+    return s;
+  });
+  return { h, made };
+}
+
+test("[§143.21 HO1 · HO2] 미리 받기 때 연결을 연다 · 같은 토큰이면 넘겨받는다(한 번만) · 처리기를 바꿔 낀다", async () => {
+  const { h } = makeHandoff();
+  h.start({ url: "wss://x/ws", token: "T1" });
+  assert.equal(FakeSock.all.length, 1, "벨 울리는 동안 연결");
+  FakeSock.all[0].onopen?.({} as Event);
+  FakeSock.all[0].msg({ type: "ready", sr: 32000 });
+  h.start({ url: "wss://x/ws", token: "T1" }); // 같은 토큰 재요청 = 다시 열지 않음
+  assert.equal(FakeSock.all.length, 1);
+  const got = h.claim("T1");
+  assert.ok(got);
+  assert.equal(await got.ready, true, "받기 전에 준비가 끝났다");
+  const pcm: number[] = [];
+  got.stream.setHandlers({ onPcm: (f) => pcm.push(f.length), onFatal: () => {}, onIdle: () => {}, guard: (t) => t });
+  got.stream.push("여보세요?");
+  FakeSock.all[0].pcm(1, [1, 2, 3]);
+  assert.deepEqual(pcm, [3], "넘겨받은 뒤 소리는 통화 처리기로");
+  assert.equal(h.claim("T1"), null, "한 번만");
+});
+
+test("[§143.21 HO3 · HO4 · HO5] 토큰이 다르면 닫고 null · 닫힌 것은 null · 떠나면 닫는다", async () => {
+  const a = makeHandoff();
+  a.h.start({ url: "wss://x/ws", token: "OLD" });
+  assert.equal(a.h.claim("NEW"), null);
+  assert.equal(a.made[0].isClosed(), true, "HO3 미리 연 것은 닫는다");
+
+  const b = makeHandoff();
+  b.h.start({ url: "wss://x/ws", token: "T" });
+  b.made[0].close();
+  assert.equal(b.h.claim("T"), null, "HO4");
+
+  const c = makeHandoff();
+  c.h.start({ url: "wss://x/ws", token: "T" });
+  c.h.release();
+  assert.equal(c.made[0].isClosed(), true, "HO5");
+  assert.equal(c.h.claim("T"), null);
+});
+
+test("[§143.21 계측] 복제 준비 한 줄 = 받기 기준 실제 첫 소리 · 미리 열었는지", () => {
+  const r = buildCloneSetupRecord({ accept: 0, clonePrewarmed: 10, cloneReady: 900, connectResolved: 2500, openingSent: 2600, cloneFirstAudio: 5100 });
+  assert.deepEqual(r, { type: "cloneSetup", clonePrewarmed: true, acceptToCloneReadyMs: 900, acceptToConnectMs: 2500, connectToOpeningSentMs: 100, openingSentToCloneFirstAudioMs: 2500, acceptToCloneFirstAudioMs: 5100 });
+  assert.equal(buildCloneSetupRecord({ accept: 0, cloneOpen: 5 }).clonePrewarmed, false);
+});
+
+test("[§143.21 배선] 미리 받기 → 연결 미리 열기 · 화면 내려가면 닫기 · 세션은 넘겨받기 먼저 · 첫 복제 음성 한 줄", () => {
+  const src = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const hook = src("./useRealtimeCall.ts");
+  assert.match(hook, /mint: \(sessionId\) =>\n\s+createRealtimeCall\(\{ sessionId \}\)\.then\(\(issued\) => \{\n\s+if \(issued\.cloneTts && mountedRef\.current\) cloneTtsHandoff\.start\(issued\.cloneTts\);/);
+  assert.ok(hook.includes("cloneTtsHandoff.release();"));
+  const gvs = src("./GeminiVoiceSession.tsx");
+  const claim = gvs.indexOf("const handed = cloneTtsHandoff.claim(credentials.cloneTts.token);");
+  const fresh = gvs.indexOf("handed?.stream ?? new CloneTtsStream(");
+  assert.ok(claim > 0 && fresh > claim);
+  assert.ok(gvs.includes("cloneReady = (handed ? handed.ready : stream.open()).then((ok) => {"));
+  assert.ok(gvs.includes('markCallSetup("cloneFirstAudio", performance.now());'));
 });

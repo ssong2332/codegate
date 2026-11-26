@@ -96,7 +96,7 @@ export class CloneTtsStream {
 
   private readonly url: string;
   private readonly token: string;
-  private readonly handlers: CloneTtsHandlers;
+  private handlers: CloneTtsHandlers;
   private readonly makeSocket: (url: string) => Sock;
   private readonly now: () => number;
 
@@ -216,10 +216,21 @@ export class CloneTtsStream {
     return this.inFlight.size > 0 || this.buffer.trim() !== "";
   }
 
+  /** §143.21 판정표 HO — 벨 울리는 동안 미리 연 스트림을 통화 세션이 넘겨받을 때 처리기를 바꿔 낀다. */
+  setHandlers(handlers: CloneTtsHandlers) {
+    this.handlers = handlers;
+  }
+
+  /** 닫혔다(실패 · 상한 · close) — 넘겨받지 않고 새로 연다. */
+  isClosed(): boolean {
+    return this.closed;
+  }
+
   close() {
     this.closed = true;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
+    this.readyWaiters.splice(0).forEach((w) => w(false)); // 기다리던 open = 실패(상한 타이머도 함께 푼다)
     this.sock?.close();
     this.sock = null;
   }
@@ -246,3 +257,50 @@ export class CloneTtsStream {
     }
   }
 }
+
+// ── §143.21 복제 통화 첫 음성 단축 — 벨이 울리는 동안(자격증명 미리 받기 직후) 합성 연결을 미리 열어 두고, 받기 뒤 통화 세션이
+// 넘겨받는다(`micHandoff.ts`와 같은 발상). 합성 준비(참조 받기 · 첫 합성 준비)가 받기 전에 끝나 "연결 중" 대기가 0에 가까워진다.
+//
+// 넘겨받기 판정표 HO:
+// | 행 | 조건 | 결과 |
+// | HO1 | 미리 받은 자격증명에 cloneTts 있음 | 그 자리에서 스트림을 열어 둔다(앞서 열어 둔 것은 닫는다) |
+// | HO2 | 세션이 같은 토큰으로 넘겨받음 · 아직 열려 있음 | 그 스트림 · 준비 약속을 넘긴다(한 번만) |
+// | HO3 | 토큰이 다름(미리 받기가 상해 새로 발급 등) | 미리 연 것은 닫고 null — 세션이 새로 연다(종전) |
+// | HO4 | 미리 연 스트림이 닫힘(실패 · 상한) | null — 세션이 새로 연다 |
+// | HO5 | 통화 화면이 내려감(받지 않고 떠남) | 닫는다(GPU 연결을 붙잡아 두지 않는다) |
+
+type Slot = { token: string; stream: CloneTtsStream; ready: Promise<boolean> };
+
+const NOOP: CloneTtsHandlers = { onPcm: () => {}, onFatal: () => {}, onIdle: () => {}, guard: (t) => t };
+
+export function createCloneTtsHandoff(make: (url: string, token: string, h: CloneTtsHandlers) => CloneTtsStream) {
+  let slot: Slot | null = null;
+  const release = () => {
+    slot?.stream.close();
+    slot = null;
+  };
+  return {
+    /** HO1 */
+    start(creds: { url: string; token: string }) {
+      if (slot?.token === creds.token && !slot.stream.isClosed()) return;
+      release();
+      const stream = make(creds.url, creds.token, NOOP);
+      slot = { token: creds.token, stream, ready: stream.open() };
+    },
+    /** HO2 ~ HO4 */
+    claim(token: string): { stream: CloneTtsStream; ready: Promise<boolean> } | null {
+      const s = slot;
+      slot = null;
+      if (!s) return null;
+      if (s.token !== token || s.stream.isClosed()) {
+        s.stream.close();
+        return null;
+      }
+      return { stream: s.stream, ready: s.ready };
+    },
+    /** HO5 */
+    release,
+  };
+}
+
+export const cloneTtsHandoff = createCloneTtsHandoff((url, token, h) => new CloneTtsStream(url, token, h));

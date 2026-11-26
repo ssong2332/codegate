@@ -66,7 +66,7 @@ import { INITIAL_UNHEARD_REPLY_STATE, UNHEARD_REPLY_TEXT, stepUnheardReply } fro
 import { appendScammerChunk, claimedScammerTranscriptTurns, shouldMarkToolBoundary } from "./toolTurnTranscript";
 import { INITIAL_THOUGHT_LEAK_GATE_STATE, pickLiveAudioData, stepThoughtLeakGate, stripLeakedThought, type LiveContentPart } from "./thoughtLeak";
 import { guardLiveScammerLine, guardLiveUserLine } from "./liveTranscriptGuard";
-import { CLONE_TTS_SAMPLE_RATE, CloneTtsStream } from "./cloneTts";
+import { CLONE_TTS_SAMPLE_RATE, CloneTtsStream, cloneTtsHandoff } from "./cloneTts";
 import { participantSaidSent } from "./transferClaim";
 import {
   AWAIT_RESPONSE_TIMEOUT_MS,
@@ -104,6 +104,7 @@ import {
   INITIAL_LIVE_LATENCY_STATE,
   LIVE_LATENCY_LOG_PREFIX,
   buildCallSetupRecord,
+  buildCloneSetupRecord,
   formatLatencyLine,
   markCallSetup,
   noteModelAudio,
@@ -1300,8 +1301,15 @@ export default function GeminiVoiceSession({
       scheduleGateClose({ remainingPlaybackMs: 0, turnInProgress: false });
     };
     // §143 UI1 — 복제 합성 PCM을 Live 오디오와 같은 재생 큐(정규화 · 이어 붙이기 · 끼어들기 정지)에 넣는다.
+    let cloneFirstAudioLogged = false;
     const scheduleClonePcm = (samples: Float32Array) => {
       if (!outputContext || cancelled || samples.length === 0) return;
+      if (!cloneFirstAudioLogged) {
+        // §143.21 — 실제 첫 소리(복제 음성) 시각 · 준비 구간 한 줄(숫자만)
+        cloneFirstAudioLogged = true;
+        markCallSetup("cloneFirstAudio", performance.now());
+        logLatency(formatLatencyLine(credentials.geminiModel, buildCloneSetupRecord(readCallSetupMarks())));
+      }
       const scaled = normalizeChunk(samples, loudness);
       loudness = scaled.state;
       const clip = outputContext.createBuffer(1, samples.length, CLONE_TTS_SAMPLE_RATE);
@@ -1492,7 +1500,7 @@ export default function GeminiVoiceSession({
         // ⭐ §143 — 복제 목소리 합성 연결(콜드 스타트면 최대 150초 · 판정표 CW). 실패 = 기본 음성으로 넘어가지 않는다(D5).
         // CW1 · CW2 — 준비될 때까지 화면은 "연결 중"(onActive 보류) · 오프닝 · 마이크 전송도 보류(아래 `cloneReady`).
         if (credentials.cloneTts) {
-          const stream = new CloneTtsStream(credentials.cloneTts.url, credentials.cloneTts.token, {
+          const cloneHandlers = {
             onPcm: scheduleClonePcm,
             onIdle: () => {
               scheduleGateClose();
@@ -1500,10 +1508,16 @@ export default function GeminiVoiceSession({
             },
             onFatal: reportCloneFailed,
             guard: guardScammer,
-          });
+          };
+          // §143.21 HO2 — 벨이 울리는 동안 미리 연 연결이 있으면 넘겨받는다(준비가 이미 끝났거나 진행 중). 없으면 종전대로 연다.
+          const handed = cloneTtsHandoff.claim(credentials.cloneTts.token);
+          const stream = handed?.stream ?? new CloneTtsStream(credentials.cloneTts.url, credentials.cloneTts.token, cloneHandlers);
+          if (handed) stream.setHandlers(cloneHandlers);
           cloneTts = stream;
+          markCallSetup(handed ? "clonePrewarmed" : "cloneOpen", performance.now());
           // Live 연결과 병렬(연결을 기다리지 않는다) — 기다리는 쪽은 통화 연결 알림 · 오프닝뿐이다.
-          cloneReady = stream.open().then((ok) => {
+          cloneReady = (handed ? handed.ready : stream.open()).then((ok) => {
+            markCallSetup("cloneReady", performance.now());
             if (!ok) reportCloneFailed(); // CW3
             return ok;
           });

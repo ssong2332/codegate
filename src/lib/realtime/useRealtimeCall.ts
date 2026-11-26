@@ -20,7 +20,7 @@ import { markCallSetup, markCredentialsPrefetched, resetCallSetupMarks } from ".
 import { noteAccept, noteCredentialSource } from "./audioDiagnostics";
 import { SCREEN_OFF_COPY } from "./backgroundCall";
 import { CLONE_CALL_FAILED_MESSAGE, isCloneCallFailedError } from "./cloneCallFailed";
-import { connectTimeoutMs } from "./cloneTts";
+import { cloneTtsHandoff, connectTimeoutMs } from "./cloneTts";
 
 export type RealtimeCallStatus =
   | "idle"
@@ -132,7 +132,12 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
   const getPrefetchSlot = useCallback((): PrefetchSlot<CreateRealtimeCallResponse> => {
     if (!prefetchSlotRef.current) {
       prefetchSlotRef.current = createPrefetchSlot<CreateRealtimeCallResponse>({
-        mint: (sessionId) => createRealtimeCall({ sessionId }),
+        // §143.21 HO1 — 복제 통화면 벨이 울리는 동안 합성 연결을 미리 연다(받기 뒤 세션이 넘겨받는다).
+        mint: (sessionId) =>
+          createRealtimeCall({ sessionId }).then((issued) => {
+            if (issued.cloneTts && mountedRef.current) cloneTtsHandoff.start(issued.cloneTts);
+            return issued;
+          }),
         now: () => Date.now(),
         staleMs: PREFETCH_STALE_MS,
         isAlive: () => mountedRef.current,
@@ -153,6 +158,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     return () => {
       mountedRef.current = false;
       liveMicHandoff.release(); // 세션이 가져가지 않은 받기 마이크는 닫는다(누수 0).
+      cloneTtsHandoff.release(); // §143.21 HO5 — 받지 않고 떠나면 미리 연 합성 연결도 닫는다
     };
   }, []);
 
