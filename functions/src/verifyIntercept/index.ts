@@ -25,7 +25,7 @@ import type { SessionDoc } from "../shared/types";
 import { getRealtimeProvider, requiresServerPromptProvider } from "../realtime/provider";
 // 에스컬레이션 세션의 "유효 voiceMode" 유추는 createRealtimeCall이 쓰는 것과 **같은 함수**를
 // 재사용한다(복제하면 게이트 판정이 두 곳에서 갈라진다 — §15.6 G7과 같은 판단).
-import { resolveEffectiveVoiceMode } from "../realtime";
+import { resolveEffectiveVoiceMode } from "../realtime/voiceMode";
 import {
   buildVerifyInterceptDoc,
   buildVerifyOfferResponse,

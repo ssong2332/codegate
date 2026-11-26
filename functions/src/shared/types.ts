@@ -81,7 +81,7 @@ export type CloneStatus = "pending" | "ready" | "failed" | "fallback";
 // T19 추가(옵셔널, 하위호환 — Migration Policy): 어떤 VoiceProvider가 클론을 만들었는지 감사용
 // 표식. `mock`이면 MockVoiceProvider 산출물(PRD Risks "목업 잔존 위험" 방어용). Database.md에는
 // 아직 반영 안 됨 — architect 확인/문서 갱신 권장(docs 에이전트가 Update Request 발행).
-export type VoiceProviderName = "mock" | "elevenlabs";
+export type VoiceProviderName = "mock" | "elevenlabs" | "gsv"; // gsv = §143 GPT-SoVITS(Modal)
 
 // T7 추가(옵셔널, 하위호환 — Migration Policy, VoiceProviderName과 동일 패턴): 이 세션의 역할극
 // 응답을 만든 LLM 어댑터 식별. `mock`이면 MockLlmClient 산출물(LLM_API_KEY 미확보 — 실 LLM으로

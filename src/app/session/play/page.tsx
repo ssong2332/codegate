@@ -2222,6 +2222,9 @@ export default function SessionCallPage() {
         } else {
           setPhase("live");
         }
+      } else if (realtime.status === "clone-failed") {
+        // §143 D5 — 복제 목소리 연결 실패 = 기본 음성 · 텍스트로 넘어가지 않고 통화를 끝낸다(종료 셸이 재시도를 안내한다).
+        await endCall("remote");
       } else if (realtime.status === "ended") {
         // ⭐ T192 C5(§79.9 셸 `ended` 구분) — 서버 close = `remote`(오늘 동작: 기존 `ended` 셸 + 탭). 이 화면이 스스로
         // `realtime.stop()`한 뒤에도 이 분기가 오지만, 그때는 래치가 이미 `ending`이라 `endCall`이 무시한다(E1).
@@ -3497,6 +3500,7 @@ export default function SessionCallPage() {
             onActive={realtime.handleActive}
             onEnded={realtime.handleEnded}
             onError={realtime.handleError}
+            onCloneTtsFailed={realtime.handleCloneTtsFailed}
             onSpeakingChange={realtime.handleSpeakingChange}
             onUserSpeakingChange={realtime.handleUserSpeakingChange}
             onTranscriptTurn={handleTranscriptTurn}
@@ -4011,6 +4015,9 @@ export default function SessionCallPage() {
           <p className="text-lg font-semibold" role="status">
             통화가 종료되었습니다.
           </p>
+          {realtime.status === "clone-failed" && (
+            <p className="text-base text-[var(--call-fg-sub)]">{realtime.errorMessage}</p>
+          )}
           <button
             type="button"
             onClick={() => void handleEndedShellProceed()}

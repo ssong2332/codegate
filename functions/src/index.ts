@@ -6,6 +6,8 @@
 // synthesizeDeepvoice는 2026-07-22에 제거됐다 — UX-014 통합 이후 호출하는 화면이 없고 본문이
 // placeholder를 반환하는 상태였다(functions/src/voice/index.ts 상단 제거 이력 참고).
 export { createVoiceClone } from "./voice";
+// §143 — 복제 합성 서비스 미리 띄우기(녹음 화면 · 챌린지 입장).
+export { warmCloneEngine } from "./voice/warm";
 export { createSession, endSession, updateMessengerSkin, requestEscalation } from "./session";
 // 보이스→메신저 역방향 전이(T40 fast-follow, AC-039) — session 모듈에 함수 자체는 이미 있으므로
 // export만 추가한다(기존 줄은 건드리지 않음, 다른 태스크와의 diff 충돌 회피).

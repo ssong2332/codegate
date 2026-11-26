@@ -23,6 +23,8 @@ import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { readDocId } from "../shared/requestValidation";
 import { denyAnonymous } from "../shared/anonymousGate";
 import { getVoiceProvider } from "./provider";
+import { GSV_TOKEN_KEY } from "../shared/config";
+import { gsvKey } from "./gsvKey";
 import type { CreateVoiceCloneRequest, CreateVoiceCloneResponse } from "./types";
 
 ensureFirebaseAdminApp();
@@ -34,6 +36,8 @@ export function voiceInputStoragePath(uid: string, sessionId: string): string {
 }
 
 export const createVoiceClone = onCall<CreateVoiceCloneRequest, Promise<CreateVoiceCloneResponse>>(
+  // §143 — GSV `/prepare`(콜드 스타트 포함 최대 약 3분)를 기다린다. 키는 합성 토큰 봉인에 쓴다.
+  { secrets: [GSV_TOKEN_KEY], timeoutSeconds: 240 },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
@@ -65,7 +69,7 @@ export const createVoiceClone = onCall<CreateVoiceCloneRequest, Promise<CreateVo
     }
 
     // 처리② VoiceProvider 클론 생성(현재 Mock, T19).
-    const provider = getVoiceProvider();
+    const provider = getVoiceProvider(gsvKey());
     const result = await provider.createClone({ sessionId, uid, voiceInputStoragePath: storagePath });
     const cloneStatus = result.cloneStatus === "ready" ? "ready" : "failed";
 
@@ -75,7 +79,7 @@ export const createVoiceClone = onCall<CreateVoiceCloneRequest, Promise<CreateVo
       uid,
       voiceId: result.voiceId,
       cloneStatus,
-      voiceProvider: result.isMock ? ("mock" as const) : ("elevenlabs" as const),
+      voiceProvider: result.isMock ? ("mock" as const) : provider.providerName,
       // 이 콜러블에 도달했다는 것 자체가 녹음(UX-002, 본인 확인 체크박스 통과)까지 마쳤다는 뜻이다
       // (createSession의 동일 가정 패턴, functions/src/session/index.ts NOTE 참고).
       identitySelfConfirmed: true,

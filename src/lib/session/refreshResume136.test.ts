@@ -13,7 +13,10 @@ const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8").re
 
 test("[§136 원인] 글 대화 경로의 합성은 늘 무음 목업이다(이 전제가 바뀌면 이 수정의 근거를 다시 볼 것)", () => {
   const provider = read("../../../functions/src/voice/provider.ts");
-  assert.match(provider, /export function getVoiceProvider\(\): VoiceProvider \{\n\s+return new MockVoiceProvider\(\);\n\}/);
+  // §143 — 합성 서비스가 설정되면 GsvVoiceProvider가 되지만, 그 synthesize도 무음 목업이다(통화 음성은 실시간 경로만 GPT-SoVITS).
+  assert.match(provider, /export function getVoiceProvider\(key = ""\): VoiceProvider \{[\s\S]*?return new MockVoiceProvider\(\);\n\}/);
+  const gsv = read("../../../functions/src/voice/gsvProvider.ts");
+  assert.match(gsv, /synthesize\(input: SynthesizeInput\): Promise<VoiceSynthesisResult> \{\n\s+return new MockVoiceProvider\(\)\.synthesize\(input\);/);
   const mock = read("../../../functions/src/voice/mockProvider.ts");
   assert.ok(mock.includes("audioUrl: buildMockSilentWavDataUri(),"));
 });

@@ -61,7 +61,7 @@ test("[T133/AC-081 전제] `__endpoint.secretEnvironmentVariables`로 선언 집
   }
   assert.deepEqual(
     readDeclaredSecrets(callables.createRealtimeCall),
-    ["ELEVENLABS_API_KEY", "GEMINI_API_KEY", "GEMINI_API_KEY2"],
+    ["ELEVENLABS_API_KEY", "GEMINI_API_KEY", "GEMINI_API_KEY2", "GSV_TOKEN_KEY"], // §143 — 복제 합성 토큰 키
     "판독 수단 자체의 기준점(선언이 확실히 있는 콜러블)이 무너졌다.",
   );
   assert.equal(

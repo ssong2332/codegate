@@ -159,6 +159,8 @@ cp functions/.env.example functions/.env
 | `CLAUDE_API_KEY` | (선택) **사기범 대사 1차** LLM(Claude `claude-haiku-5-5`) — 아래 "사기범 대사 1차 Claude" 참조. 없으면 사기범 대사도 Gemini 체인. 로컬은 `functions/.secret.local` 권장 |
 | `ELEVENLABS_API_KEY` | ElevenLabs Instant Voice Cloning + TTS + Agents(실시간 통화) API 키 |
 | `ELEVENLABS_AGENT_IDS` | 실시간 음성 통화용 `scenarioId:agentId` 매핑(쉼표 구분) — 아래 설명 참조 |
+| `GSV_ENDPOINT_URL` | (선택) 복제 목소리 통화 합성 서비스 주소(Modal GPT-SoVITS · `https://…modal.run`, 끝 `/` 없이) — 아래 "복제 목소리 통화" 참조. 비우면 종전 동작 |
+| `GSV_TOKEN_KEY` | (선택) 합성 서비스 토큰 키(32바이트 base64). Modal Secret `gsv-token`과 같은 값. 운영은 `firebase functions:secrets:set GSV_TOKEN_KEY` — ⛔ 선언된 시크릿이라 **배포 전에 값이 있어야 한다** |
 | `LLM_API_KEY` | 사기범 역할극/리포트 생성용 LLM API 키 |
 | `LLM_PROVIDER` | `claude` 또는 `gemini` (DECISIONS #11 어댑터 선택) |
 | `FALLBACK_VOICE_ID` | 클론/합성 타임아웃 시 폴백용 사전 준비 voiceId(OQ-U3, DECISIONS #9) |
@@ -166,6 +168,18 @@ cp functions/.env.example functions/.env
 
 프로덕션 배포 시에는 `functions/.env` 파일 대신 `firebase functions:secrets:set <NAME>`로
 시크릿을 설정하는 것을 권장한다(파일을 배포 서버에 올리지 않음).
+
+#### 복제 목소리 통화 (GPT-SoVITS · Modal — `docs/Architecture.md` §143)
+
+지인에게 보내기(챌린지)의 복제 목소리 통화는 Gemini Live의 출력 자막을 Modal GPU(T4)의 GPT-SoVITS로 합성해 재생한다.
+1. 키 만들기: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`
+2. Modal Secret: `python -m modal secret create gsv-token GSV_TOKEN_KEY=<위 값>`
+3. 서비스 배포(사용자 PC의 Modal 토큰): `python -m modal deploy services/gsv/app.py` → 출력된 `…-web.modal.run` 주소를 `GSV_ENDPOINT_URL`에
+4. Functions: `firebase functions:secrets:set GSV_TOKEN_KEY` · `functions/.env`의 `GSV_ENDPOINT_URL`
+5. Functions 실행 서비스 계정에 **서비스 계정 토큰 생성자**(`iam.serviceAccounts.signBlob`) 권한 — 참조 클립 서명 URL을 만든다
+
+참조 클립은 Storage `voices/{voiceId}/`에만 두고 세션 종료 · 챌린지 폐기 때 지운다. Modal 쪽은 메모리 · 임시 파일만 쓴다(§143.7).
+합성 서비스 단위 시험: `python -m unittest discover -s services/gsv`
 
 #### 실시간 음성 통화 설정
 

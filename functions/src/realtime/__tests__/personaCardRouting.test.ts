@@ -98,7 +98,7 @@ test("[G567 배선] createRealtimeCall이 세션 술어 값을 프로바이더 �
   const src = readFileSync(path.resolve(__dirname, "../../../src/realtime/index.ts"), "utf8").replace(/\r\n/g, "\n");
   assert.match(
     src,
-    /getRealtimeProvider\(\n\s*session\.scenarioId,\n\s*effectiveVoiceMode,\n\s*requiresServerPromptProvider\(session\),\n\s*\)/,
+    /getRealtimeProvider\(\n\s*session\.scenarioId,\n\s*effectiveVoiceMode,\n\s*requiresServerPromptProvider\(session\),\n\s*cloneTts !== null,\n\s*\)/, // §143 RP3 — 넷째 인자 = 복제 합성 자격
   );
   assert.match(src, /personaCard: session\.personaCard\?\.items,/);
   assert.equal(/request\.data[^;]*personaCard/.test(src), false, "요청에서 카드를 읽는다");
@@ -178,7 +178,7 @@ function callSiteViolations(sources: readonly SourceFile[]): { calls: number; vi
       }
       const args = code.slice(m.index + m[0].length, i - 1);
       calls += 1;
-      if (!/,\s*requiresServerPromptProvider\(session\),?\s*$/.test(args)) violations.push(file + ": getRealtimeProvider(" + args.replace(/\s+/g, " ").trim() + ")");
+      if (!/,\s*requiresServerPromptProvider\(session\),?(\s*cloneTts !== null,?)?\s*$/.test(args)) violations.push(file + ": getRealtimeProvider(" + args.replace(/\s+/g, " ").trim() + ")");
     }
   }
   return { calls, violations };

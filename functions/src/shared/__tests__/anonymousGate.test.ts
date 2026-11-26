@@ -157,6 +157,8 @@ const ANONYMOUS_POLICY: Record<string, AnonymousPolicy> = {
   deleteVoiceProfile: "deny",
   getChallengeLanding: "no_auth",
   consentChallenge: "entry",
+  // §143 — 복제 합성 서비스 미리 띄우기. 챌린지 받는 사람(익명)도 부른다 · 참가자 데이터 0 · uid당 2분 1회 · 하루 20회(`voice/warm.ts` 판정표 WT).
+  warmCloneEngine: "entry",
   reportChallenge: "no_auth",
   setChallengeResultSharing: "entry",
   onSessionEnded: "not_callable",
@@ -213,7 +215,7 @@ const EXPORTED_NAMES: readonly string[] = Object.keys(callables);
 
 test("[T176 T-2] index.ts export 집합과 §68.3 정책표가 양방향으로 일치한다(G421)", () => {
   assertNoClassificationGaps(EXPORTED_NAMES, ANONYMOUS_POLICY);
-  assert.equal(EXPORTED_NAMES.length, 34, "§68.1 1 — 서버 진입점은 34개(콜러블 30 + 트리거 1 + 스케줄 3 — T192 C1 +1 · §128(7) +1 · §142 +1 · PR-B recordLoanReview +1 · 2026-11-17 endStaleSessions +1 · §144 목소리 프로필 +3)");
+  assert.equal(EXPORTED_NAMES.length, 35, "§68.1 1 — 서버 진입점은 35개(콜러블 31 + 트리거 1 + 스케줄 3 — T192 C1 +1 · §128(7) +1 · §142 +1 · PR-B recordLoanReview +1 · 2026-11-17 endStaleSessions +1 · §143 warmCloneEngine +1 · §144 목소리 프로필 +3)");
 });
 
 test("[T176 T-2] 정책표 클래스별 개수 = §68.3(D 6 · S 17 · R 1 · E 2 · N 2 · X 3 — 변경 대상 24 · T192 C1 S +1 · §128(7) S +1 · §142 S +1 · PR-B S +1 · 2026-11-17 X +1)", () => {
@@ -222,7 +224,7 @@ test("[T176 T-2] 정책표 클래스별 개수 = §68.3(D 6 · S 17 · R 1 · E 
   assert.equal(count("deny"), 8); // §144 saveVoiceProfile · deleteVoiceProfile
   assert.equal(count("session"), 17); // PR-B recordLoanReview
   assert.equal(count("report"), 1);
-  assert.equal(count("entry"), 2);
+  assert.equal(count("entry"), 3); // §143 warmCloneEngine +1
   assert.equal(count("no_auth"), 2);
   assert.equal(count("not_callable"), 4); // 2026-11-17 endStaleSessions +1 · §144 purgeExpiredVoiceProfiles +1
   assert.equal(count("deny") + count("session") + count("report"), 26);

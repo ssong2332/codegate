@@ -1,5 +1,6 @@
 export * from "./types";
 export { createVoiceClone } from "./createVoiceClone";
+export { warmCloneEngine } from "./warmCloneEngine";
 export { createSession } from "./createSession";
 export { sendMessage } from "./sendMessage";
 export { createRealtimeCall } from "./createRealtimeCall";

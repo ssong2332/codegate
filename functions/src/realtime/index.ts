@@ -11,15 +11,17 @@ import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { readDocId } from "../shared/requestValidation";
 import { realtimeIssueLegKey, realtimeSessionTimeExceeded, reserveRealtimeIssue } from "./issueBudget";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
-import { ELEVENLABS_API_KEY, GEMINI_KEY_SECRETS } from "../shared/config";
+import { ELEVENLABS_API_KEY, GEMINI_KEY_SECRETS, GSV_TOKEN_KEY } from "../shared/config";
+import { buildCloneTtsCredentials } from "../voice/gsvProvider";
+import { GSV_BANNED_TERMS, gsvDeps, gsvEndpoint } from "../voice/gsvRuntime";
+import { gsvKey } from "../voice/gsvKey";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { getVerifyOfferTrigger } from "../scenarios/verifyIntercept";
 import { findFlowVariant, routeEndsWithoutAccount, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
 import { callScreensDoneRule, linkScreensAllDone } from "../roleplay/callScreensDone";
 import { buildLegLoanReviewContext, buildLegRejoinContext, legSentSmsDescriptions, resolveSessionCallLeg } from "../callLegs/legPlan";
-import type { VoiceMode } from "../scenarios/publicMeta";
-import type { ChallengeDoc, MessageDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
+import type { ChallengeDoc, MessageDoc, SessionDoc } from "../shared/types";
 import { getRealtimeProvider, requiresServerPromptProvider } from "./provider";
 import type { CreateRealtimeCallRequest, CreateRealtimeCallResponse } from "./callTypes";
 import type { RealtimeProviderName } from "./types";
@@ -32,19 +34,13 @@ import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { currentCallCaller } from "../roleplay/callCaller";
 import { isEscalatedVoiceCall } from "../roleplay/escalatedCall";
 import { sessionFamilyAddress } from "../scenarios/familyAddress";
+import { resolveEffectiveVoiceMode } from "./voiceMode";
 
-/**
- * 에스컬레이션된 세션(§13.6 통합 버그 수정)의 "유효 voiceMode" 유추 — session.voiceSelectionSource가
- * 있으면(메신저→보이스 전이 세션) 그 값으로부터 유추하고, 없으면(기존 순수 보이스 세션) undefined를
- * 반환해 getRealtimeProvider가 PUBLIC_SCENARIOS[scenarioId]?.voiceMode를 그대로 쓰게 한다.
- */
-export function resolveEffectiveVoiceMode(
-  voiceSelectionSource: VoiceSelectionSource | undefined,
-): VoiceMode | undefined {
-  if (!voiceSelectionSource) return undefined;
-  if (voiceSelectionSource === "recorded" || voiceSelectionSource === "reused") return "clone";
-  return "generic"; // fallback_male | fallback_female
-}
+/** §143 D5 — 복제 목소리 연결 실패 안내(클라가 이 문구로 재시도를 안내한다). */
+export const CLONE_CALL_FAILED_MESSAGE = "복제 목소리 연결에 실패했습니다. 통화를 끝내고 잠시 뒤 다시 시도해 주세요.";
+
+// §143 — 잎 모듈로 옮겼다(verifyIntercept가 이 파일을 가져오면 합성 키 시크릿까지 끌려간다 — secretDeclarationGate). 종전 import 경로 유지용 재내보내기.
+export { resolveEffectiveVoiceMode };
 
 /**
  * ⭐⭐ **턴 지시 주입 자격 허용목록(§43.7 ⓑ, 2026-07-29).**
@@ -98,7 +94,7 @@ ensureFirebaseAdminApp();
 export const createRealtimeCall = onCall<
   CreateRealtimeCallRequest,
   Promise<CreateRealtimeCallResponse>
->({ secrets: [ELEVENLABS_API_KEY, ...GEMINI_KEY_SECRETS] }, async (request) => {
+>({ secrets: [ELEVENLABS_API_KEY, ...GEMINI_KEY_SECRETS, GSV_TOKEN_KEY] }, async (request) => {
   // 2026-10-21 — 처리 시간 분해 1줄(숫자 · 종류만 — `setupTiming.ts`). 받기 때 미리 받기가 끝나지 않았으면 이 시간이 첫소리 지연에 더해진다.
   const timing = startSetupTiming(() => Date.now(), takeColdStartFlag());
   if (!request.auth) {
@@ -248,11 +244,23 @@ export const createRealtimeCall = onCall<
   }
   timing.mark("firestore");
   const effectiveVoiceMode = resolveEffectiveVoiceMode(session.voiceSelectionSource);
+  // §143 RP3 · D5 — 복제 목소리 세션이고 합성 서비스가 설정돼 있으면 합성 토큰을 만든다. 못 만들면(참조 없음 · 키 없음 · Storage 실패)
+  // 기본 음성으로 넘어가지 않고 발급을 거절한다(사용자 결정 D5 "통화 종료 후 재시도 안내"). 서비스 미설정 = 종전(Mock 텍스트).
+  const cloneVoice = (effectiveVoiceMode ?? PUBLIC_SCENARIOS[session.scenarioId]?.voiceMode) === "clone";
+  let cloneTts: { url: string; token: string } | null = null;
+  if (cloneVoice && gsvEndpoint()) {
+    cloneTts = await buildCloneTtsCredentials(effectiveVoiceId, gsvDeps(gsvKey()), GSV_BANNED_TERMS).catch(() => null);
+    if (!cloneTts) {
+      logger.warn("[§143] 복제 목소리 통화 자격 없음 — 발급 거절", { hasVoiceId: Boolean(effectiveVoiceId) });
+      throw new HttpsError("failed-precondition", CLONE_CALL_FAILED_MESSAGE);
+    }
+  }
   // T194-b(§84.3.5 · G567) — 카드 세션은 서버 프롬프트를 실을 수 있는 경로(Gemini · 폴백)로만 보낸다.
   const provider = getRealtimeProvider(
     session.scenarioId,
     effectiveVoiceMode,
     requiresServerPromptProvider(session),
+    cloneTts !== null,
   );
   // T68(§15.1.2) → ⭐ T191(문자 도달 조건) — 예전에는 카탈로그 트리거(`smsId` + `afterScammerTurns`)를 내려줘 클라가
   // 고정 턴에 발송을 요청했다. 이제 발송 판정은 전부 서버(`inCallSms/smsGate.ts`)이고, 클라에 내려가는 것은
@@ -318,7 +326,7 @@ export const createRealtimeCall = onCall<
       ...(!callLeg && isEscalatedVoiceCall(session.channel, session.channelHistory) ? { escalatedCall: true } : {}),
       // §142 — 다통화 레그(부재 = 종전).
       ...(callLeg ? { callLeg: { legIndex: callLeg.legIndex, voiceSlot: callLeg.voiceSlot } } : {}),
-    });
+    }).then((c) => (cloneTts && c.provider === "gemini" ? { ...c, cloneTts } : c));
     timing.mark("credentials");
     logger.info(REALTIME_SETUP_LOG_MESSAGE, timing.finish({ provider: credentials.provider, isMock: credentials.isMock }));
     // T38 QA NO-GO 수정, architect 판정(ADR-0006 Addendum A2, 2026-07-24) — §14.2 "추출 차단"은

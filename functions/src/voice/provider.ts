@@ -1,4 +1,6 @@
 import { MockVoiceProvider } from "./mockProvider";
+import { GsvVoiceProvider } from "./gsvProvider";
+import { gsvDeps, gsvEndpoint } from "./gsvRuntime";
 
 // VoiceProvider 인터페이스 — ElevenLabs 클론/TTS 교체점 (T19, Architecture.md §1 "LLM 어댑터"와
 // 동일 패턴을 음성에 적용: 인터페이스 뒤에 구현체를 교체). Track A(T4/T5)가 이 계약에 맞춰
@@ -44,7 +46,7 @@ export type VoiceSynthesisResult = {
 };
 
 export interface VoiceProvider {
-  readonly providerName: "mock" | "elevenlabs";
+  readonly providerName: "mock" | "elevenlabs" | "gsv";
   /** 30초 녹음으로 클론 voice 생성 (API.md createVoiceClone, AC-018). */
   createClone(input: CreateVoiceCloneInput): Promise<VoiceCloneResult>;
   /** 클론 voice로 문장 합성 (API.md synthesizeDeepvoice, AC-019/AC-022). */
@@ -67,6 +69,10 @@ export interface VoiceProvider {
  * ElevenLabsVoiceProvider는 이번 태스크(T19) 범위 밖 — 실제 ElevenLabs API를 호출하는 코드는
  * 아직 만들지 않는다(T1/T4에서 구현).
  */
-export function getVoiceProvider(): VoiceProvider {
+// key — 클론을 새로 만드는 콜러블(createVoiceClone · createChallenge)만 `gsvKey()`를 넘긴다(시크릿 선언 필요). 그 밖은 합성 · 삭제만 쓴다.
+export function getVoiceProvider(key = ""): VoiceProvider {
+  // §143 — 합성 서비스 주소가 설정돼 있으면 GPT-SoVITS(Modal). 키 없이도 deleteVoice(Storage 삭제)는 된다 — 폐기 경로는 secrets 선언 불필요.
+  const endpoint = gsvEndpoint();
+  if (endpoint) return new GsvVoiceProvider(gsvDeps(key));
   return new MockVoiceProvider();
 }

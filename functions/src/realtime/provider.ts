@@ -117,6 +117,8 @@ export function getRealtimeProvider(
   // T194-b(G567) — `requiresServerPromptProvider(session)`의 값. 참이면 ① ElevenLabs 분기를 건너뛴다(키 · 에이전트 맵이 있어도).
   // 부재 = false = 오늘 동작 그대로.
   requiresServerPrompt: boolean = false,
+  // §143 RP3 — 복제 목소리 합성 자격(`cloneTts`)을 이미 만들었는가. 참이면 clone 세션도 Gemini(Live 자막 → GSV)로 보낸다.
+  cloneTtsReady: boolean = false,
 ): RealtimeVoiceProvider {
   const voiceMode = effectiveVoiceMode ?? PUBLIC_SCENARIOS[scenarioId]?.voiceMode;
 
@@ -131,7 +133,7 @@ export function getRealtimeProvider(
 
   // ② Gemini Live — 무료 경로. 고정 음성만 되므로 generic 시나리오에만 붙인다.
   const geminiKey = readSecret(GEMINI_API_KEY);
-  if (geminiKey && voiceMode === "generic") {
+  if (geminiKey && (voiceMode === "generic" || (voiceMode === "clone" && cloneTtsReady))) {
     return new GeminiRealtimeProvider(geminiKey);
   }
 
