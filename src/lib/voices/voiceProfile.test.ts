@@ -77,9 +77,9 @@ test("[배선 · 만들기] 목소리 필요 안내 → 녹음 우회(error-clon
 
 test("[배선 · clone/wait] 보내기 = 프로필 저장이 끝난 뒤 그 id로 만들기에 돌아간다 · 세션 생성 0", () => {
   const page = read("src/app/clone/wait/page.tsx");
-  const challengeAt = page.indexOf('route.kind === "challenge"');
+  const challengeAt = page.indexOf('action.kind === "save"'); // U02 — 판정표 CR(CR4 save)
   const saveAt = page.indexOf("saveProfileThenReturn({");
-  const backAt = page.indexOf("challengeHref: route.href"); // §145.1 — 이동은 saveProfileThenReturn이 저장 뒤에
+  const backAt = page.indexOf("challengeHref: action.href"); // §145.1 — 이동은 saveProfileThenReturn이 저장 뒤에
   const createAt = page.indexOf("await createSession(");
   assert.ok(challengeAt > 0 && saveAt > challengeAt && backAt > saveAt, "challenge → 저장 → 복귀");
   assert.ok(createAt > backAt, "본인 세션 생성은 challenge 분기 뒤");
