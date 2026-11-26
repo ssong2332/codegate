@@ -2,7 +2,7 @@
 # 배포: python -m modal deploy services/gsv/app.py   (Modal Secret `gsv-token`에 GSV_TOKEN_KEY — Functions와 같은 값)
 # 엔드포인트(모두 우리 토큰으로 인증 — Modal 프록시 인증 없음):
 #   POST /prepare   {token}  → 녹음에서 참조 1 + 보조 3 골라 wav(base64) + 글 반환. 디스크는 요청 안에서 지움(§143.7 P4)
-#   POST /warm      {token}  → 즉시 200(컨테이너가 떠 있다는 뜻 — 호출 자체가 콜드 스타트를 일으킨다)
+#   POST /warm      {token}  → {ok, phase} 즉시(§143.22 판정표 BS — 모델은 백그라운드로 읽는다 · 호출 자체가 콜드 스타트를 일으킨다)
 #   WS   /ws  첫 메시지 {"type":"auth","token"} → {"type":"say","id","text"} · {"type":"cancel"} 받고, 바이너리 = id(uint32 LE) + PCM16 LE 32kHz mono
 # ⛔ 로그에 음성 · 본문 글 0(종류 · 길이 · 시간만). ⛔ Volume · Dict 사용 0(test_gsv.py NoPersistTest).
 import asyncio, base64, io, json, os, shutil, struct, subprocess, sys, tempfile, threading, time, urllib.request
@@ -23,7 +23,7 @@ image = (
                   "python -c \"from mecab import MeCab; print(MeCab().morphs('안녕하세요'))\"",
                   f"cd {GSV} && python -c \"from huggingface_hub import snapshot_download; snapshot_download('lj1995/GPT-SoVITS', local_dir='GPT_SoVITS/pretrained_models', allow_patterns=['chinese-hubert-base/*','chinese-roberta-wwm-ext-large/*','v2Pro/s2Gv2Pro.pth','s1v3.ckpt','sv/*'])\"",
                   "python -c \"from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')\"")
-    .add_local_python_source("gsvtoken", "refpick", "textguard")
+    .add_local_python_source("gsvtoken", "refpick", "textguard", "bootstate")
 )
 app = modal.App("codegate-gsv", image=image)
 
@@ -55,6 +55,21 @@ def _fetch(url: str, path: str):
 @modal.concurrent(max_inputs=1)  # 1통화 = 1컨테이너(T4 RTF 0.556 — 두 통화면 실시간 미달 추정 · §143.13)
 class Gsv:
     @modal.enter()
+    def start(self):
+        """§143.22 — 모델 읽기를 백그라운드로 돌려 컨테이너가 바로 요청을 받게 한다(/warm이 단계를 알려 준다 · 판정표 BS)."""
+        from bootstate import BootState
+        self.boot = BootState()
+        self.key = os.environ["GSV_TOKEN_KEY"]
+        threading.Thread(target=self._load_safe, daemon=True).start()
+
+    def _load_safe(self):
+        try:
+            self.load()
+            self.boot.ready()
+        except Exception as e:  # BS4 — 기다리는 요청은 즉시 실패(503)
+            _log("load_fail", why=type(e).__name__)
+            self.boot.failed()
+
     def load(self):
         t0 = time.time()
         os.chdir(GSV)
@@ -68,8 +83,8 @@ class Gsv:
         cfg.vits_weights_path = "GPT_SoVITS/pretrained_models/v2Pro/s2Gv2Pro.pth"
         self.tts = TTS(cfg)
         self.whisper = WhisperModel("small", device="cuda", compute_type="float16")
-        self.key = os.environ["GSV_TOKEN_KEY"]
         self.lock = threading.Lock()  # TTS 객체는 한 번에 하나
+        self.boot.warming()
         t1 = time.time()
         self._boot_warmup()
         _log("loaded", sec=round(time.time() - t0, 1), warmupSec=round(time.time() - t1, 1))
@@ -111,11 +126,16 @@ class Gsv:
         @api.post("/warm")
         def warm(body: dict):
             auth(body.get("token"), "warm")
-            return {"ok": True}
+            return {"ok": True, "phase": self.boot.phase}  # §143.22 BS1 ~ BS4
+
+        def wait_boot():  # /prepare · /ws — 모델이 다 올라온 뒤에만 합성한다(BS3 · BS4)
+            if not self.boot.wait(300):
+                raise HTTPException(503)
 
         @api.post("/prepare")
         def prepare(body: dict):
             t = auth(body.get("token"), "prepare")
+            wait_boot()
             tmp = tempfile.mkdtemp()
             try:
                 src, wav = os.path.join(tmp, "in"), os.path.join(tmp, "in.wav")
@@ -147,6 +167,9 @@ class Gsv:
             except (TokenError, ValueError, asyncio.TimeoutError) as e:
                 _log("auth_fail", kind="synth", why=str(e))
                 await sock.close(code=4401)
+                return
+            if not await asyncio.to_thread(self.boot.wait, 300):
+                await sock.close(code=1013)  # BS4 · 시간 초과 — 클라는 복제 실패(D5)로 처리한다
                 return
             tmp = tempfile.mkdtemp()
             cancel = threading.Event()

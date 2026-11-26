@@ -25,7 +25,9 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { getChallengeLanding, consentChallenge, reportChallenge, warmCloneEngine } from "@/lib/api";
+import { getChallengeLanding, consentChallenge, reportChallenge, warmCloneEngineByLink } from "@/lib/api";
+import { createCloneWarmup, needsFreshWarmCheck, type CloneWarmup } from "@/lib/realtime/cloneWarmup";
+import CloneWarmWait from "@/components/CloneWarmWait";
 import type { ChallengeReportReason } from "@/lib/api";
 import {
   setPendingSessionId,
@@ -78,6 +80,17 @@ export default function ChallengeJoinPage() {
   );
   // T181 C5(UX-021 v1.27 노트 (8)) — 완료 안내로 바뀌면 제목에 포커스한다(UX-007 종료 고지와 같은 관례).
   const completedHeadingRef = useRef<HTMLHeadingElement>(null);
+  // §143.22 — 링크가 열린 순간부터 복제 목소리 서버를 켠다(동의 전 = 서버 GPU만 · 녹음 · 개인정보 · 통화 0). 복제 목소리 챌린지가 아니면 서버가 off.
+  const [warmup] = useState<CloneWarmup | null>(() =>
+    token
+      ? createCloneWarmup({
+          call: () => warmCloneEngineByLink(token),
+          now: () => Date.now(),
+          sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+        })
+      : null,
+  );
+  const [voiceWait, setVoiceWait] = useState(false);
 
   const loadLanding = async (t: string) => {
     const result = await getChallengeLanding({ token: t });
@@ -133,6 +146,12 @@ export default function ChallengeJoinPage() {
     };
   }, [token]);
 
+  useEffect(() => {
+    if (!warmup) return;
+    warmup.start();
+    return () => warmup.stop();
+  }, [warmup]);
+
   // T181 C5 — Error (c) 진입 시 1회 제목으로 포커스(경고 알림 대신 제목 → 본문 순으로 읽힌다).
   useEffect(() => {
     if (state === "completed") completedHeadingRef.current?.focus();
@@ -148,6 +167,11 @@ export default function ChallengeJoinPage() {
     if (!token || consenting) return;
     setConsentError(null);
     setConsenting(true);
+    // §143.22 — 동의와 나란히 서버 상태를 다시 확인한다(멈췄거나 오래된 '준비 완료'만 · 진행 중이면 그대로).
+    if (channel === "voice" && warmup) {
+      if (needsFreshWarmCheck(warmup.get(), Date.now())) warmup.retry();
+      else warmup.start();
+    }
     try {
       // §14.7/ADR-0006 A1 — 로그인 UI 없이 익명 uid만 확보한다. 이미 같은 브라우저에 익명 세션이
       // 있으면(로컬 persistence) 같은 uid가 그대로 재사용된다(중도 이탈 복귀와 자연히 정합).
@@ -159,14 +183,17 @@ export default function ChallengeJoinPage() {
       }
       const result = await consentChallenge({ token });
       setPendingSessionId(result.sessionId);
-      // §143.5 W3 — 복제 목소리 챌린지면 통화 전에 합성 서비스를 띄운다(서버가 세션 voiceId로 판정 · generic은 0).
-      if (channel === "voice") warmCloneEngine(result.sessionId);
       setChallengeToken(token);
       if (result.openingAudioUrl) setOpeningAudioUrl(result.openingAudioUrl);
       // 사용자 신고(2026-07-24) — 실시간 통화 "AI가 먼저 말해야" 수정, ScenarioListView.tsx와
       // 동일 근거.
       if (result.openingMessageText) setOpeningMessageText(result.openingMessageText);
       // T49(#20, D-28) — 메신저 챌린지는 UX-022(채팅 셸)로, 보이스 챌린지는 기존대로 UX-014로.
+      // §143.22 판정표 WW — 복제 목소리 서버가 아직이면 벨로 가지 않고 대기 화면(준비되면 스스로 넘어간다).
+      if (channel === "voice" && warmup && warmup.get().decision !== "advance") {
+        setVoiceWait(true);
+        return;
+      }
       router.push(channel === "messenger" ? "/session/messenger" : "/session/play");
     } catch {
       // T181 C6(§69.15.2 (4) W-2 · OQ-U52) — 동의 화면을 띄워 둔 사이 체험이 끝났으면 재시도는 성공할 수
@@ -195,6 +222,17 @@ export default function ChallengeJoinPage() {
       setReportState("error");
     }
   };
+
+  if (voiceWait && warmup) {
+    return (
+      <CloneWarmWait
+        warmup={warmup}
+        displayName={displayName}
+        onReady={() => router.push("/session/play")}
+        onExit={() => router.push("/")}
+      />
+    );
+  }
 
   if (state === "no-token") {
     return (
@@ -311,8 +349,8 @@ export default function ChallengeJoinPage() {
       {/* 상시 노출 훈련 초대 배너 — 닫기 불가(Banner 컴포넌트 계약, README "Interactions &
           Behavior"). 동의 전 무동의 재생 없음(AC-040)을 화면 진입 즉시 재확인시킨다. */}
       <Banner variant="caution">
-        <span className="font-semibold text-caution">훈련 초대입니다.</span> 동의 전에는 아무것도
-        시작되지 않아요.
+        <span className="font-semibold text-caution">훈련 초대입니다.</span> 동의 전에는 전화가 오지
+        않고, 어떤 목소리도 재생되지 않아요.
       </Banner>
 
       <header className="flex flex-col gap-3">
