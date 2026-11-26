@@ -44,12 +44,28 @@ const LEAK = {
   events: [{ ev: "sms", smsId: "a", senderNumber: "02-0731-5402", body: "안내 문자", turnIdx: 1 }],
 };
 
+// E — 앱 안 설치 화면(`*install*` 랜딩)이 열린 세션: "보안 점검 앱을 설치" 안내는 서비스 안 안내(기준선 loan fv-d8pw · fv-m3hd 오탐).
+const INSTALL_OK = {
+  ch: "voice", id: "loan-refinance-scam", level: "advanced", persona: "comply", variantId: "fv-inst", callNumber: "070-0000-0001",
+  turns: [S(1, "심사 전에 문자로 보내 드린 링크에서 보안 점검 앱을 설치하셔야 합니다."), U(1, "네.")],
+  events: [{ ev: "sms", smsId: "a", senderNumber: "070-0000-0001", body: "안내", landingId: "loan-check-app-install", turnIdx: 1 }],
+};
+// F — 부정 어형: "창구 방문 없이 … 가실 필요는 없으세요"(기준선 loan fv-6s5p 오탐).
+const NEGATED_OK = {
+  ch: "voice", id: "loan-refinance-scam", level: "advanced", persona: "comply", variantId: "fv-neg", callNumber: "070-0000-0001",
+  turns: [S(1, "고객님, 저희는 은행 창구 방문 없이 온라인으로만 진행됩니다."), U(1, "네."), S(2, "창구에 가실 필요는 없으세요.")],
+  events: [],
+};
+
 // 기대 점수(규칙 하나가 틀리면 어긋난다).
 const EXPECT = [
   ["합격", GOOD, { Q1: 2, Q2: 2, Q3: 2, Q4: 2, Q6: 2, Q8: 2, Q10: 2 }, { pass: true }],
   ["막다른 길", DEAD, { Q1: 2, Q2: 2, Q3: 0, Q4: 0, Q8: 2 }, { pass: false, frustration: true }],
   ["금액·번호 불일치", MISMATCH, { Q1: 0, Q2: 0, Q3: 2 }, { pass: false }],
   ["메타·밖 유도·설명 있는 번호", LEAK, { Q1: 2, Q8: 0, Q10: 0, Q6: 0 }, { pass: false }],
+  ["앱 안 설치 화면 세션의 앱 설치 언급(오탐 아님 = 2점)", INSTALL_OK, { Q10: 2 }, {}],
+  ["부정 어형(방문 없이 · 가실 필요는 없으세요)", NEGATED_OK, { Q10: 2 }, {}],
+  ["진짜 밖 유도(창구에 가서 현금)는 계속 잡는다", LEAK, { Q10: 0 }, {}],
 ];
 
 function check(rules, lib) {
@@ -108,6 +124,61 @@ describe("realism-score 채점기", { skip: !hasLib && "functions/lib 없음 —
       const md = renderMarkdown(result, dir);
       assert.match(md, /수동/);
       assert.match(md, /답답함 표시 1판/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("Q10 예외 역검증 — 설치 화면 · 부정 어형 예외를 걷으면 같은 문장이 다시 0점이 된다", () => {
+    const noLanding = { ...INSTALL_OK, events: INSTALL_OK.events.map((e) => ({ ...e, landingId: undefined })) };
+    assert.equal(RULES.Q10(noLanding, lib).score, 0, "설치 화면 예외가 일을 하지 않는다");
+    const positive = { ...NEGATED_OK, turns: [S(1, "고객님, 저희는 은행 창구 방문하고 진행됩니다."), U(1, "네."), S(2, "창구에 가세요.")] };
+    assert.equal(RULES.Q10(positive, lib).score, 0, "부정 어형 예외가 일을 하지 않는다");
+    assert.equal(RULES.Q10(NEGATED_OK, lib).score, 2);
+  });
+
+  it("Q2 경계 — 사기범이 참가자가 말한 큰 금액을 요구액으로 받으면 문자 금액과 달라 0점(판정 고정)", () => {
+    const adopt = {
+      ch: "voice", id: "kidnapping-threat", level: "intermediate", persona: "comply", variantId: "fv-adopt", callNumber: "발신번호 표시제한",
+      turns: [S(1, "합의금 오십만 원을 이체하세요."), U(1, "한 삼천만 원 정도 있어요."), S(2, "삼천만 원 있는 거 바로 전부 다 이체하세요.")],
+      events: [{ ev: "sms", smsId: "a", senderNumber: "070-0457-2618", body: "금액: 500,000원", turnIdx: 1 }],
+    };
+    assert.equal(RULES.Q2(adopt, lib).score, 0);
+  });
+
+  it("다통화 계획 dials — 모든 다통화 변형이 마지막 레그까지 연결된다(레그 0에서 끊기지 않는다)", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "realism-dials-"));
+    try {
+      const gen = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "realism-baseline-plan.mjs");
+      assert.equal(spawnSync(process.execPath, [gen, "--out", dir, "--max-a", "99"], { encoding: "utf8" }).status, 0);
+      const { createRequire } = await import("node:module");
+      const L = (p) => createRequire(path.join(fnRoot, "package.json"))(path.join(fnRoot, "lib", p));
+      const { planLegStart } = L("callLegs/legPlan.js");
+      const { findFlowVariant } = L("scenarios/flowVariants.js");
+      const { findDialEntry } = L("scenarios/dialDirectory.js");
+      const multi = ["A", "A-overflow", "B", "C"].flatMap((n) => JSON.parse(readFileSync(path.join(dir, `plan-${n}.json`), "utf8"))).filter((e) => e.ch === "multicall");
+      assert.ok(multi.length >= 3, "다통화 항목이 없다(fv-k3dn · fv-r8vb · fv-c5fj)");
+      for (const job of multi) {
+        const variant = findFlowVariant(job.variant);
+        let relay;
+        let key = (variant.legs[0].entry ?? "incoming") === "incoming" ? null : "start";
+        for (let step = 0; step < variant.legs.length; step += 1) {
+          if (key !== null) {
+            const exit = key === "start" ? undefined : variant.legs[key].exit;
+            const a = job.dials?.[key] ?? (exit === "transfer" ? { action: "transfer" } : null);
+            assert.ok(a, `${job.variant} 레그 ${key} 뒤 행동이 계획에 없다`);
+            const dialed = a.numberId ? findDialEntry(variant.scenarioId, a.numberId)?.number : undefined;
+            const plan = planLegStart({ variant, relay, action: a.action, dialed, installConsented: true, userTurns: 99, submittedLandings: [variant.legs[key === "start" ? 0 : key]?.opensNextAfterLanding].filter(Boolean) });
+            assert.equal(plan.status, "connected", `${job.variant} 레그 ${key}: ${plan.status} ${plan.reason ?? ""}`);
+            relay = plan.relay;
+          }
+          const idx = key === null ? 0 : relay.legIndex;
+          if (idx >= variant.legs.length - 1) break;
+          relay = { ...(relay ?? {}), legIndex: idx, legStartUserTurns: relay?.legStartUserTurns ?? [0], connected: false, legEnded: idx };
+          key = idx;
+        }
+        assert.equal(relay?.legIndex ?? 0, variant.legs.length - 1, `${job.variant}가 마지막 레그에 닿지 않았다`);
+      }
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

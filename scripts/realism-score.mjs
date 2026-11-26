@@ -63,6 +63,8 @@ const amountOfSms = (e) => {
 };
 const turnIndexOf = (e, r) => (typeof e.turnIdx === "number" ? e.turnIdx : (r.turns ?? []).length); // 부재 = 끝(앞 문장만 못 가른다)
 
+/** Q10 — 하지 말라는 쪽 말("창구 방문 없이" · "가실 필요는 없으세요" · "안 가셔도"). 같은 문장에 이 어형이 있으면 유도로 세지 않는다(표기만 봄 — 한 문장에 유도와 부정이 같이 있으면 놓친다). */
+export const NEGATED_FORM = /없이|필요\s?(?:는|도)?\s?없|안\s?(?:가|하|해)(?:도|셔도)|(?:가|하|해)시지\s?않/;
 const NUMBER_EXPLAIN = /(?:다른|별도|따로|새|바꾼|지정)\s*(?:전화\s*)?번호|번호(?:가|로)\s*(?:다르|바뀌)|번호로\s*(?:문자|메시지|보내\s*드|보냈|발송)/;
 
 // ── 규칙(Q별 · 시험이 이 객체를 일부러 깨 본다) ──────────────────────────────────────────────────
@@ -85,7 +87,10 @@ export const RULES = {
     return { score: 2, note: "일치 또는 설명 있음" };
   },
 
-  /** Q2 ★ 금액 일치 — 사기범이 말한 요구액(`demandAmountFrom`)이 문자 · 화면 금액과 모두 같다. */
+  /**
+   * Q2 ★ 금액 일치 — 사기범이 말한 요구액(`demandAmountFrom`)이 문자 · 화면 금액과 모두 같다.
+   * 판정 이유(경계): 참가자가 말한 큰 금액("삼천만 원 있어요")을 사기범이 요구액으로 받아 "전부 이체"라 해도 문자 금액과 다르면 불일치(0점)다 — 요구액은 한 번 정해지면 바뀌지 않아야 한다(판정표 T6 · M2).
+   */
   Q2(r, lib) {
     const smsAmounts = new Set((r.events ?? []).filter((e) => e.ev === "sms").map(amountOfSms).filter(Boolean));
     const screenDemands = new Set((r.events ?? []).filter((e) => e.ev === "landingSubmitted" && e.demand).map((e) => String(Number(digits(e.demand)))));
@@ -166,12 +171,13 @@ export const RULES = {
   /** Q10 ★ 서비스 밖 유도 없음 — 장부 J-표를 사기범 문장에 적용(앱 안 대출 · 금 · 출금 예약 화면이 열린 세션은 그 행 제외). */
   Q10(r, lib) {
     const landings = (r.events ?? []).map((e) => String(e.landingId ?? "")).join(" ");
-    const skip = new Set([/loan/.test(landings) && "J1_LOAN", /gold/.test(landings) && "J3_GOLD", /cash/.test(landings) && "J2_CASH"].filter(Boolean));
+    // 앱 안 설치 화면(`*install*` 랜딩)이 열린 세션의 '앱 설치' 언급은 서비스 안 안내다(J6 제외).
+    const skip = new Set([/loan/.test(landings) && "J1_LOAN", /gold/.test(landings) && "J3_GOLD", /cash/.test(landings) && "J2_CASH", /install/.test(landings) && "J6_INSTALL"].filter(Boolean));
     const o = lib.outOfService;
     const hits = [];
     for (const t of scammerTurns(r)) {
       for (const s of sentences(t.text)) {
-        if (o.rule.test(s) || o.label.test(s)) continue;
+        if (o.rule.test(s) || o.label.test(s) || NEGATED_FORM.test(s)) continue; // 부정 어형("방문 없이" · "가실 필요는 없으세요")은 유도가 아니다
         const row = o.counted.find((x) => !skip.has(x.id) && x.pattern.test(s));
         if (row) hits.push({ row: row.id, s });
       }
