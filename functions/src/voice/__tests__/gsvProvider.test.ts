@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sealGsvToken } from "../gsvToken";
 import { buildCloneTtsCredentials, GsvVoiceProvider, isGsvVoiceId, type GsvDeps } from "../gsvProvider";
-import { nextWarmRecord, WARM_DAILY_LIMIT } from "../warm";
+import { phaseFromModal, planWarm, WARM_DAILY_LIMIT, type WarmRecord } from "../warm";
 import { getRealtimeProvider } from "../../realtime/provider";
 
 const KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="; // 시험 전용(0..31) — services/gsv/test_gsv.py와 같은 값
@@ -100,13 +100,36 @@ test("[§143 RP3 · D4] 합성 토큰 — 참조 없음 · gsv 아님 = null, �
   assert.deepEqual(body.refs.map((r) => r.text), ["글0", "글1", "글2", "글3"]);
 });
 
-test("[§143 판정표 WT] 2분 안 재요청 · 하루 20회 = 데우지 않음 · 날짜가 바뀌면 다시 센다", () => {
-  const day1 = Date.UTC(2026, 10, 26, 1);
-  const r1 = nextWarmRecord(undefined, day1);
-  assert.deepEqual(r1, { lastAtMs: day1, day: "2026-11-26", count: 1 });
-  assert.equal(nextWarmRecord(r1!, day1 + 119_000), null);
-  assert.equal(nextWarmRecord({ lastAtMs: day1, day: "2026-11-26", count: WARM_DAILY_LIMIT }, day1 + 200_000), null);
-  assert.equal(nextWarmRecord({ lastAtMs: day1, day: "2026-11-26", count: WARM_DAILY_LIMIT }, day1 + 86_400_000)?.count, 1);
+test("[§143.22 판정표 WT] 새 데우기는 하루 20회 · 5분 창 안 다시 부르기는 횟수 안 셈 · 1.5초 안 · 응답 대기 중이면 Modal 0", () => {
+  const t = Date.UTC(2026, 10, 26, 1);
+  const r1 = planWarm(undefined, t); // WT4
+  assert.equal(r1.act, "call");
+  const rec1 = (r1 as { record: WarmRecord }).record;
+  assert.deepEqual({ ...rec1, inflightUntilMs: 0 }, { startAtMs: t, lastAtMs: t, day: "2026-11-26", count: 1, phase: "booting", inflightUntilMs: 0 });
+  // WT5 — 첫 응답을 기다리는 중(새로고침 · 두 탭) = 기록된 단계만, Modal 요청은 늘 1개
+  assert.deepEqual(planWarm(rec1, t + 5_000), { act: "cached", phase: "booting" });
+  const answered: WarmRecord = { ...rec1, phase: "loading", inflightUntilMs: 0 };
+  // WT2 — 1.5초 안
+  assert.deepEqual(planWarm({ ...answered, lastAtMs: t + 9_000 }, t + 10_000), { act: "cached", phase: "loading" });
+  // WT6 — 창 안 다시 부르기 = 호출 · 횟수 그대로
+  const r2 = planWarm(answered, t + 12_000);
+  assert.equal(r2.act, "call");
+  assert.equal((r2 as { record: WarmRecord }).record.count, 1);
+  assert.equal((r2 as { record: WarmRecord }).record.startAtMs, t);
+  // 창(5분) 지나면 새 데우기 = 횟수 +1
+  assert.equal((planWarm(answered, t + 5 * 60_000) as { record: WarmRecord }).record.count, 2);
+  // WT3 — 새 데우기 20회째 다음은 거절 · 날짜 바뀌면 다시 센다 · 옛 기록(startAtMs 없음)은 새 데우기로
+  const full: WarmRecord = { lastAtMs: t, day: "2026-11-26", count: WARM_DAILY_LIMIT };
+  assert.deepEqual(planWarm(full, t + 200_000), { act: "refuse" });
+  assert.equal((planWarm(full, t + 86_400_000) as { record: WarmRecord }).record.count, 1);
+});
+
+test("[§143.22] Modal /warm 응답 → 단계(phase 없는 옛 서비스 = 기동 끝 = ready)", () => {
+  assert.equal(phaseFromModal(true, { ok: true, phase: "loading" }), "loading");
+  assert.equal(phaseFromModal(true, { ok: true, phase: "warming" }), "warming");
+  assert.equal(phaseFromModal(true, { ok: true }), "ready");
+  assert.equal(phaseFromModal(true, { phase: "weird" }), "failed");
+  assert.equal(phaseFromModal(false, null), "failed");
 });
 
 test("[§143 RP3 · RP5] clone 세션 = 합성 자격이 있고 Gemini 키가 있을 때만 gemini, 아니면 종전(mock)", () => {

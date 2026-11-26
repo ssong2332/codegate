@@ -118,5 +118,36 @@ class FirstAudioTest(unittest.TestCase):  # §143.21 — 첫 음성 지연 판�
         self.assertIn("primeSec=", ws)
 
 
+class BootStateTest(unittest.TestCase):  # §143.22 판정표 BS — 기동 단계 신호
+    def test_bs1_to_bs3(self):
+        from bootstate import BootState
+        b = BootState()
+        self.assertEqual(b.phase, "loading")  # BS1
+        self.assertFalse(b.wait(0.01))
+        b.warming()
+        self.assertEqual(b.phase, "warming")  # BS2
+        b.ready()
+        self.assertEqual(b.phase, "ready")  # BS3
+        self.assertTrue(b.wait(0.01))
+
+    def test_bs4_failed_releases_waiters_false(self):
+        from bootstate import BootState
+        b = BootState()
+        b.failed()
+        self.assertEqual(b.phase, "failed")
+        self.assertFalse(b.wait(5))  # 즉시 False(5초 안 기다림)
+
+    def test_wiring(self):  # 배선 — enter는 백그라운드 읽기 · /warm은 phase · /prepare · /ws는 ready까지 기다림
+        src = open(os.path.join(os.path.dirname(__file__), "app.py"), encoding="utf-8").read()
+        enter = src[src.index("@modal.enter()"):src.index("def load(self)")]
+        self.assertIn("threading.Thread(target=self._load_safe", enter)
+        self.assertIn('"phase": self.boot.phase', src)
+        prep = src[src.index('@api.post("/prepare")'):src.index('@api.websocket("/ws")')]
+        self.assertIn("wait_boot()", prep)
+        ws = src[src.index('@api.websocket("/ws")'):]
+        self.assertLess(ws.index("self.boot.wait"), ws.index("tempfile.mkdtemp()"))
+        self.assertIn('"bootstate"', src)  # 이미지에 실림
+
+
 if __name__ == "__main__":
     unittest.main()

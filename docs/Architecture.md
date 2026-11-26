@@ -25376,3 +25376,13 @@ Modal 정리 근거: 앱은 Volume · Dict 0(`test_gsv.py` NoPersistTest) · 참
 
 ② 판정표 DL — 7일 저장 직후 "6일 뒤 삭제"(내림). 남은 시간을 올림: DL1 ≤ 0 · DL2 1일 미만 = "오늘 삭제" · DL3 1일 이상 = 올림 일수(저장 직후 = "7일 뒤 삭제").
 - 시험 `functions/src/voice/__tests__/cloneFailReason.test.ts` · `src/lib/recording/cloneFailNotice.test.ts`.
+
+### 143.22 링크 열면 미리 켜기 · 받는 사람 '목소리 준비 중' 대기 화면(사용자 요구 2026-11-26 · 브랜치 `claude/clone-warm-wait-screen` = main `dd08ab48` + 변경)
+사용자 원문: "링크를 열면 미리 켜고, 서버가 준비 중이면 바로 통화 화면으로 넘어가지 말고, 목소리 준비중 같은 대기 화면에서 사용자가 현재 진행상황을 알 수있게 하자". 근거: #624 뒤 콜드 통화 받기 → 첫 복제 음성 28.7초(메인 실측) — 데우기가 동의 뒤에야 시작돼 받는 사람이 '연결 중'에서 20초 넘게 기다렸다.
+- 서버 단계 신호(판정표 BS · `services/gsv/bootstate.py`): `@modal.enter`는 모델 읽기를 백그라운드 스레드로 돌리고 바로 요청을 받는다. `/warm` → `{ok, phase}` — BS1 loading(모델 읽는 중) · BS2 warming(첫 합성 초기화 §143.21 B1) · BS3 ready · BS4 failed. `/prepare` · `/ws`는 ready까지 기다린다(300초 · 실패면 503 · ws 1013).
+- Functions `warmCloneEngine`(판정표 WT 개정 · `functions/src/voice/warm.ts`): `challengeToken`(링크 토큰) 경로 = 로그인 없이 동의 전에 부른다 — 살아 있는 음성 챌린지 · voiceId가 gsv일 때만(그 밖 phase "off"). 키 `gsvWarm/c_<challengeId>`. WT5 앞 호출이 Modal 응답을 기다리는 중이면 Modal을 다시 부르지 않는다(대상당 Modal 요청 1개 — max_inputs=1이라 겹치면 컨테이너가 하나 더 켜진다 · 새로고침 · 두 탭 중복 억제) · WT2 1.5초 안 = 기록된 phase · WT6 데우기 창(5분) 안 다시 부르기 = 횟수 안 셈 · WT3 새 데우기 하루 20회. 응답 phase 없는 옛 Modal = "ready"(옛 서비스는 기동이 끝나야 답한다 — 배포 순서 무관).
+- 화면(판정표 WW · `src/lib/realtime/cloneWarmup.ts`): 링크 화면이 열리면 2초 간격으로 묻는다(요청 1개씩). 동의 순간 ready · off면 종전대로 벨 · 아니면 `CloneWarmWait` 대기 화면 → ready가 오면 스스로 벨로. WW3 failed · WW4 150초(= CW3) → 다시 시도 · 나가기. 동의 때 다시 확인 = give-up · 4분 넘은 ready(Modal scaledown 300초)만.
+- 대기 화면: 실제 단계 4줄(서버 켜는 중 → 음성 모델 불러오는 중 → 목소리 엔진 준비 중 → 준비 완료 — 진행률 막대 0) · 경과 초 · "처음 켤 때는 보통 30~45초"(근거: 콜드 /warm 28.1초 + 기동 초기화 약 9초 이전 · 콜드 받기 → 합성 준비 24.4초 — 추정 범위, 새 단계 신호 배포 뒤 실측으로 고칠 것) · 단계 바뀔 때만 aria-live · 공용 loading-dot · motion-reveal(reduced-motion 정지). 실패 시 멈춘 단계를 빨간 점으로(마지막 실제 단계 유지).
+- 동의 전 문구: "동의 전에는 아무것도 시작되지 않아요" → "동의 전에는 전화가 오지 않고, 어떤 목소리도 재생되지 않아요"(서버 GPU를 미리 켜므로 '아무것도'는 사실이 아니다 · 녹음 · 개인정보 · 참가자 데이터는 동의 전 0).
+- 시험: `src/lib/realtime/cloneWarmup.test.ts`(9) · `functions/src/voice/__tests__/gsvProvider.test.ts` WT 1 → 2 · `services/gsv/test_gsv.py` BootStateTest 3. 역검증: main 링크 화면 = 배선 1 fail · WW3 뒤집기 = 1 fail · 요청 2개 동시 = 2 fail · main app.py = BS 배선 1 fail.
+- ⚠️ 실측 미완: Modal 단계 신호는 Modal 재배포가 있어야 운영에서 나온다(이 브랜치는 배포 금지). 배포 전엔 옛 Modal = 응답 = ready라 대기 화면은 '서버 켜는 중' → '준비 완료' 두 단계로만 보인다.

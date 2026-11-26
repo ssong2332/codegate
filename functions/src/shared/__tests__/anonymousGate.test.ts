@@ -157,7 +157,7 @@ const ANONYMOUS_POLICY: Record<string, AnonymousPolicy> = {
   deleteVoiceProfile: "deny",
   getChallengeLanding: "no_auth",
   consentChallenge: "entry",
-  // §143 — 복제 합성 서비스 미리 띄우기. 챌린지 받는 사람(익명)도 부른다 · 참가자 데이터 0 · uid당 2분 1회 · 하루 20회(`voice/warm.ts` 판정표 WT).
+  // §143 — 복제 합성 서비스 미리 띄우기. 챌린지 받는 사람(익명)도 부른다 · 참가자 데이터 0 · 동의 전 링크 토큰 경로 · 5분 창 · 하루 20회 · 대상당 Modal 요청 1개(`voice/warm.ts` 판정표 WT · §143.22).
   warmCloneEngine: "entry",
   reportChallenge: "no_auth",
   setChallengeResultSharing: "entry",

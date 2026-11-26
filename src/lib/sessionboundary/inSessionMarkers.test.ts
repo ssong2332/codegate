@@ -51,6 +51,7 @@ const SESSION_SURFACE_REGISTRY: Record<string, SurfaceRole> = {
   "src/components/ThemeDebugPanel.tsx": "in-session", // ?themedebug=1 색 진단 패널(훈련 화면 묶음 — 영문 키 · 색 견본만 · 쿼리 없으면 DOM 0)
   "src/components/AuthInvalidationBanner.tsx": "in-session", // 세션 중에도 뜰 수 있는 인증 무효 안내(T128)
   "src/components/CallStartNotice.tsx": "pre-session", // T190-8b UX-014 pre-call-notice(벨 직전 고지 — AC-091)
+  "src/components/CloneWarmWait.tsx": "pre-session", // §143.22 복제 목소리 서버 준비 대기(동의 뒤 · 벨 전 — 통화 0)
   "src/components/DebugFlagCapture.tsx": "not-in-session", // §134 전역 셸의 진단 플래그 저장 — 그리는 것 0
   "src/components/DeviceSkinPicker.tsx": "pre-session", // T190-6 세션 전 화면 모양 줄(start-notice 안 — AC-092 (d))
   "src/components/CallWaveform.tsx": "in-session", // 통화 중 파형
@@ -117,8 +118,8 @@ test("[T187/G436] 세션 표면 등록부 = src/components/*.tsx ∪ src/app/ses
   // → 2026-10-27 33(+OneUiCallControls — One UI 9 통화 버튼 묶음) → 35(+CallExtraSheets · IosCallControls — 통화 부가 기능 · iOS 26)
   // → BA-1 2026-11-01 36(+BankAppOverlay — 통화 중 훈련용 홈 · 내 은행 앱) → 2026-11-01 37(+LogoutButton — 훈련 유형 선택 하단 로그아웃) → §142 38(+CallLegScreens — 통화 사이 화면)
   // → 2026-11-07 40(+BankAuthSheet · WithdrawAccountSheet — 이체 생체 인증 · 출금 계좌 선택 시트) → 2026-11-08 41(+CardAccountFields — 카드 거래 은행 · 잔액 칸)
-  // → §144 42(+VoiceProfileList — 저장한 목소리 목록)
-  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 42);
+  // → §144 42(+VoiceProfileList — 저장한 목소리 목록) → §143.22 43(+CloneWarmWait — 목소리 준비 대기 화면)
+  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 43);
 });
 
 // ── G451 — 등록부 2벌(G436 · T86)이 최상위 `src/components/*.tsx`만 훑으므로, 하위 디렉터리에 컴포넌트를 두면
